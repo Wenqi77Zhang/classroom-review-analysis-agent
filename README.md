@@ -37,10 +37,10 @@ chmod +x setup.sh start.sh verify.sh
 
 ## 开发环境基线
 
-- Node.js 24 LTS：前端统一使用当前长期支持版本，版本入口为 `.nvmrc`，约束同时写入 `frontend/package.json`。
-- Python 3.13：后端、Worker 与 Agent 统一使用这一版本，版本入口为 `.python-version`，约束同时写入 `pyproject.toml`。
+- Node.js 24 LTS：前端统一使用当前长期支持版本，版本约束写入 `frontend/package.json`。
+- Python 3.13：后端、Worker 与 Agent 统一使用这一版本，版本约束写入 `pyproject.toml`。
 
-没有选择 Node.js 的非 LTS Current 版本，是为了减少四天集中开发期间的依赖波动；没有选择 Python 3.14，是为了降低语音识别、视频处理及其原生依赖尚未提供兼容构建的风险。`setup.ps1` 与 `setup.sh` 会拒绝不符合基线的版本，避免成员在不同运行时上得到不一致结果。
+没有选择 Node.js 的非 LTS Current 版本，是为了减少四天集中开发期间的依赖波动；没有选择 Python 3.14，是为了降低语音识别、视频处理及其原生依赖尚未提供兼容构建的风险。Windows 安装脚本优先通过 `py -3.13` 创建项目环境，因此系统默认 Python 可以保留其他版本；`setup.ps1` 与 `setup.sh` 会拒绝不符合基线的项目解释器，避免成员得到不一致结果。
 
 ## 文档与目录导航
 

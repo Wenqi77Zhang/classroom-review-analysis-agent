@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
-for command in python3 node npm git ffmpeg; do
+for command in node npm git ffmpeg; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "缺少系统工具：$command。请先安装后重新运行 setup.sh。" >&2
     exit 1
@@ -17,13 +17,18 @@ if [[ ! "$node_version" =~ ^v24\. ]]; then
   exit 1
 fi
 
-python3 -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 13) else 1)' || {
-  echo "需要 Python 3.13。当前版本为 $(python3 --version)，请切换版本后再运行 setup.sh。" >&2
+if command -v python3.13 >/dev/null 2>&1; then
+  python_command="python3.13"
+elif command -v python3 >/dev/null 2>&1 &&
+  python3 -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 13) else 1)'; then
+  python_command="python3"
+else
+  echo "需要 Python 3.13。请安装 python3.13；系统默认 Python 可以保留其他版本。" >&2
   exit 1
-}
+fi
 
 if [[ ! -d .venv ]]; then
-  python3 -m venv .venv
+  "$python_command" -m venv .venv
 fi
 
 .venv/bin/python -m pip install --upgrade pip

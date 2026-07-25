@@ -27,14 +27,12 @@ if [[ "$readme_files" != "./README.md" ]]; then
   exit 1
 fi
 
-node_baseline="$(tr -d '[:space:]' < .nvmrc)"
-python_baseline="$(tr -d '[:space:]' < .python-version)"
-if [[ "$node_baseline" != "24" ]] || ! grep -Eq '"node"[[:space:]]*:[[:space:]]*">=24 <25"' frontend/package.json; then
-  echo "Node.js 版本基线不一致：.nvmrc 必须为 24，frontend/package.json 必须限制为 >=24 <25。" >&2
+if ! grep -Eq '"node"[[:space:]]*:[[:space:]]*">=24 <25"' frontend/package.json; then
+  echo "Node.js 版本基线不一致：frontend/package.json 必须限制为 >=24 <25。" >&2
   exit 1
 fi
-if [[ "$python_baseline" != "3.13" ]] || ! grep -Eq '^requires-python = ">=3\.13,<3\.14"$' pyproject.toml; then
-  echo "Python 版本基线不一致：.python-version 必须为 3.13，pyproject.toml 必须限制为 >=3.13,<3.14。" >&2
+if ! grep -Eq '^requires-python = ">=3\.13,<3\.14"$' pyproject.toml; then
+  echo "Python 版本基线不一致：pyproject.toml 必须限制为 >=3.13,<3.14。" >&2
   exit 1
 fi
 

@@ -35,17 +35,15 @@ if ($readmeFiles.Count -ne 1 -or $readmeFiles[0].FullName -ne (Join-Path $Projec
     exit 1
 }
 
-$nodeBaseline = (Get-Content -LiteralPath ".nvmrc" -Raw).Trim()
-$pythonBaseline = (Get-Content -LiteralPath ".python-version" -Raw).Trim()
 $frontendPackage = Get-Content -LiteralPath "frontend\package.json" -Raw | ConvertFrom-Json
 $pythonProject = Get-Content -LiteralPath "pyproject.toml" -Raw
 
-if ($nodeBaseline -ne "24" -or $frontendPackage.engines.node -ne ">=24 <25") {
-    Write-Error "Node.js 版本基线不一致：.nvmrc 必须为 24，frontend/package.json 必须限制为 >=24 <25。"
+if ($frontendPackage.engines.node -ne ">=24 <25") {
+    Write-Error "Node.js 版本基线不一致：frontend/package.json 必须限制为 >=24 <25。"
     exit 1
 }
-if ($pythonBaseline -ne "3.13" -or $pythonProject -notmatch '(?m)^requires-python = ">=3\.13,<3\.14"$') {
-    Write-Error "Python 版本基线不一致：.python-version 必须为 3.13，pyproject.toml 必须限制为 >=3.13,<3.14。"
+if ($pythonProject -notmatch '(?m)^requires-python = ">=3\.13,<3\.14"$') {
+    Write-Error "Python 版本基线不一致：pyproject.toml 必须限制为 >=3.13,<3.14。"
     exit 1
 }
 
