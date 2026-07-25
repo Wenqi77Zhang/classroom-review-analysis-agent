@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "classroom-review-analysis-agent"
+version = "0.0.0"
+description = "Evidence-grounded classroom review and teaching analysis agent."
+requires-python = ">=3.12,<3.14"
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend", "worker", "agent"]
+
+[tool.ruff]
+line-length = 100
