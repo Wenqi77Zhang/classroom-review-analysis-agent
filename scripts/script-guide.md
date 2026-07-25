@@ -1,4 +1,4 @@
-# Scripts
+# 辅助脚本说明
 
 根目录的 `setup/start/verify` 是用户入口；本目录保存辅助检查脚本。
 

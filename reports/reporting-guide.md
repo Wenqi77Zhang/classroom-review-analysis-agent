@@ -1,4 +1,4 @@
-# Reports
+# 小组报告编写说明
 
 成员 1 负责统稿；全员按 `docs/report-outline.md` 提供真实材料。
 

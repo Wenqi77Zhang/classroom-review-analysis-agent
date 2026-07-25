@@ -35,19 +35,22 @@ chmod +x setup.sh start.sh verify.sh
 
 阶段 0 的安装脚本只创建项目内 `.venv` 并安装当前已声明依赖；后续依赖由责任成员在实现时补充并锁定。脚本不会写入真实密钥。
 
-## 文档顺序
+## 文档与目录导航
 
-1. `docs/requirements-baseline.md`
-2. `docs/background-and-needs.md`
-3. `docs/product-spec.md`
-4. `docs/architecture.md`
-5. `docs/interface-contracts.md`
-6. `docs/agent-design.md`
-7. `docs/data-security.md`
-8. `docs/acceptance-matrix.md`
-9. `docs/validation-plan.md`
+本文件是仓库唯一使用通用名称 `README.md` 的总入口。子目录说明均使用能直接表达用途的唯一文件名，避免出现多个同名 README。
 
-责任分配见 `OWNERSHIP.md`，完整规划见 `docs/project-plan-v5.md`。
+- 正式需求、产品、架构、安全与验收文档：`docs/documentation-index.md`
+- 完整四天五人规划与目标骨架：`docs/project-plan-v5.md`
+- 文件和模块责任：`OWNERSHIP.md`
+- 前端模块：`frontend/frontend-module-guide.md`
+- 后端模块：`backend/backend-module-guide.md`
+- 媒体处理 Worker：`worker/media-worker-guide.md`
+- Agent 模块：`agent/agent-module-guide.md`
+- 测试策略与执行：`tests/testing-guide.md`
+- 报告编写与证据：`reports/reporting-guide.md`
+- 辅助脚本：`scripts/script-guide.md`
+
+正式项目文档的推荐阅读顺序和维护规则统一记录在 `docs/documentation-index.md`。
 
 ## 安全提醒
 

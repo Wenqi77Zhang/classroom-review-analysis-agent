@@ -103,6 +103,7 @@ Codex 负责协助：
 ├─ OWNERSHIP.md                 [成员 1] — 汇总每个目录、文件、负责人、输入输出和完成标准
 ├─ .env.example                 [成员 3；协作：成员 4、成员 5] — 仅列环境变量名和说明，不含真实密钥
 ├─ .gitignore                   [成员 3；审查：成员 5] — 排除 .venv、密钥、缓存、视频和本地数据
+├─ .gitattributes               [成员 5；协作：成员 3] — 统一跨平台文本换行与 Git 文件处理规则
 ├─ .python-version              [成员 3；协作：成员 4、成员 5] — 固定团队使用的 Python 版本
 ├─ .nvmrc                       [成员 2] — 固定团队使用的 Node.js 版本
 ├─ pyproject.toml               [成员 3；协作：成员 4、成员 5] — 声明后端、Worker、Agent 与测试依赖
@@ -123,7 +124,8 @@ Codex 负责协助：
 │  └─ workflows/                [成员 5] — GitHub Actions 自动检查目录
 │     └─ ci.yml                 [成员 5；协作：成员 2、成员 3] — 自动运行格式、测试与密钥扫描
 ├─ docs/                        [成员 1 统筹；全员供稿] — 项目需求、方案、架构和验收的事实源
-│  ├─ README.md                 [成员 1] — 文档导航、更新责任和阅读顺序
+│  ├─ documentation-index.md    [成员 1] — 文档导航、更新责任和阅读顺序
+│  ├─ project-plan-v5.md        [成员 1；全员确认] — 冻结四天五人规划、目标骨架、责任与验收边界
 │  ├─ requirements-baseline.md  [成员 1] — 固化网页全部硬性要求与范围边界
 │  ├─ background-and-needs.md   [成员 1] — 说明背景、用户、痛点、场景和成功标准
 │  ├─ product-spec.md           [成员 1；协作：成员 2] — 定义流程、页面、交互、状态和功能取舍
@@ -137,7 +139,7 @@ Codex 负责协助：
 │  ├─ report-outline.md         [成员 1；协作：全员] — 固定小组报告章节、作者和所需证据
 │  └─ ai-collaboration-log.md   [成员 5；全员填写] — 记录提示词、AI 输出、人工核验和修改原因
 ├─ frontend/                    [成员 1、成员 2] — Next.js 浏览器端产品与证据工作台
-│  ├─ README.md                 [成员 2；协作：成员 1] — 前端安装、结构、接口、测试和完成定义
+│  ├─ frontend-module-guide.md  [成员 2；协作：成员 1] — 前端安装、结构、接口、测试和完成定义
 │  ├─ package.json              [成员 2] — 声明前端依赖与 dev、build、test 命令
 │  ├─ tsconfig.json             [成员 2] — 配置 TypeScript 类型检查和路径别名
 │  ├─ next.config.ts            [成员 2] — 配置 Next.js 构建、资源和运行选项
@@ -173,7 +175,7 @@ Codex 负责协助：
 │     ├─ flow-pages.test.tsx    [成员 1] — 测试对话、上传、任务看板和报告页面
 │     └─ evidence-workbench.test.tsx [成员 2] — 测试播放器、逐字稿和复核联动
 ├─ backend/                     [成员 3] — FastAPI、数据库、权限、对象地址和业务 API
-│  ├─ README.md                 [成员 3] — 后端安装、运行、接口、迁移和测试说明
+│  ├─ backend-module-guide.md   [成员 3] — 后端安装、运行、接口、迁移和测试说明
 │  ├─ alembic.ini               [成员 3] — 配置 PostgreSQL 数据库迁移工具
 │  ├─ app/                      [成员 3] — 后端 Python 包
 │  │  ├─ __init__.py            [成员 3] — 标记后端应用包
@@ -182,6 +184,7 @@ Codex 负责协助：
 │  │  ├─ database.py            [成员 3] — 创建数据库连接和事务会话
 │  │  ├─ dependencies.py        [成员 3] — 提供当前用户、数据库和权限依赖
 │  │  ├─ api/                   [成员 3] — HTTP 接口路由
+│  │  │  ├─ __init__.py         [成员 3] — 标记后端 API 子包
 │  │  │  ├─ auth.py             [成员 3] — 登录、身份验证和演示账号接口
 │  │  │  ├─ classrooms.py       [成员 3] — 课程与课堂增删查改接口
 │  │  │  ├─ uploads.py          [成员 3；协作：成员 4] — 预签名上传和文件归属接口
@@ -190,18 +193,22 @@ Codex 负责协助：
 │  │  │  ├─ analyses.py         [成员 3；协作：成员 5] — 查询结论并保存接受、修改、驳回
 │  │  │  └─ reports.py          [成员 3；协作：成员 1、成员 5] — 获取、保存和导出报告
 │  │  ├─ models/                [成员 3] — PostgreSQL 持久化实体
+│  │  │  ├─ __init__.py         [成员 3] — 标记数据库模型子包
 │  │  │  ├─ identity.py         [成员 3] — 用户、课程和课堂数据模型
 │  │  │  ├─ processing.py       [成员 3] — 文件、任务、逐字稿和处理状态模型
 │  │  │  └─ review_report.py    [成员 3] — 证据、结论、复核、报告和审计模型
 │  │  ├─ schemas/               [成员 3；契约：成员 2、成员 4、成员 5] — API 输入输出 Schema
+│  │  │  ├─ __init__.py         [成员 3] — 标记 API Schema 子包
 │  │  │  ├─ common.py           [成员 3] — ID、分页、错误和通用响应结构
 │  │  │  ├─ task.py             [成员 3；协作：成员 4、成员 5] — 任务、进度和失败信息结构
 │  │  │  ├─ transcript.py       [成员 3；协作：成员 4] — 时间戳、说话人和翻译结构
 │  │  │  └─ analysis_report.py  [成员 3；协作：成员 1、成员 5] — 分析、复核和报告结构
 │  │  ├─ repositories/          [成员 3] — 隔离数据库读写
+│  │  │  ├─ __init__.py         [成员 3] — 标记数据仓储子包
 │  │  │  ├─ tasks.py            [成员 3] — 按用户归属读写任务和状态
 │  │  │  └─ reviews.py          [成员 3] — 保存结论版本、复核和报告内容
 │  │  └─ services/              [成员 3；协作：成员 4、成员 5] — 后端领域服务
+│  │     ├─ __init__.py         [成员 3] — 标记后端领域服务子包
 │  │     ├─ storage.py          [成员 3；协作：成员 4] — 生成对象存储上传与读取签名
 │  │     ├─ permissions.py      [成员 3] — 实施账号与资源归属校验
 │  │     └─ audit.py            [成员 3；协作：成员 5] — 保存关键操作、Trace 和错误记录
@@ -209,12 +216,13 @@ Codex 负责协助：
 │     ├─ env.py                 [成员 3] — 连接应用模型并运行迁移
 │     └─ versions/.gitkeep      [成员 3] — 保留迁移版本目录，后续文件由命令生成
 ├─ worker/                      [成员 4；协作：成员 3、成员 5] — 异步把视频和课件加工成可检索证据
-│  ├─ README.md                 [成员 4；协作：成员 3、成员 5] — 处理阶段、依赖、重试和完成定义
+│  ├─ media-worker-guide.md     [成员 4；协作：成员 3、成员 5] — 处理阶段、依赖、重试和完成定义
 │  ├─ __init__.py               [成员 4] — 标记 Worker Python 包
 │  ├─ runner.py                 [成员 4；协作：成员 3] — 领取待处理任务并回写状态
 │  ├─ job_store.py              [成员 4；契约：成员 3] — 获取任务、续租、完成和失败记录
 │  ├─ pipeline.py               [成员 4] — 按顺序编排媒体处理阶段和断点重试
 │  ├─ stages/                   [成员 4] — 可单独测试和重试的处理步骤
+│  │  ├─ __init__.py            [成员 4] — 标记 Worker 处理阶段子包
 │  │  ├─ fetch_object.py        [成员 4] — 从对象存储安全下载本次输入
 │  │  ├─ extract_audio.py       [成员 4] — 用 FFmpeg 抽取、压缩和分段音频
 │  │  ├─ transcribe.py          [成员 4] — 调用 ASR 生成带时间戳逐字稿
@@ -222,17 +230,19 @@ Codex 负责协助：
 │  │  ├─ parse_courseware.py    [成员 4] — 提取 PDF/PPTX 文字和页码或页面图像
 │  │  └─ build_evidence_index.py [成员 4；协作：成员 5] — 建立时间、原文、课件页和画面索引
 │  ├─ adapters/                 [成员 4；契约：成员 3] — 隔离外部服务实现
+│  │  ├─ __init__.py            [成员 4] — 标记 Worker 外部适配器子包
 │  │  ├─ asr.py                 [成员 4] — 统一本地与云端语音识别调用
 │  │  ├─ translation.py         [成员 4] — 统一本地与云端翻译调用
 │  │  └─ object_storage.py      [成员 4；契约：成员 3] — 读取对象、上传派生文件和清理临时对象
 │  └─ cleanup.py                [成员 4] — 清除本地临时音视频且保留持久化结果
 ├─ agent/                       [成员 5；协作：成员 4] — 受约束地生成证据化教学分析和报告草稿
-│  ├─ README.md                 [成员 5] — Agent 流程、模型、Skill、工具、限制和测试说明
+│  ├─ agent-module-guide.md     [成员 5] — Agent 流程、模型、Skill、工具、限制和测试说明
 │  ├─ __init__.py               [成员 5] — 标记 Agent Python 包
 │  ├─ orchestrator.py           [成员 5] — 执行追问、规划、并行分析、校验和报告组合
 │  ├─ state.py                  [成员 5] — 定义有限状态、转移条件和失败恢复
 │  ├─ contracts.py              [成员 5；契约：成员 2、成员 3、成员 4] — 定义分析契约与结构化输出
 │  ├─ providers/                [成员 5] — 模型供应商与隐私路由
+│  │  ├─ __init__.py            [成员 5] — 标记模型供应商子包
 │  │  ├─ base.py                [成员 5] — 定义统一模型调用接口
 │  │  ├─ cloud.py               [成员 5] — 实现公开课的云模型调用
 │  │  └─ local.py               [成员 5] — 实现私有课堂的本地模型调用
@@ -241,21 +251,26 @@ Codex 负责协助：
 │  │  ├─ analysis.md            [成员 5；协作：成员 4] — 生成事实、判断、建议和证据引用
 │  │  └─ report.md              [成员 5；协作：成员 1] — 将已复核内容组织为报告草稿
 │  ├─ skills/                   [成员 4、成员 5] — 可选择的通用与学科分析能力
+│  │  ├─ __init__.py            [成员 5；协作：成员 4] — 标记 Agent Skill 子包
 │  │  ├─ common.py              [成员 5] — 通用课堂结构与教学行为分析
 │  │  ├─ computer_ai.py         [成员 4；集成：成员 5] — 计算机/AI 课程专业规则
 │  │  └─ humanities.py          [成员 4；集成：成员 5] — 人文社科课程专业规则
 │  ├─ tools/                    [成员 5；协作：成员 4] — Agent 可调用的受限工具
+│  │  ├─ __init__.py            [成员 5] — 标记 Agent 工具子包
 │  │  └─ retrieve_evidence.py   [成员 5；协作：成员 4] — 按时间、原文和课件页检索证据
 │  ├─ validators/               [成员 4；集成：成员 5] — 结构与证据门禁
+│  │  ├─ __init__.py            [成员 5；协作：成员 4] — 标记 Agent 校验器子包
 │  │  └─ evidence_gate.py       [成员 4；集成：成员 5] — 拒绝没有可定位证据的分析结论
 │  ├─ reporting/                [成员 5；协作：成员 1] — 报告组合逻辑
+│  │  ├─ __init__.py            [成员 5] — 标记 Agent 报告组合子包
 │  │  └─ composer.py            [成员 5；协作：成员 1] — 仅组合接受或修改确认的结论
 │  └─ observability/            [成员 5；协作：成员 3] — Agent 可观测与回溯
+│     ├─ __init__.py            [成员 5] — 标记 Agent 可观测子包
 │     └─ tracing.py             [成员 5；协作：成员 3] — 记录 Trace、模型、Prompt、Skill、耗时和错误
 ├─ tests/                       [成员 5 统筹；全员写本人模块] — 自动化、集成、E2E 和人工验证
-│  ├─ README.md                 [成员 5] — 测试运行方式、数据规则和证据保存方式
+│  ├─ testing-guide.md          [成员 5] — 测试运行方式、数据规则和证据保存方式
 │  ├─ fixtures/                 [成员 4；协作：成员 5] — 小型合法样例与非敏感测试数据
-│  │  └─ README.md              [成员 4] — 记录样例来源、许可、用途和禁止提交的视频
+│  │  └─ fixture-catalog.md     [成员 4] — 记录样例来源、许可、用途和禁止提交的视频
 │  ├─ unit/                     [全员] — 各模块快速单元测试
 │  │  ├─ test_flow_frontend.md  [成员 1] — 流程前端测试清单或对应测试入口
 │  │  ├─ test_evidence_frontend.md [成员 2] — 证据工作台测试清单或对应测试入口
@@ -272,7 +287,7 @@ Codex 负责协助：
 │     ├─ usability-record.md    [成员 1] — 记录真实用户操作、理解和产品修改
 │     └─ failure-and-retry-record.md [成员 5；协作：成员 3、成员 4] — 记录失败、原因、修复和复测
 ├─ reports/                     [成员 1 统稿；全员供稿] — 最终共同提交的小组报告材料
-│  ├─ README.md                 [成员 1] — 写作流程、证据要求和合并规则
+│  ├─ reporting-guide.md        [成员 1] — 写作流程、证据要求和合并规则
 │  ├─ group-report.md           [成员 1；全员供稿] — 小组报告唯一正文
 │  ├─ contributions/            [全员] — 每位成员的真实个人贡献材料
 │  │  ├─ member-1.md            [成员 1] — 产品、流程前端、组长协调和统稿贡献
@@ -281,9 +296,9 @@ Codex 负责协助：
 │  │  ├─ member-4.md            [成员 4] — 媒体、数据和专业能力贡献
 │  │  └─ member-5.md            [成员 5] — Agent、测试和部署贡献
 │  └─ evidence/                 [全员按模块提交] — 截图、日志、测试和迭代证据
-│     └─ README.md              [成员 5] — 规定证据命名、来源、脱敏和引用方法
+│     └─ evidence-index.md      [成员 5] — 规定证据命名、来源、脱敏和引用方法
 └─ scripts/                     [成员 5 统筹；成员 3 协作] — 一键入口调用的辅助检查脚本
-   ├─ README.md                 [成员 5] — 说明脚本用途、支持系统和安全边界
+   ├─ script-guide.md           [成员 5] — 说明脚本用途、支持系统和安全边界
    ├─ check-secrets.ps1         [成员 5；协作：成员 3] — Windows 扫描疑似密钥和敏感文件
    ├─ check-secrets.sh          [成员 5；协作：成员 3] — macOS/Linux 扫描疑似密钥和敏感文件
    ├─ verify-readme.ps1         [成员 5] — Windows 按 README 验证全新安装
@@ -340,7 +355,7 @@ Codex 负责协助：
 
 - `OWNERSHIP.md` 集中列出每个目录、文件、负责成员、任务和交付证据。
 - `.github/CODEOWNERS` 为目录设置自动审查责任。
-- 每个模块 `README.md` 写明目的、负责人、输入、输出、接口、依赖、测试和完成定义。
+- 根目录保留唯一的 `README.md` 作为仓库总入口；每个模块使用职责明确且不重名的说明文件，并写明目的、负责人、输入、输出、接口、依赖、测试和完成定义。
 - 空文件不冒充实现，统一标注 `TODO` 或使用 `.gitkeep`。
 - `.env.example` 只写变量名和说明，不写真实密钥。
 - 项目方案文件与仓库结构保持一致；任何结构变化都同步更新方案和责任表。
