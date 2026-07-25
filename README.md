@@ -35,6 +35,13 @@ chmod +x setup.sh start.sh verify.sh
 
 阶段 0 的安装脚本只创建项目内 `.venv` 并安装当前已声明依赖；后续依赖由责任成员在实现时补充并锁定。脚本不会写入真实密钥。
 
+## 开发环境基线
+
+- Node.js 24 LTS：前端统一使用当前长期支持版本，版本入口为 `.nvmrc`，约束同时写入 `frontend/package.json`。
+- Python 3.13：后端、Worker 与 Agent 统一使用这一版本，版本入口为 `.python-version`，约束同时写入 `pyproject.toml`。
+
+没有选择 Node.js 的非 LTS Current 版本，是为了减少四天集中开发期间的依赖波动；没有选择 Python 3.14，是为了降低语音识别、视频处理及其原生依赖尚未提供兼容构建的风险。`setup.ps1` 与 `setup.sh` 会拒绝不符合基线的版本，避免成员在不同运行时上得到不一致结果。
+
 ## 文档与目录导航
 
 本文件是仓库唯一使用通用名称 `README.md` 的总入口。子目录说明均使用能直接表达用途的唯一文件名，避免出现多个同名 README。

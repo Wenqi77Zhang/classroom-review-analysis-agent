@@ -2,6 +2,9 @@
   "name": "classroom-review-analysis-frontend",
   "version": "0.0.0",
   "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "node -e \"console.error('TODO: initialize Next.js on Day 1'); process.exit(2)\"",
     "build": "node -e \"console.error('TODO: initialize Next.js on Day 1'); process.exit(2)\"",

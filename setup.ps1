@@ -8,9 +8,15 @@ foreach ($command in @("python", "node", "npm", "git", "ffmpeg")) {
     }
 }
 
-$pythonVersionOk = python -c "import sys; print(int((3, 12) <= sys.version_info[:2] < (3, 14)))"
+$nodeVersion = (node --version).Trim()
+if ($nodeVersion -notmatch '^v(?<major>\d+)\.' -or [int]$Matches.major -ne 24) {
+    throw "需要 Node.js 24 LTS。当前版本为 $nodeVersion，请切换版本后再运行 setup.ps1。"
+}
+
+$pythonVersionOk = python -c "import sys; print(int(sys.version_info[:2] == (3, 13)))"
 if ($pythonVersionOk -ne "1") {
-    throw "需要 Python 3.12 或 3.13。当前版本不兼容，请安装后再运行 setup.ps1。"
+    $pythonVersion = python --version
+    throw "需要 Python 3.13。当前版本为 $pythonVersion，请切换版本后再运行 setup.ps1。"
 }
 
 if (-not (Test-Path -LiteralPath ".venv")) {

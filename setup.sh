@@ -11,8 +11,14 @@ for command in python3 node npm git ffmpeg; do
   }
 done
 
-python3 -c 'import sys; raise SystemExit(0 if (3, 12) <= sys.version_info[:2] < (3, 14) else 1)' || {
-  echo "需要 Python 3.12 或 3.13。当前版本不兼容，请安装后再运行 setup.sh。" >&2
+node_version="$(node --version)"
+if [[ ! "$node_version" =~ ^v24\. ]]; then
+  echo "需要 Node.js 24 LTS。当前版本为 $node_version，请切换版本后再运行 setup.sh。" >&2
+  exit 1
+fi
+
+python3 -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 13) else 1)' || {
+  echo "需要 Python 3.13。当前版本为 $(python3 --version)，请切换版本后再运行 setup.sh。" >&2
   exit 1
 }
 

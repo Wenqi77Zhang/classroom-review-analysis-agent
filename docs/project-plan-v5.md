@@ -104,8 +104,8 @@ Codex 负责协助：
 ├─ .env.example                 [成员 3；协作：成员 4、成员 5] — 仅列环境变量名和说明，不含真实密钥
 ├─ .gitignore                   [成员 3；审查：成员 5] — 排除 .venv、密钥、缓存、视频和本地数据
 ├─ .gitattributes               [成员 5；协作：成员 3] — 统一跨平台文本换行与 Git 文件处理规则
-├─ .python-version              [成员 3；协作：成员 4、成员 5] — 固定团队使用的 Python 版本
-├─ .nvmrc                       [成员 2] — 固定团队使用的 Node.js 版本
+├─ .python-version              [成员 3；协作：成员 4、成员 5] — 固定使用 Python 3.13，降低媒体与 AI 依赖兼容风险
+├─ .nvmrc                       [成员 2] — 固定使用 Node.js 24 LTS，避免采用非 LTS Current 版本
 ├─ pyproject.toml               [成员 3；协作：成员 4、成员 5] — 声明后端、Worker、Agent 与测试依赖
 ├─ docker-compose.yml           [成员 5；协作：成员 3] — 可选启动 PostgreSQL 等本地基础服务
 ├─ setup.ps1                    [成员 3；协作：成员 2、成员 4、成员 5] — Windows 一键检查并安装全部开发依赖
