@@ -1,3 +1,129 @@
-"""TODO(成员 3)：使用 Pydantic Settings 校验环境变量，禁止输出密钥。"""
+"""环境变量校验与运行配置。
 
-CONFIG_NOT_IMPLEMENTED = True
+负责人：成员 3。
+
+两条设计约束：
+
+* **启动即失败**：必填项缺失时在应用启动阶段就报错，而不是等到教师上传视频时才 500。
+  四天冲刺里配置错误是最常见的"看起来像 bug 的非 bug"，早失败能省大量排查时间。
+* **密钥不可打印**：所有敏感值用 `SecretStr`，这样 `repr(settings)`、日志、异常堆栈
+  和 FastAPI 的报错页都不会带出明文。发布门禁里"密钥出现在前端、仓库或日志"是阻断项。
+
+变量清单与 `.env.example` 一一对应；新增变量必须同时更新 `.env.example`，否则其他成员
+拿不到可运行配置。
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, SecretStr, computed_field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class AppEnv(StrEnum):
+    DEVELOPMENT = "development"
+    TEST = "test"
+    PRODUCTION = "production"
+
+
+# 按文件类型分别限制大小：课件和逐字稿没有理由达到视频量级，统一放宽等于给
+# 对象存储和 Worker 留了一个廉价的资源耗尽入口。
+MAX_UPLOAD_BYTES: dict[str, int] = {
+    "video": 4 * 1024 * 1024 * 1024,  # 4 GiB，一节课的原始录像
+    "courseware": 128 * 1024 * 1024,  # 128 MiB
+    "transcript": 32 * 1024 * 1024,  # 32 MiB
+}
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",  # .env 里还有 Worker 与模型相关变量，不属于后端
+        case_sensitive=False,
+    )
+
+    # ---------------- Runtime ----------------
+    app_env: AppEnv = AppEnv.DEVELOPMENT
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    frontend_origin: str = Field(
+        default="http://localhost:3000",
+        description="CORS 允许来源。不使用通配符：带凭据的跨域请求下 * 无效，也放大攻击面。",
+    )
+    backend_url: str = "http://localhost:8000"
+
+    # ---------------- Database ----------------
+    database_url: SecretStr = Field(
+        description="必须是异步驱动形式 postgresql+asyncpg://…（含口令，故为 SecretStr）。"
+    )
+
+    # ---------------- Authentication ----------------
+    jwt_secret: SecretStr
+    access_token_expire_minutes: int = Field(default=120, ge=5, le=1440)
+    demo_account_password: SecretStr | None = Field(
+        default=None,
+        description="演示账号口令。为空时不注册演示账号——绝不回退到硬编码默认口令。",
+    )
+
+    # ---------------- Internal service auth ----------------
+    worker_service_token: SecretStr = Field(
+        description="Worker/Agent 回写用的服务令牌，与教师 JWT 分开，不绑定任何账号。"
+    )
+
+    # ---------------- Object storage ----------------
+    object_storage_endpoint: str
+    object_storage_region: str = "us-east-1"
+    object_storage_bucket: str
+    object_storage_access_key_id: SecretStr
+    object_storage_secret_access_key: SecretStr
+    object_storage_use_path_style: bool = Field(
+        default=True, description="MinIO 等自托管服务必须为 true；云厂商 S3 一般为 false。"
+    )
+    presign_expire_seconds: int = Field(
+        default=900,
+        ge=60,
+        le=3600,
+        description="预签名 URL 有效期。上限 1 小时：限时是 data-security.md 的强制要求，"
+        "过长的签名等同于把对象长期公开。",
+    )
+
+    @field_validator("database_url")
+    @classmethod
+    def _require_async_driver(cls, value: SecretStr) -> SecretStr:
+        url = value.get_secret_value()
+        if not url.startswith("postgresql+asyncpg://"):
+            # 只报格式要求，不回显 URL 本身——它含口令。
+            raise ValueError(
+                "DATABASE_URL 必须以 postgresql+asyncpg:// 开头；"
+                "同步驱动会阻塞事件循环并拖垮连接池。"
+            )
+        return value
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _require_strong_secret(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value()) < 32:
+            raise ValueError("JWT_SECRET 至少 32 个字符；短密钥可被离线暴力破解。")
+        return value
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_production(self) -> bool:
+        return self.app_env is AppEnv.PRODUCTION
+
+    def max_upload_bytes(self, kind: str) -> int:
+        """按 AssetKind 取上限；未知类型退回最严格的限制。"""
+        return MAX_UPLOAD_BYTES.get(kind, min(MAX_UPLOAD_BYTES.values()))
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """进程内缓存一次。
+
+    用 `lru_cache` 而不是模块级实例：模块级实例会在 import 时读 `.env`，让测试无法
+    注入配置，也会让"缺配置"的错误发生在 import 阶段、堆栈难读。
+    """
+    return Settings()  # type: ignore[call-arg]
