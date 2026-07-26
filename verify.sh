@@ -9,6 +9,7 @@ for path in \
   docs/documentation-index.md \
   docs/requirements-baseline.md \
   frontend/package.json \
+  frontend/package-lock.json \
   frontend/frontend-module-guide.md \
   backend/backend-module-guide.md \
   worker/media-worker-guide.md \
@@ -35,6 +36,10 @@ fi
 
 if ! grep -Eq '"node"[[:space:]]*:[[:space:]]*">=24 <25"' frontend/package.json; then
   echo "Node.js 版本基线不一致：frontend/package.json 必须限制为 >=24 <25。" >&2
+  exit 1
+fi
+if ! grep -Eq '"lockfileVersion"[[:space:]]*:[[:space:]]*3' frontend/package-lock.json; then
+  echo "前端依赖锁文件必须使用 lockfileVersion 3。" >&2
   exit 1
 fi
 if ! grep -Eq '^requires-python = ">=3\.13,<3\.14"$' pyproject.toml; then

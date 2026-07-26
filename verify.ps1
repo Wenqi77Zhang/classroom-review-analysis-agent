@@ -9,6 +9,7 @@ foreach ($path in @(
     "docs\documentation-index.md",
     "docs\requirements-baseline.md",
     "frontend\package.json",
+    "frontend\package-lock.json",
     "frontend\frontend-module-guide.md",
     "backend\backend-module-guide.md",
     "worker\media-worker-guide.md",
@@ -44,6 +45,11 @@ $pythonProject = Get-Content -LiteralPath "pyproject.toml" -Raw
 
 if ($frontendPackage.engines.node -ne ">=24 <25") {
     Write-Error "Node.js 版本基线不一致：frontend/package.json 必须限制为 >=24 <25。"
+    exit 1
+}
+& node -e 'const p=require("./frontend/package.json"); const l=require("./frontend/package-lock.json"); if(l.name!==p.name || l.version!==p.version || l.lockfileVersion!==3) process.exit(1);'
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "前端依赖锁文件与 package.json 不一致，或 lockfileVersion 不是 3。"
     exit 1
 }
 if ($pythonProject -notmatch '(?m)^requires-python = ">=3\.13,<3\.14"$') {

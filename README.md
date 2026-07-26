@@ -42,6 +42,8 @@ chmod +x setup.sh start.sh verify.sh
 
 没有选择 Node.js 的非 LTS Current 版本，是为了减少四天集中开发期间的依赖波动；没有选择 Python 3.14，是为了降低语音识别、视频处理及其原生依赖尚未提供兼容构建的风险。Windows 安装脚本优先通过 `py -3.13` 创建项目环境，因此系统默认 Python 可以保留其他版本；`setup.ps1` 与 `setup.sh` 会拒绝不符合基线的项目解释器，避免成员得到不一致结果。
 
+前端实际依赖树由 `frontend/package-lock.json` 锁定。日常初始化与部署使用 `npm ci`；只有成员 2 在有意新增或升级依赖时使用 npm 修改依赖并同时提交清单与锁文件。
+
 ## 文档与目录导航
 
 本文件是仓库唯一使用通用名称 `README.md` 的总入口。子目录说明均使用能直接表达用途的唯一文件名，避免出现多个同名 README。
