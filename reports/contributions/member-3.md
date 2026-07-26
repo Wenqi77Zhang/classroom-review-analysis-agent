@@ -101,6 +101,19 @@ TODO(成员 3)：按 `reports/evidence/evidence-index.md` 的命名规则补截�
 - 复测：新增回归用例 `test_redaction_preserves_non_string_arg_types` 与 `test_redaction_masks_secrets`，覆盖 `%d`、`%.2f`、多参数以及三种 `Authorization` 形态。
 - 说明：该缺陷由本人当天新写的代码引入，并由本人补写的测试发现。
 
+*问题 D：`verify.ps1` 新加的锁文件检查在 Windows 上必然失败。*
+- 原因：该检查（随 `main` 的 `06ff4dd` 引入）把 JS 代码放在 PowerShell 单引号串内并在其中使用双引号；Windows PowerShell 向原生命令传参时会吃掉这些双引号，node 实际收到 `require(./frontend/package.json)`，抛 `SyntaxError: Unexpected token '.'`。`setup.ps1` 最后一步调用 `verify.ps1`，因此安装流程同样失败。`verify.sh` 用 grep，不受影响。
+- 修复：校验逻辑不变，只把引号写法改为「JS 侧单引号、PowerShell 侧双引号」。**未**改用 `ConvertFrom-Json`——`package-lock.json` 含空字符串键 `"packages": { "": {...} }`，Windows PowerShell 5.1 的 `ConvertFrom-Json` 无法处理空属性名（已实测确认）。
+- 复测：`verify.ps1` 退出 0；`setup.ps1` 端到端跑通（含 `npm ci`）。
+- 归属提示：该文件第一负责人是成员 5，**待其确认**。
+
+*方案对齐：`main` 将 M1 对象存储定为 Backblaze B2。*
+- 背景：`main` 的 `19901dc` 确定 M1 走 B2 的 S3 兼容 API，并在后端完成定义中加入「Provider 有独立测试且业务层不直接依赖 B2」「不得让前端接触长期应用密钥」。
+- 处理：本分支原按本地 MinIO 搭建，已对齐——预签名有效期变量统一到 `main` 的 `OBJECT_STORAGE_PRESIGNED_URL_TTL_SECONDS`（本分支原用同义的 `PRESIGN_EXPIRE_SECONDS`，已废弃）；新增 `OBJECT_STORAGE_PROVIDER`（枚举）与 `OBJECT_STORAGE_RETENTION_DAYS`；`OBJECT_STORAGE_USE_PATH_STYLE` 默认值由 `true` 改为 `false`（B2 用 virtual-host 寻址，原默认值只对 MinIO 正确）。
+- MinIO 保留但降级为「离线开发替代品」，已在 `docker-compose.yml` 与模块说明中显著标注，不是 M1 交付目标。
+- 复测：新增 4 项配置测试（默认供应商、未知供应商被拒、保留天数边界）。
+- 待办：统一 S3 Provider 抽象层**尚未实现**，B2 凭据**尚未申请**，均已列入已知限制。
+
 *环境类问题：WSL2 安装两次失败。*
 - 原因：C 盘可用空间仅 0.3 GB，WSL 的 MSIX 包（约 200 MB）安装中断，留下"正在安装"日志但无已注册包。
 - 修复：清理 pip / npm / uv 缓存与冗余的 uv 托管 Python 共回收约 4.6 GB 后重试成功；Docker Desktop 以 `--installation-dir=D:\Docker\DockerDesktop`、`--wsl-default-data-root=D:\Docker\wsl` 安装到 D 盘，使镜像与容器数据不再占用 C 盘。

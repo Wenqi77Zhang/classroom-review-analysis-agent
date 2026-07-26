@@ -7,7 +7,8 @@
 | 2026-07-26 | 成员 3 | 配置校验、异步数据库、领域异常、FastAPI 应用 | 同上计划的 Day 1「基础设施」与「认证权限骨架」时间块 | `config.py`、`database.py`、`errors.py`、`main.py` | 自动化：`/health` 与 `/health/ready` 实连 PostgreSQL 17.10 通过；CORS 允许/拒绝、错误外层、trace_id 透传均有测试 | 见下方「被修改或推翻的 AI 输出」第 3、4 条 | 修改后采纳 | `backend/app/`、`tests/unit/test_backend.py` |
 | 2026-07-26 | 成员 3 | 后端测试 | 要求把临时验证脚本转成仓库内可复现测试 | `tests/unit/test_backend.py` 52 项 | 自动化：`pytest -q` → 52 passed | 无 | 采纳 | `tests/unit/test_backend.py` |
 | 2026-07-26 | 成员 3 | 本地环境与基础设施 | "帮我装"、"我的储存空间已经严重不足了，你能不能把 Docker 安装在 D 盘上？"、"已重启" | Python 3.13 安装、C 盘清理、Docker Desktop 装到 D 盘、WSL2 修复、compose 加入 MinIO | 自动化：`wsl --status` 退出码 0、`docker info` 可用、两容器 healthy、桶已建、`D:\Docker\wsl` 已生成 | 见下方第 5 条：AI 原先归因 UAC 未批准，实测证伪 | 修改后采纳 | `docker-compose.yml`、`backend/backend-module-guide.md` |
-| 2026-07-26 | 成员 3 | 缺陷修复（3 个） | 无专门提示词；均在执行上述计划过程中由实际运行或自建测试暴露 | `.ps1` 编码修复、`verify` README 检查改用 `git ls-files`、日志脱敏两处修正 | 自动化：`setup.ps1` 跑通、`verify.ps1`/`verify.sh` 在 `.pytest_cache/README.md` 存在时退出 0、脱敏回归用例通过 | 见下方第 1、2 条 | 修改后采纳；涉及成员 5 主责文件的部分标注待确认 | `reports/contributions/member-3.md` 第 5 项 |
+| 2026-07-26 | 成员 3 | 合并 `main` 并对齐 B2 对象存储方案 | "推送"、"合并对齐 + 按 B2 调整" | 识别出远端 main 已定 B2 方案且与本分支 5 个文件重叠；统一变量名、修正 path-style 默认值、MinIO 降级为离线替代品 | 自动化：56 项测试全过、`setup.ps1` 端到端退出 0、无残留冲突标记 | AI 原方案基于本地 MinIO，与团队已定的 B2 方案冲突，以 `main` 为准 | 修改后采纳；Provider 抽象层与 B2 凭据列入已知限制 | `backend/app/config.py`、`docs/interface-contracts.md` |
+| 2026-07-26 | 成员 3 | 缺陷修复（4 个） | 无专门提示词；均在执行上述计划过程中由实际运行或自建测试暴露 | `.ps1` 编码修复、`verify` README 检查改用 `git ls-files`、日志脱敏两处修正 | 自动化：`setup.ps1` 跑通、`verify.ps1`/`verify.sh` 在 `.pytest_cache/README.md` 存在时退出 0、脱敏回归用例通过 | 见下方第 1、2 条 | 修改后采纳；涉及成员 5 主责文件的部分标注待确认 | `reports/contributions/member-3.md` 第 5 项 |
 
 禁止把未经人工核验的 AI 内容直接写成事实、引用、测试结果或个人独立成果。
 
