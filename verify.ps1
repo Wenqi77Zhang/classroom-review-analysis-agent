@@ -47,7 +47,13 @@ if ($frontendPackage.engines.node -ne ">=24 <25") {
     Write-Error "Node.js 版本基线不一致：frontend/package.json 必须限制为 >=24 <25。"
     exit 1
 }
-& node -e 'const p=require("./frontend/package.json"); const l=require("./frontend/package-lock.json"); if(l.name!==p.name || l.version!==p.version || l.lockfileVersion!==3) process.exit(1);'
+# 校验逻辑与原实现一致，只修正引号写法。原写法把 JS 代码放在 PowerShell 单引号串里并
+# 在其中使用双引号，而 Windows PowerShell 向原生命令传参时会吃掉这些双引号，node 收到的
+# 是 require(./frontend/package.json)（缺引号），必然抛 SyntaxError，使本检查恒失败。
+# 改为 JS 侧用单引号、PowerShell 侧用双引号（串内无 $，不会被插值）。
+# 不改用 ConvertFrom-Json：package-lock.json 含空字符串键 "packages": { "": {...} }，
+# Windows PowerShell 5.1 的 ConvertFrom-Json 无法处理空属性名，会直接报错。
+& node -e "const p=require('./frontend/package.json'); const l=require('./frontend/package-lock.json'); if(l.name!==p.name || l.version!==p.version || l.lockfileVersion!==3) process.exit(1);"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "前端依赖锁文件与 package.json 不一致，或 lockfileVersion 不是 3。"
     exit 1
