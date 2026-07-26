@@ -19,7 +19,7 @@ from enum import StrEnum
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, computed_field, field_validator
+from pydantic import Field, SecretStr, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -83,8 +83,14 @@ class Settings(BaseSettings):
     )
 
     # ---------------- Internal service auth ----------------
+    # Worker 与 Agent 各持一个令牌，不共用。共用意味着 Agent 也能覆盖逐字稿、
+    # Worker 也能写入教学结论，违反最小权限（PR #6 审查意见 4）。
+    # 端点与身份的对应关系见 schemas/task.py 的 INTERNAL_ENDPOINT_SCOPES。
     worker_service_token: SecretStr = Field(
-        description="Worker/Agent 回写用的服务令牌，与教师 JWT 分开，不绑定任何账号。"
+        description="Worker 回写任务状态与逐字稿的服务令牌，与教师 JWT 分开，不绑定账号。"
+    )
+    agent_service_token: SecretStr = Field(
+        description="Agent 回写分析结论的服务令牌，权限范围小于 Worker 令牌。"
     )
 
     # ---------------- Object storage ----------------
@@ -132,6 +138,23 @@ class Settings(BaseSettings):
         if len(value.get_secret_value()) < 32:
             raise ValueError("JWT_SECRET 至少 32 个字符；短密钥可被离线暴力破解。")
         return value
+
+    @model_validator(mode="after")
+    def _service_tokens_must_differ(self) -> Settings:
+        """两个服务令牌不能填成同一个值。
+
+        否则「拆分令牌」只是名义上的：拿着同一个字符串，Agent 依然能冒充 Worker
+        覆盖逐字稿。启动时就拒绝，好过上线后才发现权限边界形同虚设。
+        """
+        if (
+            self.worker_service_token.get_secret_value()
+            == self.agent_service_token.get_secret_value()
+        ):
+            raise ValueError(
+                "WORKER_SERVICE_TOKEN 与 AGENT_SERVICE_TOKEN 必须不同，"
+                "否则服务身份无法区分，端点权限范围形同虚设。"
+            )
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -110,9 +110,41 @@ class AnalysisConclusion(OrmModel):
     skill: str | None = Field(default=None, max_length=64)
     prompt_version: str | None = Field(default=None, max_length=64)
 
+    @model_validator(mode="after")
+    def _check_review_consistency(self) -> AnalysisConclusion:
+        """`modified` 必须带非空的教师改写内容。
+
+        否则会出现一种最坏的情况：状态显示"教师已修改确认"，报告里却是模型原文。
+        这既是数据不一致，也直接违反"只组合已确认内容"（PR #6 审查意见 3）。
+        """
+        if (
+            self.review_status is ReviewStatus.MODIFIED
+            and not (self.reviewed_content or "").strip()
+        ):
+            raise ValueError(
+                "review_status=modified 必须提供非空 reviewed_content；"
+                "缺失时必须拒绝，不允许退回模型原文。"
+            )
+        return self
+
     def reportable_content(self) -> str:
-        """报告应当采用的正文：教师改过就用改后的。"""
-        return self.reviewed_content or self.content
+        """报告应当采用的正文。
+
+        对不可进入报告的状态直接抛错，而不是返回一段"看起来能用"的文本：
+        静默回退正是"未复核或已驳回结论进入报告"这条阻断项的典型成因。
+        """
+        if self.review_status not in REPORTABLE_REVIEW_STATUSES:
+            raise ValueError(
+                f"review_status={self.review_status} 的结论不得进入报告，"
+                f"仅允许 {sorted(s.value for s in REPORTABLE_REVIEW_STATUSES)}。"
+            )
+        if self.review_status is ReviewStatus.MODIFIED:
+            # 校验器已保证非空；此处不做 `or self.content` 回退，避免将来
+            # 有人绕过校验构造对象时悄悄拿到模型原文。
+            if not (self.reviewed_content or "").strip():
+                raise ValueError("modified 结论缺少教师改写内容，拒绝进入报告。")
+            return self.reviewed_content  # type: ignore[return-value]
+        return self.content
 
 
 # --------------------------------------------------------------------------- #

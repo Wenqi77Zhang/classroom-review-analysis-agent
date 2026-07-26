@@ -99,6 +99,18 @@ class InternalTranscriptSegmentWrite(ApiModel):
     text: str
     translation: str | None = None
 
+    @model_validator(mode="after")
+    def _check_range(self) -> InternalTranscriptSegmentWrite:
+        """与对外的 `TranscriptSegment` 使用同一条时间区间约束。
+
+        早期版本只在对外 Schema 上校验，Worker 可以从内部接口写进
+        `end_ms <= start_ms` 的句子——这类数据读出来时才会被对外 Schema 拒绝，
+        等于把坏数据先存进了数据库（PR #6 审查意见 2）。
+        """
+        if self.end_ms <= self.start_ms:
+            raise ValueError("end_ms 必须大于 start_ms，否则证据无法定位到有效区间。")
+        return self
+
 
 class InternalTranscriptWrite(ApiModel):
     """Worker 批量写入识别结果。
@@ -112,3 +124,18 @@ class InternalTranscriptWrite(ApiModel):
     duration_ms: int = Field(ge=0)
     segments: list[InternalTranscriptSegmentWrite] = Field(min_length=1)
     trace_id: str | None = None
+
+    @model_validator(mode="after")
+    def _check_indexes(self) -> InternalTranscriptWrite:
+        """批内 `index` 必须唯一且递增。
+
+        `index` 是句序，前端按它渲染、证据按它定位。重复会让"第 3 句"指向两处；
+        乱序会让整批替换后的逐字稿顺序与音频对不上。这两种都只能在写入时拦，
+        读出来时已经晚了。
+        """
+        indexes = [seg.index for seg in self.segments]
+        if len(set(indexes)) != len(indexes):
+            raise ValueError("segments 的 index 必须唯一，重复会让同一句序指向多条记录。")
+        if indexes != sorted(indexes):
+            raise ValueError("segments 必须按 index 升序提供，否则整批替换后句序与音频错位。")
+        return self

@@ -127,6 +127,30 @@ class _TraceIdLogFilter(logging.Filter):
 
 
 # --------------------------------------------------------------------------- #
+# trace_id 规范化
+# --------------------------------------------------------------------------- #
+
+# 上游可以透传 trace_id，但它会进日志、进错误响应体、进审计记录，属于不可信输入。
+# 不加约束的话，外部请求能塞进超长字符串（撑爆日志）或换行与控制字符
+# （日志注入：伪造出一条看似独立的日志行）。故限制长度与字符集
+# （PR #6 审查意见 8）。
+TRACE_ID_MAX_LENGTH = 128
+_TRACE_ID_PATTERN = re.compile(rf"[A-Za-z0-9_-]{{1,{TRACE_ID_MAX_LENGTH}}}")
+
+
+def normalize_trace_id(raw: str | None) -> str:
+    """校验上游 trace_id；不合法就换一个新的，而不是让整个请求失败。
+
+    选择"静默换新"而非"返回 400"：一个格式错误的可选头部不应该打断业务链路，
+    而且此时还没有 trace_id 可用于错误响应。换新 ID 既保证日志始终可关联，
+    又保证不可信内容进不了日志。
+    """
+    if raw and _TRACE_ID_PATTERN.fullmatch(raw):
+        return raw
+    return uuid.uuid4().hex
+
+
+# --------------------------------------------------------------------------- #
 # 错误响应
 # --------------------------------------------------------------------------- #
 
@@ -239,8 +263,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def trace_id_middleware(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        # 允许上游（成员 5 的 Agent、Worker）透传 trace_id，从而串起同一条链路。
-        trace_id = request.headers.get("X-Trace-Id") or uuid.uuid4().hex
+        # 允许上游（成员 5 的 Agent、Worker）透传 trace_id，从而串起同一条链路，
+        # 但必须先规范化——见 normalize_trace_id 的说明。
+        trace_id = normalize_trace_id(request.headers.get("X-Trace-Id"))
         token = current_trace_id.set(trace_id)
         try:
             response = await call_next(request)
