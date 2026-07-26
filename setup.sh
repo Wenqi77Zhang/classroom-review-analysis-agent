@@ -35,7 +35,7 @@ fi
 .venv/bin/python -m pip install -e ".[dev]"
 
 if [[ -f frontend/package.json ]]; then
-  (cd frontend && npm install)
+  (cd frontend && npm ci)
 fi
 
 if [[ ! -f .env ]]; then

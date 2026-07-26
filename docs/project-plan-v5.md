@@ -139,6 +139,7 @@ Codex 负责协助：
 ├─ frontend/                    [成员 1、成员 2] — Next.js 浏览器端产品与证据工作台
 │  ├─ frontend-module-guide.md  [成员 2；协作：成员 1] — 前端安装、结构、接口、测试和完成定义
 │  ├─ package.json              [成员 2] — 声明前端依赖与 dev、build、test 命令
+│  ├─ package-lock.json         [成员 2] — 锁定 npm 实际依赖树，保证成员与部署环境可重复安装
 │  ├─ tsconfig.json             [成员 2] — 配置 TypeScript 类型检查和路径别名
 │  ├─ next.config.ts            [成员 2] — 配置 Next.js 构建、资源和运行选项
 │  ├─ src/                      [成员 1、成员 2] — 前端业务源码

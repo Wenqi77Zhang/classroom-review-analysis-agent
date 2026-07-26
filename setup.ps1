@@ -47,7 +47,7 @@ if (-not (Test-Path -LiteralPath ".venv")) {
 
 if (Test-Path -LiteralPath "frontend\package.json") {
     Push-Location "frontend"
-    npm install
+    npm ci
     Pop-Location
 }
 
