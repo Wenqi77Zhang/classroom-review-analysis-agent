@@ -1,3 +1,124 @@
-# 成员 3 贡献
+# 成员 3 贡献（平台后端）
 
-TODO：FastAPI、数据库、认证权限、对象地址、任务状态和后端测试。
+责任范围：FastAPI 应用与 API 契约、PostgreSQL 数据模型、认证与权限、对象存储地址、
+任务状态与重试、审计、数据库迁移、后端测试与启动说明。
+
+> 本文件同时充当成员 3 的每日工作证据包（`docs/project-plan-v5.md` §7.2）。
+> 每条"已完成"都对应可运行代码或可复现的命令输出；未实现内容一律标注，不写成已完成。
+
+---
+
+## 一、当前可核对成果
+
+| 内容 | 位置 | 可核对方式 |
+|---|---|---|
+| 跨模块 Schema 契约 v1（冻结） | `backend/app/schemas/`、`docs/interface-contracts.md` | `pytest tests/unit/test_backend.py` |
+| 配置校验与密钥保护 | `backend/app/config.py` | 测试中"配置"一节 |
+| 异步数据库引擎与请求级事务 | `backend/app/database.py` | `GET /health/ready` |
+| 领域异常体系 | `backend/app/errors.py` | 测试中"统一错误格式"一节 |
+| FastAPI 应用、CORS、trace_id、统一错误、日志脱敏、健康检查 | `backend/app/main.py` | 同上 |
+| 后端测试 52 项 | `tests/unit/test_backend.py` | `pytest -q` |
+| 本地基础设施（PostgreSQL 17 + MinIO，自动建桶） | `docker-compose.yml` | `docker compose --profile local-infra ps` |
+| 后端依赖声明与已验证版本 | `pyproject.toml`、`backend/backend-module-guide.md` | `pip freeze` |
+
+## 二、尚未实现（不得写成已完成）
+
+- 业务路由 `backend/app/api/*`：`docs/interface-contracts.md` 的端点表目前只是契约，**不可调用**。
+- ORM 模型 `backend/app/models/*` 与 Alembic 迁移：数据库可连接，但**库中尚无任何表**。
+- 仓储 `repositories/*`、领域服务 `services/*`（含预签名、权限、审计落库）。
+- 账号隔离测试 `tests/integration/test_account_isolation.py` 仍为占位。
+- MinIO 镜像仍用 `latest` 标签，可复现性不足。
+
+---
+
+## 三、每日工作证据包
+
+### Day 1 — 2026-07-26
+
+**1. 当天完成的功能**
+
+- 搭起可运行的本地后端环境：Python 3.13.14 项目内 `.venv`、PostgreSQL 17.10、MinIO（S3 兼容），并自动创建桶 `classroom-review`。
+- 冻结跨模块 Schema 契约 v1 并写入 `docs/interface-contracts.md`，供成员 1、2、4、5 对齐。
+- 实现配置校验、异步数据库连接与事务边界、领域异常体系、FastAPI 应用骨架（CORS、trace_id、统一错误格式、日志脱敏、存活/就绪健康检查）。
+- 补齐后端测试 52 项。
+- 修复 3 个阻塞全队的缺陷（见第 5 项）。
+
+**2. 为什么这样设计**
+
+- **契约优先于路由**：四位成员的工作都依赖后端的数据结构，先冻结 Schema 能避免第二天出现五套互不兼容的字段命名。
+- **约束写进校验器而非文档**：无证据结论、缺时间范围的证据、失败不带错误码等，都在 Pydantic 层直接拒绝。发布门禁里"结论没有证据""未复核内容进报告"是阻断项，靠口头约定不可验证。
+- **上传走"后端签名 → 浏览器直传对象存储 → 后端确认"**：满足"视频二进制不进数据库"，也避免后端成为大文件瓶颈。
+- **跨账号访问返回 404 而非 403**：403 会泄漏"该 ID 存在"。
+- **错误格式与日志脱敏集中在一处**：分散实现必然出现某个路由漏包装、某处日志漏遮盖。
+- **配置启动即失败、密钥用 `SecretStr`**：配置错误是最常见的"看起来像 bug 的非 bug"；`SecretStr` 让 `repr`、日志与异常页都带不出明文。
+
+**3. 对应提交或 PR**
+
+分支 `member-3/day1-backend-foundation`，按语义拆分的提交见 `git log`。尚未推送，待成员 1 确认契约变更后再合并。
+
+**4. 页面、日志、数据或测试证据**
+
+```
+$ pytest -q
+52 passed, 5 skipped
+
+$ docker compose --profile local-infra ps
+minio      running   Up (healthy)
+postgres   running   Up (healthy)
+
+$ docker compose logs minio-init
+Bucket created successfully `local/classroom-review`.
+Access permission for `local/classroom-review` is set to `private`
+
+$ psql -c "SELECT version();"
+PostgreSQL 17.10 on x86_64-pc-linux-musl
+
+$ ./verify.ps1 ; ./scripts/check-secrets.ps1
+阶段 0 骨架检查通过。
+路径级敏感文件检查通过。
+```
+
+TODO(成员 3)：按 `reports/evidence/evidence-index.md` 的命名规则补截图文件。
+
+**5. 遇到的问题（问题 → 原因 → 修复 → 复测）**
+
+*问题 A：一键安装脚本在中文 Windows 上完全无法执行。*
+- 原因：5 个 `.ps1` 均为 UTF-8 无 BOM；本机 ANSI 代码页为 GB2312，Windows PowerShell 5.1 按 ANSI 解码脚本文件，中文字符串中的 `。`/`？` 字节被当作引号提前闭合字符串，产生 ParserError。未安装 PowerShell 7 的成员全部受影响。
+- 修复：为 `setup.ps1`、`verify.ps1`、`start.ps1`、`scripts/check-secrets.ps1`、`scripts/verify-readme.ps1` 添加 UTF-8 BOM，内容与 CRLF 不变。`.sh` **不加** BOM（会破坏 shebang）。
+- 复测：`setup.ps1` 完整跑通并创建 `.venv`；`verify.ps1` 退出码 0。
+- 归属提示：除 `setup.ps1` 外 4 个文件第一负责人是成员 5，**待其确认**。
+
+*问题 B：`verify.ps1` / `verify.sh` 在任何人跑过一次测试后永久失败。*
+- 原因：README 唯一性检查扫描整个工作区，会把被 `.gitignore` 忽略目录里的第三方 `README.md` 算进来（pytest 生成 `.pytest_cache/README.md`）。而 `setup.ps1` 最后一步正是调用 `verify.ps1`。CI 因每次全新 checkout 而侥幸未暴露。
+- 修复：改用 `git ls-files '*README.md'`，只检查 Git 跟踪的文件，与 `check-secrets` 已有做法一致；并补上 `verify.ps1` 缺失的显式 `exit 0`（§2.2 要求"全部通过为 0"）。
+- 复测：在 `.pytest_cache/README.md` 存在的情况下，`verify.ps1` 与 `bash verify.sh` 均退出 0。
+- 归属提示：两文件第一负责人是成员 5，**待其确认**。
+
+*问题 C：自己新写的日志脱敏有两处缺陷。*
+- 原因一：`RedactingFilter` 把 `record.args` 全部 `str()` 化，导致第三方库的 `%d` 格式串收到字符串而抛 `TypeError`（httpx 的 `'HTTP Request: %s %s "%s %d %s"'` 每条都会报错）。
+- 原因二：`Authorization` 的正则用 `(\S+)` 只匹配到 `Bearer` 一词，**真正的令牌原样留在日志中**——命中发布门禁"密钥出现在日志"这一阻断项。
+- 修复：只脱敏字符串类型的参数、保留其余类型；正则显式吃掉 `Bearer`/`Basic`/`Token` 前缀。
+- 复测：新增回归用例 `test_redaction_preserves_non_string_arg_types` 与 `test_redaction_masks_secrets`，覆盖 `%d`、`%.2f`、多参数以及三种 `Authorization` 形态。
+- 说明：该缺陷由本人当天新写的代码引入，并由本人补写的测试发现。
+
+*环境类问题：WSL2 安装两次失败。*
+- 原因：C 盘可用空间仅 0.3 GB，WSL 的 MSIX 包（约 200 MB）安装中断，留下"正在安装"日志但无已注册包。
+- 修复：清理 pip / npm / uv 缓存与冗余的 uv 托管 Python 共回收约 4.6 GB 后重试成功；Docker Desktop 以 `--installation-dir=D:\Docker\DockerDesktop`、`--wsl-default-data-root=D:\Docker\wsl` 安装到 D 盘，使镜像与容器数据不再占用 C 盘。
+- 复测：`wsl --status` 退出码 0（WSL 2.7.11.0）；`docker info` 可用；`D:\Docker\wsl` 已生成。
+
+**6–8. AI 协作**
+
+详见 `docs/ai-collaboration-log.md` 中日期为 2026-07-26、成员为"成员 3"的记录行（含关键提示词、AI 输出、核验方式与修改原因）。
+
+**9. 问题最终如何解决**
+
+三个缺陷均已修复并有复测证据；其中问题 A、B 涉及成员 5 主责文件，已在本文件与
+`backend/backend-module-guide.md` 标注待确认，未擅自视为定稿。
+
+**10. 当前限制与下一步**
+
+限制见本文件第二节。下一步顺序：
+
+1. `backend/app/models/` 三个模型文件 + Alembic 首个迁移（每张业务表带 `owner_id`）。
+2. `dependencies.py`、`api/auth.py`、`services/permissions.py`：登录、当前用户、归属校验。
+3. 打通"创建课堂 → 上传记录 → 建立任务 → 保存结果"最短纵向链路，并把内部接口交给成员 4、5。
