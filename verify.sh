@@ -21,8 +21,14 @@ for path in \
   [[ -e "$path" ]] || { echo "阶段 0 骨架缺少：$path" >&2; exit 1; }
 done
 
-readme_files="$(find . -path ./.git -prune -o -type f -name README.md -print | sort)"
-if [[ "$readme_files" != "./README.md" ]]; then
+# 只检查 Git 跟踪的文件。find 会扫到被忽略目录里的第三方 README.md
+# （pytest 生成 .pytest_cache/README.md，node_modules 与 .venv 里也有大量 README.md），
+# 导致任何人装过依赖或跑过一次测试之后本检查就永久误报。
+if ! readme_files="$(git ls-files '*README.md' | sort)"; then
+  echo "无法读取 Git 跟踪文件，README 唯一性检查未执行；请确认当前目录是可访问的 Git 仓库。" >&2
+  exit 1
+fi
+if [[ "$readme_files" != "README.md" ]]; then
   echo "仓库必须且只能在根目录保留一个 README.md；子目录说明文件应使用职责明确的唯一名称。" >&2
   exit 1
 fi
