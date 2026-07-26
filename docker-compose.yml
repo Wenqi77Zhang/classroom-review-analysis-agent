@@ -27,9 +27,12 @@ services:
   # S3 Provider 抽象层吸收，业务层不得直接依赖任一供应商。
   # 用 MinIO 时需把 OBJECT_STORAGE_ENDPOINT 指向 http://localhost:9000 并设
   # OBJECT_STORAGE_USE_PATH_STYLE=true。
-  # TODO(成员 3)：首次拉取后把 latest 换成具体 RELEASE 标签，保证可复现。
+  #
+  # 版本固定为本机实际拉取并验证过的 RELEASE（PR #6 审查意见 6）。latest 会随时间漂移，
+  # 不满足可复现交付。已验证 digest（2026-07-26）：
+  #   sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     profiles: ["local-infra"]
     command: server /data --console-address ":9001"
     environment:
@@ -50,8 +53,10 @@ services:
       retries: 10
 
   # 一次性任务：建桶。桶不存在时预签名上传会直接失败，交给人工建容易漏。
+  # 已验证 digest（2026-07-26）：
+  #   sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     profiles: ["local-infra"]
     depends_on:
       minio:

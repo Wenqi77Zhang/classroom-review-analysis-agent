@@ -122,7 +122,9 @@ TODO(成员 3)：Alembic 迁移命令待 `models/` 实现后补入本节。
 - ORM 模型与迁移尚未实现，`/health/ready` 只验证连接可用，库里还没有表。
 - 测试覆盖集中在契约、配置与错误格式；权限、账号隔离、任务状态机与持久化尚未覆盖。
 - `docker-compose.yml` 的 MinIO 部分由成员 3 加入，该文件第一负责人是成员 5，**待其确认**。
-- MinIO 镜像仍用 `latest` 标签，可复现性不足；首次拉取后应改为具体 RELEASE 标签。
+- MinIO 与 mc 镜像已固定为本机实际验证过的 RELEASE 标签
+  （`RELEASE.2025-09-07T16-13-09Z` / `RELEASE.2025-08-13T08-35-41Z`，digest 记在
+  `docker-compose.yml` 注释中）。升级时必须重新拉取、重新验证后再改标签，不得凭猜测填写。
 - **统一 S3 Provider 抽象层尚未实现**：`main` 的完成定义要求"Provider 有独立测试且业务层
   不直接依赖 B2"，当前 `services/storage.py` 仍是 `TODO` 占位，业务层也还没有调用点。
 - **B2 凭据尚未申请**：`.env` 中 `OBJECT_STORAGE_*` 目前填的是本地 MinIO 的值，真实 B2

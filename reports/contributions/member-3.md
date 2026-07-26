@@ -116,6 +116,13 @@ TODO(成员 3)：按 `reports/evidence/evidence-index.md` 的命名规则补截�
 - 复测：新增 4 项配置测试（默认供应商、未知供应商被拒、保留天数边界）。
 - 待办：统一 S3 Provider 抽象层**尚未实现**，B2 凭据**尚未申请**，均已列入已知限制。
 
+*问题 E：Docker Desktop 反复启动即崩溃，阻塞审查意见 6。*
+- 现象：引擎始终起不来，`docker-desktop` WSL 发行版 Stopped，`docker info` 报找不到管道。
+- 原因：日志中 `backend crashed ... initializing Inference manager ... remove .../dockerInference: The file cannot be accessed by the system`。`%LOCALAPPDATA%\Docker\run\` 与 `%LOCALAPPDATA%\docker-secrets-engine\` 下残留了 0 字节的 AF_UNIX socket reparse point（重启中断留下）。Docker 启动时要先删旧 socket 再重建，删不掉即崩溃；而每次崩溃又会留下新的僵尸文件，形成循环。这些文件用 `Remove-Item` 与 `System.IO.File.Delete` 均报"文件无法被系统访问"。
+- 修复：不删文件，改为**重命名其父目录**（`run` → `run.stale-2`、`docker-secrets-engine` → `.stale`），Docker 启动时自行重建。重命名可随时还原，比"恢复出厂设置"安全——后者会清空已拉取的镜像，而本次正需要读取这些镜像的真实版本。
+- 复测：引擎 35 秒就绪；随后读到实际版本并完成审查意见 6。
+- 与 C 盘空间无关（当时 2.38 GB），是独立问题。
+
 *环境类问题：WSL2 安装两次失败。*
 - 原因：C 盘可用空间仅 0.3 GB，WSL 的 MSIX 包（约 200 MB）安装中断，留下"正在安装"日志但无已注册包。
 - 修复：清理 pip / npm / uv 缓存与冗余的 uv 托管 Python 共回收约 4.6 GB 后重试成功；Docker Desktop 以 `--installation-dir=D:\Docker\DockerDesktop`、`--wsl-default-data-root=D:\Docker\wsl` 安装到 D 盘，使镜像与容器数据不再占用 C 盘。
@@ -151,7 +158,7 @@ TODO(成员 3)：按 `reports/evidence/evidence-index.md` 的命名规则补截�
 | 3 | `modified` 未强制非空 `reviewed_content`，`reportable_content()` 静默回退模型原文 | 加状态一致性校验；`reportable_content()` 对不可进报告的状态直接抛错，不回退 | ✅ 空/空白/缺失三种、`pending`/`rejected` 抛错、两种可报告状态取值正确 |
 | 4 | Worker 与 Agent 共用高权限令牌 | 拆为 `WORKER_SERVICE_TOKEN` / `AGENT_SERVICE_TOKEN`，新增 `ServiceIdentity`、`INTERNAL_ENDPOINT_SCOPES` 端点权限表，以及 `AGENT_WRITABLE_STAGES`（Agent 仅可回写 `analyze`）。配置层拒绝两个令牌填成同值 | ✅ 端点范围、阶段划分不重叠且完备、令牌同值被拒、缺 agent 令牌启动失败 |
 | 5 | `/assets/{id}/complete` 不能信任浏览器自报 | 契约与 Schema 文档明确：标记 `uploaded` 前后端必须 HEAD 对象并核对 key/size/content_type/校验值，**以 HEAD 结果为准写库**，核对不过落 `failed` | ⏳ 路由未实现，暂无法测；已在 Schema 与契约中写死要求并留 `TODO` |
-| 6 | MinIO / mc 镜像必须固定为实际验证过的 RELEASE 标签 | **未完成（阻塞）**：本机 Docker 引擎当前起不来（C 盘仅剩 2.4 GB），无法读取实际镜像版本。审查明确要求不得猜版本，故保持 `latest` 未改，待 Docker 恢复后补 | — |
+| 6 | MinIO / mc 镜像必须固定为实际验证过的 RELEASE 标签 | 已修好 Docker（见问题 E）后读取实际镜像：`minio/minio:RELEASE.2025-09-07T16-13-09Z`、`minio/mc:RELEASE.2025-08-13T08-35-41Z`，digest 一并记入 compose 注释 | ✅ `docker compose down -v` 后用固定标签重新拉起，minio/postgres 均 healthy、桶创建成功 |
 | 7 | 报告文字与事实不符（"52 项""尚未推送"） | 全仓库同步为 85 项；提交状态更正为已推送并开出 PR #6 | — |
 | 8 | `X-Trace-Id` 无输入约束 | 限制字符集 `[A-Za-z0-9_-]` 与长度 1–128，不合法则静默生成新 ID；契约文档写明理由 | ✅ 超长、空格、换行（日志注入）、控制字符、HTML 片段、空值各一条，外加端到端"伪造头部不得回显"一条 |
 
