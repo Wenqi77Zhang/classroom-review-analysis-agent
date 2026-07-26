@@ -183,6 +183,7 @@ Codex 负责协助：
 │  │  ├─ config.py              [成员 3] — 校验环境变量与运行配置
 │  │  ├─ database.py            [成员 3] — 创建数据库连接和事务会话
 │  │  ├─ dependencies.py        [成员 3] — 提供当前用户、数据库和权限依赖
+│  │  ├─ errors.py              [成员 3] — 领域异常与 trace_id 上下文；独立成文件以避免 main 与 services 循环 import
 │  │  ├─ api/                   [成员 3] — HTTP 接口路由
 │  │  │  ├─ __init__.py         [成员 3] — 标记后端 API 子包
 │  │  │  ├─ auth.py             [成员 3] — 登录、身份验证和演示账号接口

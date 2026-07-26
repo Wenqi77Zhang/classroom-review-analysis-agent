@@ -5,7 +5,8 @@
 | 2026-07-26 | 成员 3 | 通读仓库、确定成员 3 责任范围与四天节奏 | "我现在作为成员三参与到这个多 Agent 项目中，请你完整地阅读这个初步的 GitHub 仓库，告诉我我具体的任务内容以及要用到哪些东西" | 责任边界、主责文件清单、技术选型与依据、四天逐日计划 | 结论逐条对回 `project-plan-v5.md` §4「成员 3」、§6、§8、§9 与 Issue #3 原文 | 无 | 采纳 | Issue #3、`docs/project-plan-v5.md` |
 | 2026-07-26 | 成员 3 | 冻结跨模块 Schema 契约 v1 | 承接上一条已确认的计划，要求"契约优先，先写 schemas 再写路由" | 4 个 Schema 文件、枚举表、错误码表、任务状态机、端点契约、内部接口族 | 自动化：52 项测试全过；契约条款逐条对回 `interface-contracts.md` 原有强制字段 | 4 项偏离阶段 0 草案之处未擅自定稿 | 采纳，并在 `interface-contracts.md` 变更节列出待成员 1/2/4/5 确认 | `backend/app/schemas/`、`docs/interface-contracts.md` |
 | 2026-07-26 | 成员 3 | 配置校验、异步数据库、领域异常、FastAPI 应用 | 同上计划的 Day 1「基础设施」与「认证权限骨架」时间块 | `config.py`、`database.py`、`errors.py`、`main.py` | 自动化：`/health` 与 `/health/ready` 实连 PostgreSQL 17.10 通过；CORS 允许/拒绝、错误外层、trace_id 透传均有测试 | 见下方「被修改或推翻的 AI 输出」第 3、4 条 | 修改后采纳 | `backend/app/`、`tests/unit/test_backend.py` |
-| 2026-07-26 | 成员 3 | 后端测试 | 要求把临时验证脚本转成仓库内可复现测试 | `tests/unit/test_backend.py` 52 项 | 自动化：`pytest -q` → 52 passed | 无 | 采纳 | `tests/unit/test_backend.py` |
+| 2026-07-26 | 成员 3 | 后端测试 | 要求把临时验证脚本转成仓库内可复现测试 | `tests/unit/test_backend.py`，初版 52 项 | 自动化：`pytest -q` → 52 passed | 无 | 采纳 | `tests/unit/test_backend.py` |
+| 2026-07-26 | 成员 3 | 按 PR #6 审查意见修正 | "这次 PR 被审查之后没有被合并，其中给出了一些审查意见，请你看一下，然后给出解决方案" | 逐条修正状态集合语义、内部逐字稿校验、`modified` 状态闭合、服务令牌拆分、上传核对契约、trace_id 约束、文档数字同步 | 自动化：`pytest -q` → 85 passed；`ruff` 通过 | 均为 AI 先前实现中的真实缺陷，由成员 1 独立审查发现 | 采纳并补回归测试；第 6 项（固定镜像版本）因 Docker 引擎起不来而**未完成**，未按猜测填写版本号 | `reports/contributions/member-3.md` 第四节 |
 | 2026-07-26 | 成员 3 | 本地环境与基础设施 | "帮我装"、"我的储存空间已经严重不足了，你能不能把 Docker 安装在 D 盘上？"、"已重启" | Python 3.13 安装、C 盘清理、Docker Desktop 装到 D 盘、WSL2 修复、compose 加入 MinIO | 自动化：`wsl --status` 退出码 0、`docker info` 可用、两容器 healthy、桶已建、`D:\Docker\wsl` 已生成 | 见下方第 5 条：AI 原先归因 UAC 未批准，实测证伪 | 修改后采纳 | `docker-compose.yml`、`backend/backend-module-guide.md` |
 | 2026-07-26 | 成员 3 | 合并 `main` 并对齐 B2 对象存储方案 | "推送"、"合并对齐 + 按 B2 调整" | 识别出远端 main 已定 B2 方案且与本分支 5 个文件重叠；统一变量名、修正 path-style 默认值、MinIO 降级为离线替代品 | 自动化：56 项测试全过、`setup.ps1` 端到端退出 0、无残留冲突标记 | AI 原方案基于本地 MinIO，与团队已定的 B2 方案冲突，以 `main` 为准 | 修改后采纳；Provider 抽象层与 B2 凭据列入已知限制 | `backend/app/config.py`、`docs/interface-contracts.md` |
 | 2026-07-26 | 成员 3 | 缺陷修复（4 个） | 无专门提示词；均在执行上述计划过程中由实际运行或自建测试暴露 | `.ps1` 编码修复、`verify` README 检查改用 `git ls-files`、日志脱敏两处修正 | 自动化：`setup.ps1` 跑通、`verify.ps1`/`verify.sh` 在 `.pytest_cache/README.md` 存在时退出 0、脱敏回归用例通过 | 见下方第 1、2 条 | 修改后采纳；涉及成员 5 主责文件的部分标注待确认 | `reports/contributions/member-3.md` 第 5 项 |
@@ -25,7 +26,7 @@ Claude Code（Anthropic，模型 Opus 5），在本机以命令行 Agent 方式�
 
 **必须如实区分两件事：**
 
-- **已完成的自动化核验**：52 项 pytest 断言、`ruff check`、`verify.ps1` / `verify.sh` /
+- **已完成的自动化核验**：85 项 pytest 断言、`ruff check`、`verify.ps1` / `verify.sh` /
   `check-secrets` 退出码、`docker compose ps` 健康状态、`psql` 版本输出、
   `/health/ready` 实连数据库。这些是可复现的机器验证，命令与输出记录在
   `reports/contributions/member-3.md` 第 4 项。
@@ -64,3 +65,20 @@ TODO(成员 3)：完成逐行阅读复核后更新本节，并在小组报告中
 6. **依赖版本不凭推测书写**。AI 计划中建议直接给依赖写上下界。改为先不带版本安装、
    由 `pip freeze` 读出真实解析结果，再回填下界与主版本上界，并把已验证版本记录在
    `backend/backend-module-guide.md`，避免凭猜测写出不存在或过紧的版本约束。
+
+### 由人工审查发现的 AI 缺陷（PR #6，成员 1 提出）
+
+以下 5 项都是 AI 已写完、自测通过、且自己没有发现的真实缺陷，由成员 1 的独立审查揪出。
+它们说明自动化测试通过**不等于**设计正确——测试只能验证"我想到的情况"。
+
+7. **状态集合自相矛盾**：`FAILED` 同时被列为可重试和终态。AI 写了两处定义却没做交叉检查。
+   修正后增加**不变量测试**（终态集合中每个状态的迁移集合必须为空），把"交叉检查"这件事
+   交给测试而不是记性。
+8. **内部接口绕过校验**：AI 只在对外 Schema 上加了时间区间校验，忘了同一约束在内部写入
+   接口同样必要，等于给 Worker 留了写入坏数据的口子。
+9. **状态与内容不闭合**：`modified` 允许缺教师改写内容，且 `reportable_content()` 静默回退
+   模型原文——AI 当初把"回退"当成健壮性，实际是把"教师已确认"变成了假象。
+10. **权限拆分不到位**：AI 设计了单一 `WORKER_SERVICE_TOKEN` 给 Worker 和 Agent 共用，
+    违反最小权限。修正为双令牌 + 端点权限表 + 阶段范围。
+11. **信任了客户端自报**：AI 设计的 `/assets/{id}/complete` 直接依据浏览器回调标记上传完成，
+    未要求后端独立核对对象。修正为必须 HEAD 核对后以服务端结果为准。

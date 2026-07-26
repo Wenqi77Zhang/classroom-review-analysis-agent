@@ -94,6 +94,12 @@
 `trace_id` 与成员 5 的 `agent/observability/tracing.py` 共用同一 ID，可把前端提示、
 后端日志与 Agent Trace 串成一条链。
 
+**上游可通过 `X-Trace-Id` 请求头透传，但该值是不可信输入**，会进日志、错误响应体与审计
+记录。后端强制约束：字符集 `[A-Za-z0-9_-]`、长度 1–128。不满足时**静默生成新 ID**，
+而不是返回 400——一个可选头部格式错误不应打断业务链路，且此时尚无可用的 trace_id 去
+构造错误响应。无约束会让外部请求塞入超长字符串撑爆日志，或用换行与控制字符伪造日志行
+（日志注入）。响应头 `X-Trace-Id` 返回的始终是规范化后的值。
+
 ## 任务状态机
 
 ```
@@ -107,6 +113,11 @@ parse_courseware → build_evidence_index → analyze`
 
 - 非法迁移返回 `STATE_CONFLICT`，不静默改库；允许的迁移表见
   `backend/app/schemas/task.py::ALLOWED_STATUS_TRANSITIONS`。
+- **`failed` 不是终态。** 代码中三个集合各有分工，不可混用：
+  `TERMINAL_STATUSES = {succeeded, cancelled}`（不可再迁移）、
+  `RETRYABLE_STATUSES = {failed}`（可回到 `queued`）、
+  `INACTIVE_STATUSES`（两者之并，用于判断"是否还在跑"）。
+  一致性由 `test_backend.py` 的不变量测试守住：终态集合中的每个状态，其允许迁移集合必须为空。
 - 每次 `(stage, status)` 变更由**后端**追加一条 `TaskEvent`（含 `progress`、`message`、
   `trace_id`）。Worker 不直接写事件表。前端进度条读事件流，因此不需要模拟计时器。
 - `lease_expires_at` 到期任务可被重新领取，Worker 进程被杀不会让任务永久卡在 `running`。
@@ -127,15 +138,28 @@ parse_courseware → build_evidence_index → analyze`
 | `analyses` | `GET /classrooms/{id}/conclusions`、`POST /conclusions/{id}/review`、`GET /conclusions/{id}/history` |
 | `reports` | `GET\|PUT /classrooms/{id}/report`、`POST /reports/{id}/export`、`GET /reports/{id}/export/{fmt}` |
 
-### 内部（Worker / Agent 带 `WORKER_SERVICE_TOKEN`）
+### 内部（服务令牌鉴权，**Worker 与 Agent 各持一个，不共用**）
 
-| 端点 | 请求 Schema | 使用方 |
-|---|---|---|
-| `POST /internal/tasks/claim` | `InternalTaskClaimRequest` → `InternalTaskClaim` | 成员 4 |
-| `POST /internal/tasks/{id}/heartbeat` | `InternalTaskHeartbeat` | 成员 4 |
-| `PATCH /internal/tasks/{id}/state` | `InternalTaskStateUpdate` | 成员 4、5 |
-| `POST /internal/tasks/{id}/transcript` | `InternalTranscriptWrite` | 成员 4 |
-| `POST /internal/tasks/{id}/conclusions` | `InternalConclusionBatchWrite` | 成员 5 |
+| 端点 | 请求 Schema | 允许身份 | 使用方 |
+|---|---|---|---|
+| `POST /internal/tasks/claim` | `InternalTaskClaimRequest` → `InternalTaskClaim` | `worker` | 成员 4 |
+| `POST /internal/tasks/{id}/heartbeat` | `InternalTaskHeartbeat` | `worker` | 成员 4 |
+| `PATCH /internal/tasks/{id}/state` | `InternalTaskStateUpdate` | `worker`、`agent` | 成员 4、5 |
+| `POST /internal/tasks/{id}/transcript` | `InternalTranscriptWrite` | `worker` | 成员 4 |
+| `POST /internal/tasks/{id}/conclusions` | `InternalConclusionBatchWrite` | `agent` | 成员 5 |
+
+身份由令牌区分：`WORKER_SERVICE_TOKEN` → `worker`，`AGENT_SERVICE_TOKEN` → `agent`。
+两者**必须配置为不同的值**。共用一个令牌意味着 Agent 也能覆盖逐字稿、Worker 也能写入
+教学结论，违反最小权限。权威定义见 `backend/app/schemas/task.py::INTERNAL_ENDPOINT_SCOPES`。
+
+`PATCH /internal/tasks/{id}/state` 两个身份都能调，但**可写的阶段不同**：
+
+| 身份 | 可回写的 `stage` |
+|---|---|
+| `agent` | 仅 `analyze`（`AGENT_WRITABLE_STAGES`） |
+| `worker` | 其余全部媒体处理阶段（`WORKER_WRITABLE_STAGES`） |
+
+越界回写返回 `PERMISSION_DENIED`。
 
 这组接口是 `worker/job_store.py` 与 Agent 回写的**唯一**落库入口；Worker 与 Agent
 不直连数据库。
@@ -150,7 +174,21 @@ parse_courseware → build_evidence_index → analyze`
 
 1. `POST /classrooms/{id}/uploads/presign` → `PresignResponse`（限时、限对象、限方法）
 2. 浏览器 `PUT upload_url`，必须原样带上 `headers`，否则签名不匹配
-3. `POST /assets/{id}/complete` → `upload_status` 落为 `uploaded`
+3. `POST /assets/{id}/complete` → **后端核对通过后**才把 `upload_status` 落为 `uploaded`
+
+**第 3 步不得信任浏览器自报。** 该请求只是"浏览器认为自己传完了"的信号，手工构造即可
+发出，对象可能根本不存在或只有 0 字节。标记 `uploaded` 之前，后端必须对对象存储执行
+`HEAD` 并核对：
+
+| 核对项 | 拦住什么 |
+|---|---|
+| object key 存在 | 压根没上传 |
+| `size_bytes` 与预签名时登记的一致 | 空上传、截断上传 |
+| `content_type` 与登记的一致 | 传了别的类型的文件 |
+| 校验值（若对象存储返回）与登记的一致 | 内容被替换 |
+
+**以 HEAD 结果为准写库**，请求体中的 `etag` / `checksum` 只作交叉比对线索。核对不通过返回
+`VALIDATION_ERROR`，并把 `upload_status` 落为 `failed`。
 
 视频二进制不经过 FastAPI、不进数据库；数据库只存 `object_key` 与归属。
 预签名 URL 属敏感数据：不写日志、不进前端持久化存储、不进仓库。
@@ -177,10 +215,12 @@ Agent 不得绕过证据门禁，也不得直接修改教师确认状态。
 1. **`TranslationSegment` 不再是独立实体**，译文合并为 `TranscriptSegment` 上的
    `translation` / `translation_language` 字段。理由：逐句对齐是硬要求，两份独立列表在
    教师插入或删除句子后会错位。影响成员 2（双语列渲染）、成员 4（Worker 写入）。
-2. **新增内部接口族 `/api/internal/*` 与 `WORKER_SERVICE_TOKEN`**。草案未定义 Worker/Agent
-   的回写入口，不定会导致成员 4、5 各写一套。影响成员 4、5。
+2. **新增内部接口族 `/api/internal/*`，并配 `WORKER_SERVICE_TOKEN` 与 `AGENT_SERVICE_TOKEN`
+   两个独立令牌**。草案未定义 Worker/Agent 的回写入口，不定会导致成员 4、5 各写一套。
+   令牌按身份拆分（成员 1 审查意见 4）：Worker 不得写结论，Agent 不得覆盖逐字稿，
+   且 Agent 只能回写 `analyze` 阶段的状态。影响成员 4、5。
 3. **`.env.example` 新增** `ACCESS_TOKEN_EXPIRE_MINUTES`、`DEMO_ACCOUNT_PASSWORD`、
-   `WORKER_SERVICE_TOKEN`、`OBJECT_STORAGE_USE_PATH_STYLE`。
+   `WORKER_SERVICE_TOKEN`、`AGENT_SERVICE_TOKEN`、`OBJECT_STORAGE_USE_PATH_STYLE`。
    预签名有效期统一采用 `main` 已定的 `OBJECT_STORAGE_PRESIGNED_URL_TTL_SECONDS`
    （本分支原用 `PRESIGN_EXPIRE_SECONDS`，同义重名，已废弃）。
 4. **`AnalysisConclusion` 增加证据账本字段** `model_name` / `skill` / `prompt_version`

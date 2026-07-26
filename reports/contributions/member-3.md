@@ -17,7 +17,7 @@
 | 异步数据库引擎与请求级事务 | `backend/app/database.py` | `GET /health/ready` |
 | 领域异常体系 | `backend/app/errors.py` | 测试中"统一错误格式"一节 |
 | FastAPI 应用、CORS、trace_id、统一错误、日志脱敏、健康检查 | `backend/app/main.py` | 同上 |
-| 后端测试 52 项 | `tests/unit/test_backend.py` | `pytest -q` |
+| 后端测试 85 项 | `tests/unit/test_backend.py` | `pytest -q` |
 | 本地基础设施（PostgreSQL 17 + MinIO，自动建桶） | `docker-compose.yml` | `docker compose --profile local-infra ps` |
 | 后端依赖声明与已验证版本 | `pyproject.toml`、`backend/backend-module-guide.md` | `pip freeze` |
 
@@ -40,7 +40,7 @@
 - 搭起可运行的本地后端环境：Python 3.13.14 项目内 `.venv`、PostgreSQL 17.10、MinIO（S3 兼容），并自动创建桶 `classroom-review`。
 - 冻结跨模块 Schema 契约 v1 并写入 `docs/interface-contracts.md`，供成员 1、2、4、5 对齐。
 - 实现配置校验、异步数据库连接与事务边界、领域异常体系、FastAPI 应用骨架（CORS、trace_id、统一错误格式、日志脱敏、存活/就绪健康检查）。
-- 补齐后端测试 52 项。
+- 补齐后端测试 85 项（初版 52 项，按 PR #6 审查意见补充回归用例后为 85 项）。
 - 修复 3 个阻塞全队的缺陷（见第 5 项）。
 
 **2. 为什么这样设计**
@@ -54,7 +54,9 @@
 
 **3. 对应提交或 PR**
 
-分支 `member-3/day1-backend-foundation`，按语义拆分的提交见 `git log`。尚未推送，待成员 1 确认契约变更后再合并。
+分支 `member-3/day1-backend-foundation`，按语义拆分的提交见 `git log`。已推送并开出
+**PR #6**（仓库首个 PR），GitHub CI 通过。成员 1 审查后提出 8 项必须修正，已逐条处理，
+详见下方"PR #6 审查意见处理"。合并待成员 1 复审。
 
 **4. 页面、日志、数据或测试证据**
 
@@ -130,8 +132,30 @@ TODO(成员 3)：按 `reports/evidence/evidence-index.md` 的命名规则补截�
 
 **10. 当前限制与下一步**
 
-限制见本文件第二节。下一步顺序：
+限制见本文件第二节和下方审查意见处理表。下一步顺序：
 
 1. `backend/app/models/` 三个模型文件 + Alembic 首个迁移（每张业务表带 `owner_id`）。
 2. `dependencies.py`、`api/auth.py`、`services/permissions.py`：登录、当前用户、归属校验。
 3. 打通"创建课堂 → 上传记录 → 建立任务 → 保存结果"最短纵向链路，并把内部接口交给成员 4、5。
+
+---
+
+## 四、PR #6 审查意见处理
+
+成员 1 于 2026-07-26 独立核验 head `b33533a` 后提出 8 项必须修正。处理如下：
+
+| # | 意见 | 处理 | 回归测试 |
+|---|---|---|---|
+| 1 | `FAILED` 既可迁回 `QUEUED` 又被列入 `TERMINAL_STATUSES`，语义冲突 | 拆成三个集合：`TERMINAL_STATUSES={succeeded,cancelled}`、`RETRYABLE_STATUSES={failed}`、`INACTIVE_STATUSES`（二者之并） | 加**不变量测试**：终态集合中每个状态的允许迁移集合必须为空，防止再次自相矛盾 |
+| 2 | `InternalTranscriptSegmentWrite` 未校验时间区间，Worker 可写入对外 Schema 会拒绝的数据 | 复用同一约束；并新增批内 `index` 唯一且升序校验 | ✅ 倒置区间、重复 index、乱序 index 各一条 |
+| 3 | `modified` 未强制非空 `reviewed_content`，`reportable_content()` 静默回退模型原文 | 加状态一致性校验；`reportable_content()` 对不可进报告的状态直接抛错，不回退 | ✅ 空/空白/缺失三种、`pending`/`rejected` 抛错、两种可报告状态取值正确 |
+| 4 | Worker 与 Agent 共用高权限令牌 | 拆为 `WORKER_SERVICE_TOKEN` / `AGENT_SERVICE_TOKEN`，新增 `ServiceIdentity`、`INTERNAL_ENDPOINT_SCOPES` 端点权限表，以及 `AGENT_WRITABLE_STAGES`（Agent 仅可回写 `analyze`）。配置层拒绝两个令牌填成同值 | ✅ 端点范围、阶段划分不重叠且完备、令牌同值被拒、缺 agent 令牌启动失败 |
+| 5 | `/assets/{id}/complete` 不能信任浏览器自报 | 契约与 Schema 文档明确：标记 `uploaded` 前后端必须 HEAD 对象并核对 key/size/content_type/校验值，**以 HEAD 结果为准写库**，核对不过落 `failed` | ⏳ 路由未实现，暂无法测；已在 Schema 与契约中写死要求并留 `TODO` |
+| 6 | MinIO / mc 镜像必须固定为实际验证过的 RELEASE 标签 | **未完成（阻塞）**：本机 Docker 引擎当前起不来（C 盘仅剩 2.4 GB），无法读取实际镜像版本。审查明确要求不得猜版本，故保持 `latest` 未改，待 Docker 恢复后补 | — |
+| 7 | 报告文字与事实不符（"52 项""尚未推送"） | 全仓库同步为 85 项；提交状态更正为已推送并开出 PR #6 | — |
+| 8 | `X-Trace-Id` 无输入约束 | 限制字符集 `[A-Za-z0-9_-]` 与长度 1–128，不合法则静默生成新 ID；契约文档写明理由 | ✅ 超长、空格、换行（日志注入）、控制字符、HTML 片段、空值各一条，外加端到端"伪造头部不得回显"一条 |
+
+另接受意见 5（新增 `errors.py`）的附带要求，已把该文件补入 `docs/project-plan-v5.md` 的文件清单。
+
+**仍需成员 5 确认**：其主责脚本的 BOM / README 检查 / 锁文件引号修复，以及
+`docker-compose.yml` 的 MinIO 部分。
