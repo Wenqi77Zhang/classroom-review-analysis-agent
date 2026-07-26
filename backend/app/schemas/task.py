@@ -112,7 +112,8 @@ class PresignRequest(ApiModel):
 class PresignResponse(OrmModel):
     """浏览器拿到后直接 PUT 到 `upload_url`，再调 `/assets/{id}/complete`。
 
-    `upload_url` 是限时、限对象、限方法的预签名地址（`PRESIGN_EXPIRE_SECONDS`）。
+    `upload_url` 是限时、限对象、限方法的预签名地址
+    （`OBJECT_STORAGE_PRESIGNED_URL_TTL_SECONDS`）。
     它属于敏感数据：不得写入日志、不得存进前端 localStorage、不得进仓库。
     """
 

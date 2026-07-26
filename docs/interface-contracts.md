@@ -155,7 +155,12 @@ parse_courseware → build_evidence_index → analyze`
 视频二进制不经过 FastAPI、不进数据库；数据库只存 `object_key` 与归属。
 预签名 URL 属敏感数据：不写日志、不进前端持久化存储、不进仓库。
 
-MinIO 需在 bucket 上配置 CORS，否则浏览器直传会被拦——这是成员 1、2 上传功能的隐性前提。
+**对象存储侧必须配置 CORS，否则浏览器直传会被拦**——这是成员 1、2 上传功能的隐性前提。
+M1 使用 Backblaze B2，需在其 Bucket 上允许来自 `FRONTEND_ORIGIN` 的 `PUT`；本地 MinIO
+替代方案由 compose 的 `MINIO_API_CORS_ALLOW_ORIGIN` 自动处理。
+
+两家供应商的寻址方式不同（MinIO 需 path-style，B2 用 virtual-host），差异必须由后端的
+统一 S3 Provider 抽象层吸收；业务层不得直接依赖任一供应商（`main` 的后端完成定义要求）。
 
 ## Agent 边界
 
@@ -175,7 +180,9 @@ Agent 不得绕过证据门禁，也不得直接修改教师确认状态。
 2. **新增内部接口族 `/api/internal/*` 与 `WORKER_SERVICE_TOKEN`**。草案未定义 Worker/Agent
    的回写入口，不定会导致成员 4、5 各写一套。影响成员 4、5。
 3. **`.env.example` 新增** `ACCESS_TOKEN_EXPIRE_MINUTES`、`DEMO_ACCOUNT_PASSWORD`、
-   `WORKER_SERVICE_TOKEN`、`OBJECT_STORAGE_USE_PATH_STYLE`、`PRESIGN_EXPIRE_SECONDS`。
+   `WORKER_SERVICE_TOKEN`、`OBJECT_STORAGE_USE_PATH_STYLE`。
+   预签名有效期统一采用 `main` 已定的 `OBJECT_STORAGE_PRESIGNED_URL_TTL_SECONDS`
+   （本分支原用 `PRESIGN_EXPIRE_SECONDS`，同义重名，已废弃）。
 4. **`AnalysisConclusion` 增加证据账本字段** `model_name` / `skill` / `prompt_version`
    与教师改写字段 `reviewed_content`。前者服务于"证据账本"亮点，后者用于保留教师成果。
    影响成员 5（写入时提供）、成员 2（展示）。

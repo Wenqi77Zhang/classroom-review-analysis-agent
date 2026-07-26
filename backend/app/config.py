@@ -29,6 +29,20 @@ class AppEnv(StrEnum):
     PRODUCTION = "production"
 
 
+class ObjectStorageProvider(StrEnum):
+    """对象存储供应商。
+
+    M1 定为 Backblaze B2（`main` 的 `19901dc`）。枚举而非自由字符串，是为了让
+    "业务层不直接依赖 B2"这条要求有一个可检查的边界：Provider 抽象层按此分支，
+    业务代码不读这个字段。
+
+    `MINIO` 仅用于无 B2 凭据时的本地离线开发，不是交付目标。
+    """
+
+    BACKBLAZE_B2 = "backblaze_b2"
+    MINIO = "minio"
+
+
 # 按文件类型分别限制大小：课件和逐字稿没有理由达到视频量级，统一放宽等于给
 # 对象存储和 Worker 留了一个廉价的资源耗尽入口。
 MAX_UPLOAD_BYTES: dict[str, int] = {
@@ -74,20 +88,30 @@ class Settings(BaseSettings):
     )
 
     # ---------------- Object storage ----------------
+    # M1 默认 Backblaze B2（成员 1 确定），走其 S3 兼容 API。变量名保持通用，
+    # 换供应商不必改前端、数据库与 Worker。
+    object_storage_provider: ObjectStorageProvider = ObjectStorageProvider.BACKBLAZE_B2
     object_storage_endpoint: str
     object_storage_region: str = "us-east-1"
     object_storage_bucket: str
     object_storage_access_key_id: SecretStr
     object_storage_secret_access_key: SecretStr
     object_storage_use_path_style: bool = Field(
-        default=True, description="MinIO 等自托管服务必须为 true；云厂商 S3 一般为 false。"
+        default=False,
+        description="B2 的 S3 API 用 virtual-host 风格，保持 false；仅本地 MinIO 替代时设为 true。",
     )
-    presign_expire_seconds: int = Field(
+    object_storage_presigned_url_ttl_seconds: int = Field(
         default=900,
         ge=60,
         le=3600,
         description="预签名 URL 有效期。上限 1 小时：限时是 data-security.md 的强制要求，"
         "过长的签名等同于把对象长期公开。",
+    )
+    object_storage_retention_days: int = Field(
+        default=7,
+        ge=1,
+        le=90,
+        description="对象保留天数，超期由清理流程删除；删除需同时处理业务记录与审计状态。",
     )
 
     @field_validator("database_url")

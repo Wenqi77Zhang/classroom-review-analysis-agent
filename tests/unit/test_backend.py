@@ -24,7 +24,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from backend.app.config import Settings
+from backend.app.config import ObjectStorageProvider, Settings
 from backend.app.errors import NotFoundError, UpstreamUnavailableError, current_trace_id
 from backend.app.main import RedactingFilter, create_app
 from backend.app.schemas.analysis_report import (
@@ -273,7 +273,7 @@ def test_weak_jwt_secret_is_rejected() -> None:
 def test_presign_expiry_must_stay_within_bounds(seconds: int) -> None:
     """限时是 docs/data-security.md 的强制要求：过长的签名等同于长期公开对象。"""
     with pytest.raises(ValidationError):
-        make_settings(presign_expire_seconds=seconds)
+        make_settings(object_storage_presigned_url_ttl_seconds=seconds)
 
 
 def test_secrets_are_not_printable() -> None:
@@ -283,6 +283,29 @@ def test_secrets_are_not_printable() -> None:
         assert secret not in rendered
     # 明文只能通过显式调用取到
     assert settings.jwt_secret.get_secret_value() == secret
+
+
+def test_object_storage_defaults_target_backblaze_b2() -> None:
+    """M1 默认供应商是 B2；B2 的 S3 API 用 virtual-host 寻址，故 path-style 默认 false。
+
+    默认值写错会导致"本地 MinIO 能传、切到 B2 传不上"这类难查的问题。
+    """
+    settings = make_settings()
+    assert settings.object_storage_provider is ObjectStorageProvider.BACKBLAZE_B2
+    assert settings.object_storage_use_path_style is False
+    assert settings.object_storage_presigned_url_ttl_seconds == 900
+
+
+def test_unknown_object_storage_provider_is_rejected() -> None:
+    """供应商用枚举而非自由字符串，让"业务层不直接依赖 B2"有可检查的边界。"""
+    with pytest.raises(ValidationError):
+        make_settings(object_storage_provider="aliyun_oss")
+
+
+@pytest.mark.parametrize("days", [0, 91])
+def test_object_retention_days_must_stay_within_bounds(days: int) -> None:
+    with pytest.raises(ValidationError):
+        make_settings(object_storage_retention_days=days)
 
 
 def test_upload_limit_differs_by_kind() -> None:
