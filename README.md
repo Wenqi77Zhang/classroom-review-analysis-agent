@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-当前仓库处于“阶段 0：项目骨架与方案冻结”。目录、责任、配置样例和测试模板已建立，但核心功能尚未实现。任何 `TODO`、占位实现或模拟内容均不代表已完成。
+阶段 0 已完成，成员 1 的 `UI Baseline v1` 已正式迁入 `frontend/`：首页、创建课堂和复盘目标/分析契约页面可在 Next.js 中交互并通过生产构建。当前页面仍使用 Mock 数据，尚未连接真实后端、媒体处理、证据工作台或 Agent；这些核心链路不得描述为已实现。成员 2 将在此视觉与流程基准上继续实现证据工作台。
 
 ## 里程碑
 
@@ -51,7 +51,8 @@ chmod +x setup.sh start.sh verify.sh
 - 正式需求、产品、架构、安全与验收文档：`docs/documentation-index.md`
 - 完整四天五人规划与目标骨架：`docs/project-plan-v5.md`
 - 文件和模块责任：`OWNERSHIP.md`
-- 前端模块：`frontend/frontend-module-guide.md`
+- 前端模块：`frontend/frontend-module-guide.md`（含成员 2 交接）
+- 第一版界面基准：`docs/ui-baseline-v1.md`
 - 后端模块：`backend/backend-module-guide.md`
 - 媒体处理 Worker：`worker/media-worker-guide.md`
 - Agent 模块：`agent/agent-module-guide.md`

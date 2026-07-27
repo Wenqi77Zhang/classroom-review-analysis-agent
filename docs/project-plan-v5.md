@@ -943,3 +943,30 @@ Codex 负责协助：
 6. 建立测试记录表和 AI 协作记录表。
 7. 由成员 1 以组长身份验收阶段 0。
 8. 阶段 0 通过后再开始第 1 天，且不继续扩展范围。
+
+---
+
+## 11. UI Baseline v1 冻结与前端文件责任补充（2026-07-27）
+
+成员 1 已确认“雾境竹影”作为第一版产品界面基准，并与 Codex 协作将临时原型正式迁入 Next.js。该变更不扩展里程碑 M1 范围，只把成员 1 的产品设计与流程前端落实为可运行基准；后端、媒体处理、证据工作台和真实 Agent 仍按原分工实施。
+
+新增或明确的目标骨架：
+
+```text
+frontend/
+├─ public/assets/
+│  └─ mist-bamboo-glass-v2.png       [成员 1；维护协作：成员 2] — 已确认的雾面竹影背景
+├─ src/app/
+│  ├─ globals.css                    [成员 1；维护协作：成员 2] — UI v1 令牌、材质、响应式与动效
+│  ├─ page.tsx                       [成员 1] — 产品首页入口
+│  ├─ classrooms/page.tsx            [成员 1] — 创建课程与课堂入口
+│  └─ tasks/[taskId]/page.tsx        [成员 1、成员 2] — 复盘目标后衔接证据工作台
+├─ src/components/baseline/          [成员 1；维护协作：成员 2] — 产品流程和共享壳层
+│  ├─ SiteChrome.tsx                 [成员 1] — 导航、Mock 边界、滚动与显现效果
+│  ├─ HomeBaseline.tsx               [成员 1] — 首页叙事与演示入口
+│  ├─ ClassroomBaseline.tsx          [成员 1] — 课堂表单、校验与隐私确认
+│  └─ ReviewTaskBaseline.tsx         [成员 1；衔接：成员 2] — 复盘目标、分析契约和状态预览
+└─ tests/ui-baseline.test.mjs        [成员 1；复核：成员 2、5] — 字号、资产和 Mock 边界回归
+```
+
+成员 2 从此基准继续开发 `components/evidence/`，并维护依赖锁、浏览器适配和响应式。整体视觉令牌或主流程发生变化时，需在 PR 中附前后截图并由成员 1 确认。设计事实源为 `docs/ui-baseline-v1.md`，完成证据必须包含 `npm test`、`npm run typecheck`、`npm run build` 与桌面/移动端截图。

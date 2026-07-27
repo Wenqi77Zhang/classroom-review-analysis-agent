@@ -2,6 +2,6 @@
 
 | 日期 | 成员 | 任务 | 关键提示词 | AI 输出摘要 | 人工核验 | 修改原因 | 最终处理 | 证据链接 |
 |---|---|---|---|---|---|---|---|---|
-| TODO | TODO | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
+| 2026-07-27 | 成员 1 + Codex | UI Baseline v1 设计迭代与正式迁移 | 雾境画廊、朦胧竹影、Glassmorphism、霞鹜文楷、Fraunces、字号可读性、Mock 边界、Next.js 迁移 | AI 生成临时原型、竹影背景、Next.js 组件、样式和检查脚本 | 成员 1 多轮标注布局、色彩、背景、字号和文案，最终确认 v1；自动执行测试、类型检查、生产构建和依赖审计 | 初稿过于扁平且像 PPT；背景、留白、层级、字体与色调不符合目标；TypeScript 7 与 Next 不兼容；依赖出现高危公告 | 采用 v2 竹影背景和雾面玻璃基准；固定 TypeScript 6；用 overrides 升级 PostCSS/Sharp；0 个已知漏洞；保留 Mock 标识并移交成员 2 | `docs/ui-baseline-v1.md`、`frontend/src/components/baseline/`、构建日志 |
 
 禁止把未经人工核验的 AI 内容直接写成事实、引用、测试结果或个人独立成果。
