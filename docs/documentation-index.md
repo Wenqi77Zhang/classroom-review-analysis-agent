@@ -7,13 +7,14 @@
 1. `requirements-baseline.md`：网页要求、核心功能和使用边界。
 2. `background-and-needs.md`：任务背景、目标用户、痛点和成功标准。
 3. `product-spec.md`：产品定位、核心流程、页面和交互取舍。
-4. `interface-contracts.md`：前端、后端、Worker 与 Agent 的接口契约。
-5. `architecture.md`：系统架构、存储、任务状态和部署关系。
-6. `agent-design.md`：Agent 编排、模型、Prompt、Skill、工具和证据门禁。
-7. `data-security.md`：隐私、权限、密钥、保留和删除策略。
-8. `acceptance-matrix.md`：要求、负责人、实现位置和验收证据映射。
-9. `validation-plan.md`：真实输入、失败场景、测试和迭代方法。
-10. `scorecard.md`：按官方评分结构进行提交前自检。
+4. `ui-baseline-v1.md`：成员 1 已确认的第一版视觉与流程基准，以及成员 2 接入规则。
+5. `interface-contracts.md`：前端、后端、Worker 与 Agent 的接口契约。
+6. `architecture.md`：系统架构、存储、任务状态和部署关系。
+7. `agent-design.md`：Agent 编排、模型、Prompt、Skill、工具和证据门禁。
+8. `data-security.md`：隐私、权限、密钥、保留和删除策略。
+9. `acceptance-matrix.md`：要求、负责人、实现位置和验收证据映射。
+10. `validation-plan.md`：真实输入、失败场景、测试和迭代方法。
+11. `scorecard.md`：按官方评分结构进行提交前自检。
 
 ## 项目管理与报告
 
