@@ -16,3 +16,25 @@ jobs:
       - name: Reject committed local secrets
         shell: bash
         run: bash scripts/check-secrets.sh
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci
+      - name: Run frontend contract tests
+        run: npm test
+      - name: Run TypeScript checks
+        run: npm run typecheck
+      - name: Build production frontend
+        run: npm run build
