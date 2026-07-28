@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $ProjectRoot
 $missing = @()
@@ -27,11 +27,15 @@ if ($missing.Count -gt 0) {
     exit 1
 }
 
-$readmeFiles = @(
-    Get-ChildItem -LiteralPath $ProjectRoot -Recurse -Force -File -Filter "README.md" |
-        Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' }
-)
-if ($readmeFiles.Count -ne 1 -or $readmeFiles[0].FullName -ne (Join-Path $ProjectRoot "README.md")) {
+# 只检查 Git 跟踪的文件。扫描整个工作区会把被忽略目录里的第三方 README.md 算进来
+# （pytest 会生成 .pytest_cache/README.md，node_modules 与 .venv 里也有大量 README.md），
+# 导致任何人装过依赖或跑过一次测试之后本检查就永久误报。
+$trackedReadmes = @(git ls-files "*README.md")
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "无法读取 Git 跟踪文件，README 唯一性检查未执行；请确认当前目录是可访问的 Git 仓库。"
+    exit 1
+}
+if ($trackedReadmes.Count -ne 1 -or $trackedReadmes[0] -ne "README.md") {
     Write-Error "仓库必须且只能在根目录保留一个 README.md；子目录说明文件应使用职责明确的唯一名称。"
     exit 1
 }
@@ -43,7 +47,13 @@ if ($frontendPackage.engines.node -ne ">=24 <25") {
     Write-Error "Node.js 版本基线不一致：frontend/package.json 必须限制为 >=24 <25。"
     exit 1
 }
-& node -e 'const p=require("./frontend/package.json"); const l=require("./frontend/package-lock.json"); if(l.name!==p.name || l.version!==p.version || l.lockfileVersion!==3) process.exit(1);'
+# 校验逻辑与原实现一致，只修正引号写法。原写法把 JS 代码放在 PowerShell 单引号串里并
+# 在其中使用双引号，而 Windows PowerShell 向原生命令传参时会吃掉这些双引号，node 收到的
+# 是 require(./frontend/package.json)（缺引号），必然抛 SyntaxError，使本检查恒失败。
+# 改为 JS 侧用单引号、PowerShell 侧用双引号（串内无 $，不会被插值）。
+# 不改用 ConvertFrom-Json：package-lock.json 含空字符串键 "packages": { "": {...} }，
+# Windows PowerShell 5.1 的 ConvertFrom-Json 无法处理空属性名，会直接报错。
+& node -e "const p=require('./frontend/package.json'); const l=require('./frontend/package-lock.json'); if(l.name!==p.name || l.version!==p.version || l.lockfileVersion!==3) process.exit(1);"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "前端依赖锁文件与 package.json 不一致，或 lockfileVersion 不是 3。"
     exit 1
@@ -54,3 +64,6 @@ if ($pythonProject -notmatch '(?m)^requires-python = ">=3\.13,<3\.14"$') {
 }
 
 Write-Host "阶段 0 骨架检查通过。核心流程测试将在实现后启用。"
+# 显式退出码：project-plan-v5.md §2.2 要求"全部通过为 0，任一必要检查失败为非 0"。
+# 隐式成功会让调用方读到上一条命令残留的 $LASTEXITCODE。
+exit 0
