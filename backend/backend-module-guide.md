@@ -25,7 +25,7 @@
 | `app/main.py` | **部分实现**：应用工厂、CORS、trace_id、统一错误处理、日志脱敏、健康检查。**业务路由尚未注册** |
 | `app/api/`、`app/models/`、`app/repositories/`、`app/services/` | **尚未实现**，仍为 `TODO` 占位 |
 | `migrations/` | **尚未实现**，无迁移版本 |
-| `tests/unit/test_backend.py` | **已实现** 85 项：契约校验、配置、错误格式、日志脱敏、服务身份权限、状态集合不变量、trace_id 约束 |
+| `tests/unit/test_backend.py` | **已实现** 86 项：成员 3 完成 85 项契约、配置、错误格式、服务身份、状态与 trace_id 测试；成员 1 集成复核时补 1 项异常 traceback 脱敏回归测试 |
 
 任何 `TODO`、占位实现均不代表已完成。跨模块契约见 `../docs/interface-contracts.md`（v1 已冻结）。
 

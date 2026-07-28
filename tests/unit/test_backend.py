@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -29,6 +30,7 @@ from backend.app.errors import NotFoundError, UpstreamUnavailableError, current_
 from backend.app.main import (
     TRACE_ID_MAX_LENGTH,
     RedactingFilter,
+    RedactingFormatter,
     create_app,
     normalize_trace_id,
 )
@@ -438,6 +440,28 @@ def test_redaction_does_not_touch_ordinary_messages() -> None:
     )
     RedactingFilter().filter(record)
     assert "transcribe" in str(record.msg)
+
+
+def test_redaction_masks_secrets_in_exception_traceback() -> None:
+    """回归：traceback 在 Filter 之后生成，最终格式化文本也必须脱敏。"""
+    secret = "TOP_SECRET_TOKEN"
+    try:
+        raise RuntimeError(f"upstream failed: Authorization: Bearer {secret}")
+    except RuntimeError:
+        record = logging.LogRecord(
+            "backend",
+            logging.ERROR,
+            __file__,
+            1,
+            "request failed",
+            (),
+            sys.exc_info(),
+        )
+
+    RedactingFilter().filter(record)
+    rendered = RedactingFormatter("%(message)s").format(record)
+    assert secret not in rendered
+    assert "Authorization: ***" in rendered
 
 
 @pytest.mark.parametrize(

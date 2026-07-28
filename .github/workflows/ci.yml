@@ -16,3 +16,41 @@ jobs:
       - name: Reject committed local secrets
         shell: bash
         run: bash scripts/check-secrets.sh
+
+  backend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install backend and test dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Run backend tests
+        run: python -m pytest -q
+      - name: Run backend lint
+        run: python -m ruff check backend tests
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci
+      - name: Run frontend contract tests
+        run: npm test
+      - name: Run TypeScript checks
+        run: npm run typecheck
+      - name: Build production frontend
+        run: npm run build

@@ -100,10 +100,23 @@ class RedactingFilter(logging.Filter):
         return text_value
 
 
+class RedactingFormatter(logging.Formatter):
+    """对最终渲染的日志再次脱敏，覆盖异常 traceback。
+
+    ``logging.Filter`` 在 ``Formatter`` 之前运行，只能处理 ``msg`` 与 ``args``；
+    traceback 随后才由 ``exc_info`` 生成。只用 Filter 会让异常消息里的令牌绕过脱敏。
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        return RedactingFilter._scrub(super().format(record))
+
+
 def configure_logging(settings: Settings) -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s [trace=%(trace_id)s] %(message)s")
+        RedactingFormatter(
+            "%(asctime)s %(levelname)s %(name)s [trace=%(trace_id)s] %(message)s"
+        )
     )
     handler.addFilter(RedactingFilter())
     handler.addFilter(_TraceIdLogFilter())
