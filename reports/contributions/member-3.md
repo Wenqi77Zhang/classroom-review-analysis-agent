@@ -80,6 +80,8 @@ alembic check -> No new upgrade operations detected
   保留期限和匿名化流程前硬删除有审计记录的账号。
 - 新增 5 项真实 PostgreSQL 写入/删除测试与 2 项元数据不变量测试。本地环境当前没有
   PostgreSQL/Docker，不能把这些写成已通过；须以最新 PR CI 的 PostgreSQL 17 结果为准。
+- 成员 1 与 Codex 协作把 PostgreSQL CI 从单向升级补强为
+  `upgrade head → downgrade base → upgrade head`；该工作流第一负责人是成员 5，待其确认。
 
 ### Day 1 — 2026-07-26
 
