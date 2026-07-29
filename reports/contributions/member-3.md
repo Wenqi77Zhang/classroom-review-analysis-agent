@@ -61,6 +61,9 @@ alembic check -> No new upgrade operations detected
 
 - Alembic 在中文 Windows 上按系统区域编码读取 INI，中文注释触发 GBK 解码失败；将 INI 保持纯 ASCII。
 - 纯关联表误用了 ORM `mapped_column`；改用 Core `Column`，并增加 mapper 配置测试。
+- PR #10 首轮 CI 未给真实 PostgreSQL 测试提供数据库和配置，导致 2 项测试在读取 `Settings`
+  时失败；为 `backend-check` 增加 PostgreSQL 17 service、Alembic 迁移和 `TEST_DATABASE_URL`。
+  数据库地址不写进全局 `DATABASE_URL`，避免污染“缺少配置应失败”和 B2 默认值单元测试。
 
 **当前限制与下一步**
 

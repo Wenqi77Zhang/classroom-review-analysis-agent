@@ -3,20 +3,23 @@
 Requires the local-infra PostgreSQL service and an upgraded Alembic schema.
 """
 
+import os
 import uuid
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from backend.app.config import get_settings
 from backend.app.models import Asset, Classroom, Course, ProcessingTask, User
 from backend.app.schemas.task import AssetKind, PrivacyMode, TaskStage, TaskStatus, UploadStatus
 
 
 @pytest.mark.asyncio
 async def test_core_ownership_chain_survives_a_new_session() -> None:
-    engine = create_async_engine(get_settings().database_url.get_secret_value())
+    database_url = os.environ.get("TEST_DATABASE_URL")
+    if database_url is None:
+        pytest.skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+    engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     owner_id = uuid.uuid4()
     classroom_id = uuid.uuid4()
