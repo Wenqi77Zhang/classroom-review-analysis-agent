@@ -1642,6 +1642,21 @@ textarea {
   color: #8a5267;
 }
 
+.mock-pill.backend-checking {
+  background: rgba(237, 226, 204, 0.56);
+  color: #806b42;
+}
+
+.mock-pill.backend-reachable {
+  background: rgba(207, 226, 218, 0.58);
+  color: #3f6a5c;
+}
+
+.mock-pill.backend-unreachable {
+  background: rgba(238, 221, 229, 0.58);
+  color: #8a5267;
+}
+
 .status-badge.pending {
   background: rgba(237, 226, 204, 0.58);
   color: #896b3e;
@@ -2191,7 +2206,7 @@ textarea {
   font-weight: 680;
 }
 
-.asset-kind.slides {
+.asset-kind.courseware {
   background: rgba(74, 102, 104, 0.1);
   color: #425e60;
 }
