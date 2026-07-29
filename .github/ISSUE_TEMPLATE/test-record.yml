@@ -1,0 +1,22 @@
+name: 测试记录
+description: 保存真实输入、环境、结果、问题和复测
+title: "[Test] "
+body:
+  - type: textarea
+    id: input
+    attributes:
+      label: 输入与来源
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 测试环境
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 结果、问题与复测
+    validations:
+      required: true

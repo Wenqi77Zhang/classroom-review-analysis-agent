@@ -1,0 +1,22 @@
+name: 功能任务
+description: 创建可验收的功能任务
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户问题
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围与非目标
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+    validations:
+      required: true
