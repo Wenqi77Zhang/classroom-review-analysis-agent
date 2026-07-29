@@ -163,7 +163,7 @@ async def replace_pending_conclusions(
     session: AsyncSession,
     task: ProcessingTask,
     body: InternalConclusionBatchWrite,
-) -> list[AnalysisConclusion]:
+) -> None:
     await session.execute(
         delete(AnalysisConclusion).where(
             AnalysisConclusion.task_id == task.id,
@@ -171,7 +171,6 @@ async def replace_pending_conclusions(
             AnalysisConclusion.review_status == ReviewStatus.PENDING,
         )
     )
-    created: list[AnalysisConclusion] = []
     for item in body.conclusions:
         for reference in item.evidence_refs:
             await _validate_evidence_scope(
@@ -196,7 +195,7 @@ async def replace_pending_conclusions(
         )
         session.add(conclusion)
         await session.flush()
-        conclusion.evidence_refs = [
+        session.add_all([
             EvidenceReference(
                 owner_id=task.owner_id,
                 conclusion_id=conclusion.id,
@@ -210,10 +209,8 @@ async def replace_pending_conclusions(
                 quote=reference.quote,
             )
             for reference in item.evidence_refs
-        ]
-        created.append(conclusion)
+        ])
     await session.flush()
-    return created
 
 
 async def list_conclusions(
