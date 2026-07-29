@@ -29,6 +29,11 @@ test("任务状态面板覆盖处理阶段、失败原因和安全重试", () =>
   }
   assert.match(panel, /示例原因：语音识别服务不可用/);
   assert.match(panel, /预览安全重试/);
+  assert.match(
+    panel,
+    /state === "processing" \|\| state === "failure"\s*\? 2/,
+    "语音识别失败时必须停在第三阶段，后续阶段保持等待",
+  );
 });
 
 test("复盘流程使用共享任务状态面板并仅在待复核预览展示证据", () => {

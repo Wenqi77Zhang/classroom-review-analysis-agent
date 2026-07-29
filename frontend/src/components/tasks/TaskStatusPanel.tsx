@@ -42,7 +42,11 @@ export function TaskStatusPanel({
 }: TaskStatusPanelProps) {
   const copy = stateCopy[state];
   const activeIndex =
-    state === "empty" ? -1 : state === "processing" ? 2 : stages.length - 1;
+    state === "empty"
+      ? -1
+      : state === "processing" || state === "failure"
+        ? 2
+        : stages.length - 1;
 
   return (
     <section className="task-status-panel" aria-labelledby="task-status-title">
