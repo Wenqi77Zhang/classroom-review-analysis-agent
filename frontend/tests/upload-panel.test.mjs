@@ -31,7 +31,11 @@ for (const extension of [
   );
 }
 
-assert.match(upload, /2 \* 1024 \* 1024 \* 1024/, "视频限制应为 2 GB");
+assert.match(upload, /4 \* 1024 \* 1024 \* 1024/, "视频限制应为 4 GiB");
+assert.match(upload, /courseware: 128 \* 1024 \* 1024/, "课件限制应为 128 MiB");
+assert.match(upload, /transcript: 32 \* 1024 \* 1024/, "逐字稿限制应为 32 MiB");
+assert.doesNotMatch(upload, /type AssetKind =/, "上传类型必须复用冻结的共享契约");
+assert.match(upload, /后端基础服务可达 · 上传接口待实现/, "健康检查不得冒充上传接口");
 assert.match(upload, /逐字稿不能替代视频/, "必须保留真实视频处理门禁");
 assert.match(upload, /上传服务尚未接通/, "后端未接通时必须明确标注");
 assert.doesNotMatch(upload, /可选辅助材料/, "逐字稿用途文案应简洁显示为可选");

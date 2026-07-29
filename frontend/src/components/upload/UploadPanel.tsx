@@ -1,13 +1,17 @@
 "use client";
 
 import {
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
   type DragEvent,
 } from "react";
 
-type AssetKind = "video" | "slides" | "transcript";
+import { getBackendHealth } from "@/lib/api";
+import type { AssetKind } from "@/types/contracts";
+
+type BackendHealthState = "checking" | "reachable" | "unreachable";
 
 type SelectedAsset = {
   id: string;
@@ -17,14 +21,14 @@ type SelectedAsset = {
 
 const ACCEPTED_EXTENSIONS: Record<AssetKind, string[]> = {
   video: [".mp4", ".mov", ".webm", ".mkv"],
-  slides: [".pdf", ".ppt", ".pptx"],
+  courseware: [".pdf", ".ppt", ".pptx"],
   transcript: [".txt", ".docx", ".srt", ".vtt"],
 };
 
 const MAX_BYTES: Record<AssetKind, number> = {
-  video: 2 * 1024 * 1024 * 1024,
-  slides: 100 * 1024 * 1024,
-  transcript: 30 * 1024 * 1024,
+  video: 4 * 1024 * 1024 * 1024,
+  courseware: 128 * 1024 * 1024,
+  transcript: 32 * 1024 * 1024,
 };
 
 const KIND_COPY: Record<
@@ -35,19 +39,19 @@ const KIND_COPY: Record<
     label: "课堂视频",
     purpose: "M1 真实处理链路必需",
     formats: "MP4、MOV、WEBM、MKV",
-    limit: "最大 2 GB",
+    limit: "最大 4 GiB",
   },
-  slides: {
+  courseware: {
     label: "课堂课件",
     purpose: "可选",
     formats: "PDF、PPT、PPTX",
-    limit: "最大 100 MB",
+    limit: "最大 128 MiB",
   },
   transcript: {
     label: "已有逐字稿",
     purpose: "可选",
     formats: "TXT、DOCX、SRT、VTT",
-    limit: "最大 30 MB",
+    limit: "最大 32 MiB",
   },
 };
 
@@ -80,6 +84,20 @@ export function UploadPanel() {
   const [assets, setAssets] = useState<SelectedAsset[]>([]);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [backendHealth, setBackendHealth] =
+    useState<BackendHealthState>("checking");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    getBackendHealth(controller.signal)
+      .then((health) =>
+        setBackendHealth(health.reachable ? "reachable" : "unreachable"),
+      )
+      .catch(() => setBackendHealth("unreachable"));
+
+    return () => controller.abort();
+  }, []);
 
   function addFiles(files: File[]) {
     const next: SelectedAsset[] = [];
@@ -136,11 +154,20 @@ export function UploadPanel() {
     >
       <div className="upload-heading">
         <div>
-          <span className="mock-pill">本地校验可用 · 上传服务待接通</span>
+          <span
+            className={`mock-pill backend-${backendHealth}`}
+            aria-live="polite"
+          >
+            {backendHealth === "checking"
+              ? "正在检查后端 · 本地校验可用"
+              : backendHealth === "reachable"
+                ? "后端基础服务可达 · 上传接口待实现"
+                : "后端服务未运行 · 本地校验可用"}
+          </span>
           <h2 id="upload-title">上传课堂资料</h2>
           <p>
-            文件现在只在浏览器中选择和校验，不会被发送或持久保存。成员 3
-            完成预签名接口后再启用真实上传。
+            文件现在只在浏览器中选择和校验，不会被发送或持久保存。健康检查可用不代表上传接口已实现；
+            成员 3 完成预签名接口后再启用真实上传。
           </p>
         </div>
         <span className="upload-step">步骤 3 / 3</span>
