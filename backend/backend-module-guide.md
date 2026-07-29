@@ -24,9 +24,10 @@
 | `app/errors.py` | **已实现**（新增文件，见下） |
 | `app/main.py` | **部分实现**：应用工厂、CORS、trace_id、统一错误处理、日志脱敏、健康检查。**业务路由尚未注册** |
 | `app/models/` | **已实现**：15 张业务/关联表，业务表显式带 `owner_id` |
-| `app/api/`、`app/repositories/`、`app/services/` | **尚未实现**，仍为 `TODO` 占位 |
+| 认证与权限基础 | **已实现**：Argon2、JWT、当前用户依赖、Worker/Agent 独立令牌、owner-scoped 查询 |
+| `app/api/` 业务路由、`app/repositories/` | **尚未实现**，仍为 `TODO` 占位；`api/auth.py` 当前只有安全原语 |
 | `migrations/` | **已实现首个迁移** `0b5123afcf23`，已在 PostgreSQL 17 上验证升降级 |
-| 后端自动测试 | **已实现 92 项**：原 86 项，加 5 项元数据约束和 1 项真实 PostgreSQL 持久化往返 |
+| 后端自动测试 | **已实现 99 项**：含真实 PostgreSQL 持久化与两账号隔离 |
 
 任何 `TODO`、占位实现均不代表已完成。跨模块契约见 `../docs/interface-contracts.md`（v1 已冻结）。
 
@@ -126,8 +127,8 @@ B2），否则会出现"本地能传、上线传不了"。该抽象层**尚未�
 
 - 业务端点尚未实现，`docs/interface-contracts.md` 的端点表目前只是契约，不可调用。
 - 业务路由、仓储和领域服务尚未实现；当前有表结构，但还没有可调用的课堂、上传或任务 API。
-- 持久化已有真实 PostgreSQL 冒烟测试；认证、权限、账号隔离和任务状态机服务仍未覆盖。
-- 每张业务表都有 `owner_id`，但跨表 owner 一致性要由下一步仓储层强制，并由账号隔离集成测试验证。
+- 持久化和 owner-scoped 读取已有真实 PostgreSQL 测试；登录 HTTP 路由和任务状态机服务仍未覆盖。
+- 每张业务表都有 `owner_id`，跨表写入可用 `assert_same_owner` 拦截；具体仓储实现仍须强制调用。
 - `docker-compose.yml` 的 MinIO 部分由成员 3 加入，该文件第一负责人是成员 5，**待其确认**。
 - MinIO 与 mc 镜像已固定为本机实际验证过的 RELEASE 标签
   （`RELEASE.2025-09-07T16-13-09Z` / `RELEASE.2025-08-13T08-35-41Z`，digest 记在

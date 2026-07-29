@@ -17,7 +17,7 @@
 | 异步数据库引擎与请求级事务 | `backend/app/database.py` | `GET /health/ready` |
 | 领域异常体系 | `backend/app/errors.py` | 测试中"统一错误格式"一节 |
 | FastAPI 应用、CORS、trace_id、统一错误、日志脱敏、健康检查 | `backend/app/main.py` | 同上 |
-| 后端相关测试 92 项 | `tests/unit/test_backend.py`、持久化测试 | `pytest -q` |
+| 后端相关测试 99 项 | 后端单元与集成测试 | `pytest -q` |
 | 15 张 ORM 表与首个迁移 | `backend/app/models/`、`backend/migrations/` | `alembic upgrade head`、`alembic check` |
 | 本地基础设施（PostgreSQL 17 + MinIO，自动建桶） | `docker-compose.yml` | `docker compose --profile local-infra ps` |
 | 后端依赖声明与已验证版本 | `pyproject.toml`、`backend/backend-module-guide.md` | `pip freeze` |
@@ -42,6 +42,8 @@
 - 每张业务表显式保存 `owner_id`；视频表只保存对象 key、类型、大小和校验元数据，不含二进制列。
 - 接通异步 Alembic 环境并生成首迁移 `0b5123afcf23`，数据库 URL 只从 `Settings` 读取。
 - 新增 5 项元数据不变量测试和 1 项真实 PostgreSQL 新会话读写测试。
+- 实现 Argon2 密码哈希、带 issuer/audience/过期校验的 JWT、当前用户依赖和 Worker/Agent 独立服务身份校验。
+- 将账号隔离占位测试替换为真实 PostgreSQL 测试：本人资源可读，他人资源与不存在资源均返回同一 404 语义。
 
 **验证证据**
 
@@ -50,7 +52,7 @@ alembic upgrade head -> 0b5123afcf23
 public schema -> 15 business/association tables + alembic_version
 alembic downgrade base -> only alembic_version remains
 alembic upgrade head -> success
-pytest -> 92 passed
+pytest -> 99 passed, 4 skipped
 alembic check -> No new upgrade operations detected
 ```
 
@@ -61,8 +63,8 @@ alembic check -> No new upgrade operations detected
 
 **当前限制与下一步**
 
-- 认证、仓储、资源归属校验和业务 API 仍未实现，不得把“数据库有表”描述成最短纵向链路已接通。
-- 数据库存在 `owner_id`，但跨表 owner 一致性必须在仓储层强制；下一步实现认证、权限与两账号隔离测试。
+- 登录 HTTP 路由、课堂/上传/任务仓储和业务 API 仍未实现，不得把安全原语描述成用户已可登录。
+- 下一步实现课程与课堂 CRUD，并把 owner-scoped 查询绑定到所有对外路由。
 
 ### Day 1 — 2026-07-26
 
