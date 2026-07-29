@@ -132,6 +132,7 @@ async def post_retry(task_id: UUID, session: Db, user: CurrentUser) -> TaskRead:
     task.finished_at = None
     task.trace_id = current_trace_id.get()
     await append_task_event(session, task, message="教师已请求重试。")
+    await session.refresh(task)
     return _task_read(task)
 
 
@@ -147,6 +148,7 @@ async def post_cancel(task_id: UUID, session: Db, user: CurrentUser) -> TaskRead
     task.lease_expires_at = None
     task.trace_id = current_trace_id.get()
     await append_task_event(session, task, message="教师已取消任务。")
+    await session.refresh(task)
     return _task_read(task)
 
 
@@ -202,6 +204,7 @@ async def post_heartbeat(
         raise StateConflictError("任务租约不存在、已过期或不属于该 Worker。")
     task.lease_expires_at = now + timedelta(seconds=body.lease_seconds)
     await session.flush()
+    await session.refresh(task)
     return _task_read(task)
 
 
@@ -251,4 +254,5 @@ async def patch_state(
         message=body.message,
         error_code=body.error_code,
     )
+    await session.refresh(task)
     return _task_read(task)
