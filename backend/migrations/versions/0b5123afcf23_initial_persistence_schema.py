@@ -56,7 +56,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_audit_events_action"), "audit_events", ["action"], unique=False)
@@ -86,6 +86,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("id", "owner_id", name="uq_courses_id_owner"),
     )
     op.create_index(op.f("ix_courses_owner_id"), "courses", ["owner_id"], unique=False)
     op.create_table(
@@ -108,9 +109,15 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["course_id"], ["courses.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["course_id", "owner_id"],
+            ["courses.id", "courses.owner_id"],
+            name="fk_classrooms_course_owner",
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("id", "owner_id", name="uq_classrooms_id_owner"),
     )
     op.create_index(op.f("ix_classrooms_course_id"), "classrooms", ["course_id"], unique=False)
     op.create_index(op.f("ix_classrooms_owner_id"), "classrooms", ["owner_id"], unique=False)
@@ -135,9 +142,15 @@ def upgrade() -> None:
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint("size_bytes > 0", name="ck_assets_size_positive"),
-        sa.ForeignKeyConstraint(["classroom_id"], ["classrooms.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["classroom_id", "owner_id"],
+            ["classrooms.id", "classrooms.owner_id"],
+            name="fk_assets_classroom_owner",
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("id", "owner_id", name="uq_assets_id_owner"),
         sa.UniqueConstraint("object_key"),
     )
     op.create_index(op.f("ix_assets_classroom_id"), "assets", ["classroom_id"], unique=False)
@@ -173,9 +186,15 @@ def upgrade() -> None:
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint("progress >= 0 AND progress <= 1", name="ck_tasks_progress_range"),
         sa.CheckConstraint("retry_count >= 0", name="ck_tasks_retry_nonnegative"),
-        sa.ForeignKeyConstraint(["classroom_id"], ["classrooms.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["classroom_id", "owner_id"],
+            ["classrooms.id", "classrooms.owner_id"],
+            name="fk_processing_tasks_classroom_owner",
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("id", "owner_id", name="uq_processing_tasks_id_owner"),
     )
     op.create_index(
         op.f("ix_processing_tasks_classroom_id"), "processing_tasks", ["classroom_id"], unique=False
@@ -211,10 +230,16 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["classroom_id"], ["classrooms.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["classroom_id", "owner_id"],
+            ["classrooms.id", "classrooms.owner_id"],
+            name="fk_reports_classroom_owner",
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("classroom_id", name="uq_reports_classroom"),
+        sa.UniqueConstraint("id", "owner_id", name="uq_reports_id_owner"),
     )
     op.create_index(op.f("ix_reports_classroom_id"), "reports", ["classroom_id"], unique=False)
     op.create_index(op.f("ix_reports_owner_id"), "reports", ["owner_id"], unique=False)
@@ -239,10 +264,21 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["classroom_id"], ["classrooms.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["classroom_id", "owner_id"],
+            ["classrooms.id", "classrooms.owner_id"],
+            name="fk_analysis_conclusions_classroom_owner",
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["task_id"], ["processing_tasks.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["task_id", "owner_id"],
+            ["processing_tasks.id", "processing_tasks.owner_id"],
+            name="fk_analysis_conclusions_task_owner",
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("id", "owner_id", name="uq_analysis_conclusions_id_owner"),
     )
     op.create_index(
         op.f("ix_analysis_conclusions_classroom_id"),
@@ -269,8 +305,19 @@ def upgrade() -> None:
         "task_assets",
         sa.Column("task_id", sa.UUID(), nullable=False),
         sa.Column("asset_id", sa.UUID(), nullable=False),
-        sa.ForeignKeyConstraint(["asset_id"], ["assets.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["task_id"], ["processing_tasks.id"], ondelete="CASCADE"),
+        sa.Column("owner_id", sa.UUID(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["asset_id", "owner_id"],
+            ["assets.id", "assets.owner_id"],
+            name="fk_task_assets_asset_owner",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["task_id", "owner_id"],
+            ["processing_tasks.id", "processing_tasks.owner_id"],
+            name="fk_task_assets_task_owner",
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("task_id", "asset_id"),
     )
     op.create_table(
@@ -292,7 +339,12 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("progress >= 0 AND progress <= 1", name="ck_task_events_progress_range"),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["task_id"], ["processing_tasks.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["task_id", "owner_id"],
+            ["processing_tasks.id", "processing_tasks.owner_id"],
+            name="fk_task_events_task_owner",
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_task_events_created_at"), "task_events", ["created_at"], unique=False)
@@ -322,8 +374,14 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("start_ms >= 0 AND end_ms > start_ms", name="ck_transcript_valid_range"),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["task_id"], ["processing_tasks.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["task_id", "owner_id"],
+            ["processing_tasks.id", "processing_tasks.owner_id"],
+            name="fk_transcript_segments_task_owner",
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("id", "owner_id", name="uq_transcript_segments_id_owner"),
         sa.UniqueConstraint("task_id", "index", name="uq_transcript_task_index"),
     )
     op.create_index(
@@ -352,9 +410,24 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["asset_id"], ["assets.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["conclusion_id"], ["analysis_conclusions.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["asset_id", "owner_id"],
+            ["assets.id", "assets.owner_id"],
+            name="fk_evidence_references_asset_owner",
+        ),
+        sa.ForeignKeyConstraint(
+            ["conclusion_id", "owner_id"],
+            ["analysis_conclusions.id", "analysis_conclusions.owner_id"],
+            name="fk_evidence_references_conclusion_owner",
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["segment_id"], ["transcript_segments.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["segment_id", "owner_id"],
+            ["transcript_segments.id", "transcript_segments.owner_id"],
+            name="fk_evidence_references_segment_owner",
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -370,10 +443,19 @@ def upgrade() -> None:
         "report_conclusions",
         sa.Column("report_id", sa.UUID(), nullable=False),
         sa.Column("conclusion_id", sa.UUID(), nullable=False),
+        sa.Column("owner_id", sa.UUID(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["conclusion_id"], ["analysis_conclusions.id"], ondelete="RESTRICT"
+            ["conclusion_id", "owner_id"],
+            ["analysis_conclusions.id", "analysis_conclusions.owner_id"],
+            name="fk_report_conclusions_conclusion_owner",
+            ondelete="RESTRICT",
         ),
-        sa.ForeignKeyConstraint(["report_id"], ["reports.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["report_id", "owner_id"],
+            ["reports.id", "reports.owner_id"],
+            name="fk_report_conclusions_report_owner",
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("report_id", "conclusion_id"),
     )
     op.create_table(
@@ -393,7 +475,12 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(["conclusion_id"], ["analysis_conclusions.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["conclusion_id", "owner_id"],
+            ["analysis_conclusions.id", "analysis_conclusions.owner_id"],
+            name="fk_review_decisions_conclusion_owner",
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["decided_by_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -424,7 +511,12 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["edited_by_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["segment_id"], ["transcript_segments.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["segment_id", "owner_id"],
+            ["transcript_segments.id", "transcript_segments.owner_id"],
+            name="fk_transcript_revisions_segment_owner",
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(

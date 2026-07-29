@@ -26,7 +26,7 @@
 
 - 业务路由 `backend/app/api/*`：`docs/interface-contracts.md` 的端点表目前只是契约，**不可调用**。
 - 仓储 `repositories/*`、领域服务 `services/*`（含预签名、权限、审计落库）。
-- 账号隔离测试 `tests/integration/test_account_isolation.py` 仍为占位。
+- 账号隔离测试已使用真实 PostgreSQL；本轮新增的跨账号写入与审计保留用例仍待最新 PR CI 复验。
 - MinIO 镜像仍用 `latest` 标签，可复现性不足。
 
 ---
@@ -69,6 +69,17 @@ alembic check -> No new upgrade operations detected
 
 - 登录 HTTP 路由、课堂/上传/任务仓储和业务 API 仍未实现，不得把安全原语描述成用户已可登录。
 - 下一步实现课程与课堂 CRUD，并把 owner-scoped 查询绑定到所有对外路由。
+
+### PR #10 — 成员 1 审核后协作修复
+
+- 成员 1 复核发现：原实现虽有 `owner_id` 与 `assert_same_owner()`，数据库仍允许跨账号
+  课程—课堂、任务—资料、结论—证据、报告—结论关联；该问题不归为成员 3 已独立完成。
+- 成员 1 与 Codex 协作把关键关系改为 `(资源 ID, owner_id)` 复合外键，并给两张关联表
+  增加 `owner_id`，使调用者即使漏掉服务层校验，PostgreSQL 仍会拒绝跨账号写入。
+- 将 `AuditEvent.owner_id` 从级联删除改为限制删除；M1 暂行策略为停用账号，不得在未确认
+  保留期限和匿名化流程前硬删除有审计记录的账号。
+- 新增 5 项真实 PostgreSQL 写入/删除测试与 2 项元数据不变量测试。本地环境当前没有
+  PostgreSQL/Docker，不能把这些写成已通过；须以最新 PR CI 的 PostgreSQL 17 结果为准。
 
 ### Day 1 — 2026-07-26
 

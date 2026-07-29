@@ -6,7 +6,16 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,7 +60,12 @@ class Course(Base):
 
     owner: Mapped[User] = relationship(back_populates="courses")
     classrooms: Mapped[list[Classroom]] = relationship(
-        back_populates="course", cascade="all, delete-orphan"
+        back_populates="course",
+        cascade="all, delete-orphan",
+        foreign_keys="Classroom.course_id",
+    )
+    __table_args__ = (
+        UniqueConstraint("id", "owner_id", name="uq_courses_id_owner"),
     )
 
 
@@ -62,9 +76,7 @@ class Classroom(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    course_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), index=True
-    )
+    course_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
     analysis_contract: Mapped[dict[str, Any]] = mapped_column(
@@ -78,12 +90,23 @@ class Classroom(Base):
     )
 
     owner: Mapped[User] = relationship()
-    course: Mapped[Course] = relationship(back_populates="classrooms")
+    course: Mapped[Course] = relationship(
+        back_populates="classrooms", foreign_keys=[course_id]
+    )
     assets: Mapped[list[Asset]] = relationship(
         back_populates="classroom", cascade="all, delete-orphan"
     )
     tasks: Mapped[list[ProcessingTask]] = relationship(
         back_populates="classroom", cascade="all, delete-orphan"
+    )
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["course_id", "owner_id"],
+            ["courses.id", "courses.owner_id"],
+            name="fk_classrooms_course_owner",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "owner_id", name="uq_classrooms_id_owner"),
     )
 
 

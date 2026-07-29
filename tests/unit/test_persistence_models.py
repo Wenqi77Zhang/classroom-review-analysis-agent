@@ -1,5 +1,6 @@
 """Persistence metadata invariants for the member 3 backend."""
 
+from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy.orm import configure_mappers
 
 from backend.app.database import Base
@@ -63,3 +64,45 @@ def test_association_tables_use_composite_primary_keys() -> None:
     for name in ("task_assets", "report_conclusions"):
         table = Base.metadata.tables[name]
         assert len(table.primary_key.columns) == 2
+        assert "owner_id" in table.columns
+
+
+def _has_owner_scoped_fk(
+    table_name: str,
+    resource_column: str,
+    remote_table: str,
+) -> bool:
+    table = Base.metadata.tables[table_name]
+    for constraint in table.constraints:
+        if not isinstance(constraint, ForeignKeyConstraint):
+            continue
+        local_columns = {column.name for column in constraint.columns}
+        remote_columns = {element.target_fullname for element in constraint.elements}
+        if local_columns == {resource_column, "owner_id"} and remote_columns == {
+            f"{remote_table}.id",
+            f"{remote_table}.owner_id",
+        }:
+            return True
+    return False
+
+
+def test_cross_resource_links_are_owner_scoped_in_database_metadata() -> None:
+    expected_links = (
+        ("classrooms", "course_id", "courses"),
+        ("assets", "classroom_id", "classrooms"),
+        ("processing_tasks", "classroom_id", "classrooms"),
+        ("task_assets", "task_id", "processing_tasks"),
+        ("task_assets", "asset_id", "assets"),
+        ("evidence_references", "conclusion_id", "analysis_conclusions"),
+        ("evidence_references", "asset_id", "assets"),
+        ("report_conclusions", "report_id", "reports"),
+        ("report_conclusions", "conclusion_id", "analysis_conclusions"),
+    )
+    for link in expected_links:
+        assert _has_owner_scoped_fk(*link), link
+
+
+def test_audit_owner_reference_prevents_cascade_deletion() -> None:
+    audit = Base.metadata.tables["audit_events"]
+    owner_foreign_key = next(iter(audit.c.owner_id.foreign_keys))
+    assert owner_foreign_key.ondelete == "RESTRICT"

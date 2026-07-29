@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     String,
     Table,
@@ -32,14 +33,25 @@ task_assets = Table(
     Column(
         "task_id",
         UUID(as_uuid=True),
-        ForeignKey("processing_tasks.id", ondelete="CASCADE"),
         primary_key=True,
     ),
     Column(
         "asset_id",
         UUID(as_uuid=True),
-        ForeignKey("assets.id", ondelete="CASCADE"),
         primary_key=True,
+    ),
+    Column("owner_id", UUID(as_uuid=True), nullable=False),
+    ForeignKeyConstraint(
+        ["task_id", "owner_id"],
+        ["processing_tasks.id", "processing_tasks.owner_id"],
+        name="fk_task_assets_task_owner",
+        ondelete="CASCADE",
+    ),
+    ForeignKeyConstraint(
+        ["asset_id", "owner_id"],
+        ["assets.id", "assets.owner_id"],
+        name="fk_task_assets_asset_owner",
+        ondelete="CASCADE",
     ),
 )
 
@@ -51,9 +63,7 @@ class Asset(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    classroom_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("classrooms.id", ondelete="CASCADE"), index=True
-    )
+    classroom_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     kind: Mapped[AssetKind] = mapped_column(String(32))
     filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(127))
@@ -72,7 +82,16 @@ class Asset(Base):
         secondary=task_assets, back_populates="assets"
     )
 
-    __table_args__ = (CheckConstraint("size_bytes > 0", name="ck_assets_size_positive"),)
+    __table_args__ = (
+        CheckConstraint("size_bytes > 0", name="ck_assets_size_positive"),
+        ForeignKeyConstraint(
+            ["classroom_id", "owner_id"],
+            ["classrooms.id", "classrooms.owner_id"],
+            name="fk_assets_classroom_owner",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "owner_id", name="uq_assets_id_owner"),
+    )
 
 
 class ProcessingTask(Base):
@@ -82,9 +101,7 @@ class ProcessingTask(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    classroom_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("classrooms.id", ondelete="CASCADE"), index=True
-    )
+    classroom_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     status: Mapped[TaskStatus] = mapped_column(String(32), default=TaskStatus.PENDING, index=True)
     stage: Mapped[TaskStage] = mapped_column(String(64), default=TaskStage.UPLOADED, index=True)
     progress: Mapped[float] = mapped_column(Float, default=0.0)
@@ -116,6 +133,13 @@ class ProcessingTask(Base):
     __table_args__ = (
         CheckConstraint("progress >= 0 AND progress <= 1", name="ck_tasks_progress_range"),
         CheckConstraint("retry_count >= 0", name="ck_tasks_retry_nonnegative"),
+        ForeignKeyConstraint(
+            ["classroom_id", "owner_id"],
+            ["classrooms.id", "classrooms.owner_id"],
+            name="fk_processing_tasks_classroom_owner",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "owner_id", name="uq_processing_tasks_id_owner"),
     )
 
 
@@ -126,9 +150,7 @@ class TaskEvent(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("processing_tasks.id", ondelete="CASCADE"), index=True
-    )
+    task_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     stage: Mapped[TaskStage] = mapped_column(String(64))
     status: Mapped[TaskStatus] = mapped_column(String(32))
     progress: Mapped[float] = mapped_column(Float)
@@ -142,6 +164,12 @@ class TaskEvent(Base):
     task: Mapped[ProcessingTask] = relationship(back_populates="events")
     __table_args__ = (
         CheckConstraint("progress >= 0 AND progress <= 1", name="ck_task_events_progress_range"),
+        ForeignKeyConstraint(
+            ["task_id", "owner_id"],
+            ["processing_tasks.id", "processing_tasks.owner_id"],
+            name="fk_task_events_task_owner",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -152,9 +180,7 @@ class TranscriptSegment(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("processing_tasks.id", ondelete="CASCADE"), index=True
-    )
+    task_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     index: Mapped[int] = mapped_column(Integer)
     start_ms: Mapped[int] = mapped_column(Integer)
     end_ms: Mapped[int] = mapped_column(Integer)
@@ -174,6 +200,13 @@ class TranscriptSegment(Base):
     __table_args__ = (
         UniqueConstraint("task_id", "index", name="uq_transcript_task_index"),
         CheckConstraint("start_ms >= 0 AND end_ms > start_ms", name="ck_transcript_valid_range"),
+        ForeignKeyConstraint(
+            ["task_id", "owner_id"],
+            ["processing_tasks.id", "processing_tasks.owner_id"],
+            name="fk_transcript_segments_task_owner",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "owner_id", name="uq_transcript_segments_id_owner"),
     )
 
 
@@ -184,9 +217,7 @@ class TranscriptSegmentRevision(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    segment_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("transcript_segments.id", ondelete="CASCADE"), index=True
-    )
+    segment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     previous_text: Mapped[str | None] = mapped_column(Text)
     previous_speaker: Mapped[str | None] = mapped_column(String(64))
     previous_translation: Mapped[str | None] = mapped_column(Text)
@@ -197,6 +228,14 @@ class TranscriptSegmentRevision(Base):
 
     segment: Mapped[TranscriptSegment] = relationship(back_populates="revisions")
     edited_by: Mapped[User] = relationship(foreign_keys=[edited_by_id])
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["segment_id", "owner_id"],
+            ["transcript_segments.id", "transcript_segments.owner_id"],
+            name="fk_transcript_revisions_segment_owner",
+            ondelete="CASCADE",
+        ),
+    )
 
 
 from backend.app.models.identity import Classroom, User
