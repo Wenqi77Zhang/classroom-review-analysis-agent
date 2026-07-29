@@ -35,13 +35,29 @@ assert.match(upload, /4 \* 1024 \* 1024 \* 1024/, "视频限制应为 4 GiB");
 assert.match(upload, /courseware: 128 \* 1024 \* 1024/, "课件限制应为 128 MiB");
 assert.match(upload, /transcript: 32 \* 1024 \* 1024/, "逐字稿限制应为 32 MiB");
 assert.doesNotMatch(upload, /type AssetKind =/, "上传类型必须复用冻结的共享契约");
-assert.match(upload, /后端基础服务可达 · 上传接口待实现/, "健康检查不得冒充上传接口");
+assert.match(upload, /后端与安全上传接口可达/, "真实上传接通后应显示准确状态");
 assert.match(upload, /逐字稿不能替代视频/, "必须保留真实视频处理门禁");
-assert.match(upload, /上传服务尚未接通/, "后端未接通时必须明确标注");
+assert.doesNotMatch(upload, /上传服务尚未接通/, "不得继续显示已经过期的禁用文案");
+assert.match(upload, /presignUpload/, "必须先申请限时预签名地址");
+assert.match(upload, /putPresignedUpload/, "文件必须直传对象存储");
+assert.match(upload, /completeUpload/, "直传后必须由后端 HEAD 核验");
+assert.match(upload, /createTask/, "全部文件核验后必须创建真实任务");
+assert.match(upload, /deleteAsset/, "失败的预签名对象必须尽力清理");
+assert.match(
+  upload,
+  /await deleteAsset\(asset\.assetId\)/,
+  "移除已上传但未关联任务的文件时必须同步清理对象存储",
+);
+assert.match(
+  upload,
+  /taskCreated \|\|/,
+  "任务创建成功后必须禁用重复创建入口",
+);
 assert.doesNotMatch(upload, /可选辅助材料/, "逐字稿用途文案应简洁显示为可选");
 assert.match(upload, /支持 \{KIND_COPY\[kind\]\.formats\}/, "格式应独占一行");
-assert.doesNotMatch(upload, /setInterval|setTimeout/, "不得伪造上传进度");
+assert.doesNotMatch(upload, /setInterval|setTimeout/, "上传进度必须来自 XHR progress，不得由计时器伪造");
 assert.match(upload, /upload-panel is-visible/, "动态插入的上传区必须立即可见");
-assert.match(task, /<UploadPanel onVideoReadinessChange=\{setHasVideo\} \/>/, "确认分析契约后应展示上传入口并传递视频门禁");
+assert.match(task, /classroomId=\{realClassroomId\}/, "上传必须绑定真实课堂 ID");
+assert.match(task, /onTaskCreated=\{\(task\) => \{/, "上传完成后必须把真实任务交给页面");
 
 console.log("UPLOAD_PANEL_CONTRACT_OK");

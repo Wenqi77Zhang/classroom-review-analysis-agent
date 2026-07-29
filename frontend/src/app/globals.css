@@ -2885,6 +2885,18 @@ textarea {
   color: var(--ink-faint);
 }
 
+.asset-name progress {
+  width: min(100%, 320px);
+  height: 7px;
+  margin-top: 7px;
+  accent-color: var(--success);
+}
+
+.asset-name .asset-error {
+  color: var(--danger);
+  white-space: normal;
+}
+
 .upload-selection li > button {
   padding: 7px 9px;
   background: transparent;
@@ -2960,6 +2972,13 @@ textarea {
   color: #657171;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.form-security-note {
+  margin: 12px 0 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 @media (max-width: 1080px) {

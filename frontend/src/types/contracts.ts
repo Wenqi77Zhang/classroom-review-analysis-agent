@@ -3,10 +3,94 @@
 export type AssetKind = "video" | "courseware" | "transcript";
 export type ReviewStatus = "pending" | "accepted" | "modified" | "rejected";
 export type ConclusionType = "fact" | "judgment" | "suggestion";
+export type UploadStatus = "pending" | "uploaded" | "failed";
+export type TaskStatus =
+  | "pending"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+export type TaskStage =
+  | "uploaded"
+  | "extract_audio"
+  | "segment"
+  | "transcribe"
+  | "translate"
+  | "parse_courseware"
+  | "build_evidence_index"
+  | "analyze";
 
 export type BackendHealthResponse = {
   reachable: boolean;
   status: "ok" | "unavailable";
   appEnv?: "development" | "test" | "production";
   traceId?: string;
+};
+
+export type UserRef = {
+  id: string;
+  display_name: string;
+};
+
+export type CourseRead = {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type ClassroomRead = {
+  id: string;
+  course_id: string;
+  title: string;
+  description?: string | null;
+  analysis_contract: Record<string, unknown>;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type PresignResponse = {
+  asset_id: string;
+  object_key: string;
+  upload_url: string;
+  method: "PUT";
+  headers: Record<string, string>;
+  expires_at: string;
+};
+
+export type AssetRead = {
+  id: string;
+  classroom_id: string;
+  kind: AssetKind;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  upload_status: UploadStatus;
+  object_key: string;
+  created_at: string;
+};
+
+export type TaskRead = {
+  id: string;
+  classroom_id: string;
+  status: TaskStatus;
+  stage: TaskStage;
+  progress: number;
+  privacy_mode: "local" | "cloud";
+  retry_count: number;
+  last_error_code?: string | null;
+  last_error_message?: string | null;
+  trace_id?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  finished_at?: string | null;
+};
+
+export type ApiErrorBody = {
+  code: string;
+  message: string;
+  details: Record<string, unknown>;
+  trace_id: string;
 };

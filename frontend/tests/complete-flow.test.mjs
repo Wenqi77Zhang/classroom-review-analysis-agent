@@ -24,6 +24,15 @@ test("没有课堂视频时不能越过任务状态门禁", () => {
   assert.match(status, /disabled=\{!enabled\}/);
 });
 
+test("真实课堂、上传和任务链路使用后端资源 ID", () => {
+  assert.match(task, /UUID_PATTERN\.test\(classroomId\)/);
+  assert.match(task, /classroomId=\{realClassroomId\}/);
+  assert.match(upload, /completedAssetIds/);
+  assert.match(upload, /createTask\(/);
+  assert.match(status, /task\.id/);
+  assert.match(status, /task\.progress/);
+});
+
 test("本地复核结果通过会话状态交接给报告且不冒充后端持久化", () => {
   assert.match(task, /saveDemoReportDraft\(reviewStatus, reviewNote\)/);
   assert.match(draft, /sessionStorage\.setItem/);
