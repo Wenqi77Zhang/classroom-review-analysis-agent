@@ -23,9 +23,10 @@
 | `app/database.py` | **已实现**，async 引擎、会话工厂、请求级事务 |
 | `app/errors.py` | **已实现**（新增文件，见下） |
 | `app/main.py` | **部分实现**：应用工厂、CORS、trace_id、统一错误处理、日志脱敏、健康检查。**业务路由尚未注册** |
-| `app/api/`、`app/models/`、`app/repositories/`、`app/services/` | **尚未实现**，仍为 `TODO` 占位 |
-| `migrations/` | **尚未实现**，无迁移版本 |
-| `tests/unit/test_backend.py` | **已实现** 86 项：成员 3 完成 85 项契约、配置、错误格式、服务身份、状态与 trace_id 测试；成员 1 集成复核时补 1 项异常 traceback 脱敏回归测试 |
+| `app/models/` | **已实现**：15 张业务/关联表，业务表显式带 `owner_id` |
+| `app/api/`、`app/repositories/`、`app/services/` | **尚未实现**，仍为 `TODO` 占位 |
+| `migrations/` | **已实现首个迁移** `0b5123afcf23`，已在 PostgreSQL 17 上验证升降级 |
+| 后端自动测试 | **已实现 92 项**：原 86 项，加 5 项元数据约束和 1 项真实 PostgreSQL 持久化往返 |
 
 任何 `TODO`、占位实现均不代表已完成。跨模块契约见 `../docs/interface-contracts.md`（v1 已冻结）。
 
@@ -114,13 +115,19 @@ B2），否则会出现"本地能传、上线传不了"。该抽象层**尚未�
 .\.venv\Scripts\python.exe -m pytest tests/unit/test_backend.py -q
 ```
 
-TODO(成员 3)：Alembic 迁移命令待 `models/` 实现后补入本节。
+执行迁移及检查模型漂移：
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head
+.\.venv\Scripts\python.exe -m alembic -c backend\alembic.ini check
+```
 
 ## 已知限制
 
 - 业务端点尚未实现，`docs/interface-contracts.md` 的端点表目前只是契约，不可调用。
-- ORM 模型与迁移尚未实现，`/health/ready` 只验证连接可用，库里还没有表。
-- 测试覆盖集中在契约、配置与错误格式；权限、账号隔离、任务状态机与持久化尚未覆盖。
+- 业务路由、仓储和领域服务尚未实现；当前有表结构，但还没有可调用的课堂、上传或任务 API。
+- 持久化已有真实 PostgreSQL 冒烟测试；认证、权限、账号隔离和任务状态机服务仍未覆盖。
+- 每张业务表都有 `owner_id`，但跨表 owner 一致性要由下一步仓储层强制，并由账号隔离集成测试验证。
 - `docker-compose.yml` 的 MinIO 部分由成员 3 加入，该文件第一负责人是成员 5，**待其确认**。
 - MinIO 与 mc 镜像已固定为本机实际验证过的 RELEASE 标签
   （`RELEASE.2025-09-07T16-13-09Z` / `RELEASE.2025-08-13T08-35-41Z`，digest 记在
