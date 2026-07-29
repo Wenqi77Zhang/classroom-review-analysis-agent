@@ -89,6 +89,7 @@
 
 Worker 使用稳定、可测试的错误类别：
 
+- `INPUT_NOT_FOUND`
 - `FFMPEG_NOT_FOUND`
 - `AUDIO_EXTRACTION_FAILED`
 - `AUDIO_EXTRACTION_TIMEOUT`
@@ -97,6 +98,14 @@ Worker 使用稳定、可测试的错误类别：
 - `INVALID_TIMESTAMP`
 - `TRANSCRIPT_SCHEMA_INVALID`
 - `UPSTREAM_UNAVAILABLE`
+- `CLEANUP_FAILED`
+- `JOB_STORE_FAILED`
+- `STOPPED`
+
+前三组之外的运行期错误同样保持稳定：输入缺失不得伪装成 FFmpeg 失败；临时媒体删除失败
+必须可观察、可重试；内部任务接口或 heartbeat 失败必须与 ASR 失败区分；租约停止后不得
+持久化转写结果。错误码集合由 `test_worker_error_codes_match_media_design` 做精确相等断言，
+防止实现与设计再次漂移。
 
 失败状态必须包含错误码；日志不得输出密钥、服务令牌、Cookie 或完整签名 URL。ASR 等长阶段需通过 `HttpJobStore` 定期续租。失败任务由后端状态机重新排队，Worker 不自行修改重试次数。
 

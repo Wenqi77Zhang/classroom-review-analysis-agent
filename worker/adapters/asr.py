@@ -53,7 +53,7 @@ class LocalWhisperAdapter:
             )
         except Exception as exc:
             raise WorkerError(
-                WorkerErrorCode.ASR_FAILED,
+                WorkerErrorCode.UPSTREAM_UNAVAILABLE,
                 "Whisper 识别失败。",
                 retryable=True,
             ) from exc

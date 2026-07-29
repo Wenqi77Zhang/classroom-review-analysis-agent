@@ -20,7 +20,7 @@ def extract_audio(
         raise WorkerError(WorkerErrorCode.INPUT_NOT_FOUND, f"输入视频不存在：{input_path}")
     if shutil.which(ffmpeg_binary) is None:
         raise WorkerError(
-            WorkerErrorCode.FFMPEG_UNAVAILABLE,
+            WorkerErrorCode.FFMPEG_NOT_FOUND,
             "未找到 FFmpeg，请先安装并确保它在 PATH 中。",
             retryable=True,
         )
@@ -55,7 +55,7 @@ def extract_audio(
     except subprocess.TimeoutExpired as exc:
         output_path.unlink(missing_ok=True)
         raise WorkerError(
-            WorkerErrorCode.FFMPEG_TIMEOUT,
+            WorkerErrorCode.AUDIO_EXTRACTION_TIMEOUT,
             f"FFmpeg 音频抽取超过 {timeout_seconds} 秒。",
             retryable=True,
         ) from exc
@@ -63,8 +63,11 @@ def extract_audio(
     if completed.returncode != 0:
         output_path.unlink(missing_ok=True)
         detail = (completed.stderr or "未知 FFmpeg 错误").strip()[-1000:]
-        raise WorkerError(WorkerErrorCode.FFMPEG_FAILED, f"音频抽取失败：{detail}")
+        raise WorkerError(WorkerErrorCode.AUDIO_EXTRACTION_FAILED, f"音频抽取失败：{detail}")
     if not output_path.is_file() or output_path.stat().st_size <= 44:
         output_path.unlink(missing_ok=True)
-        raise WorkerError(WorkerErrorCode.MEDIA_INVALID, "视频没有产生有效音频。")
+        raise WorkerError(
+            WorkerErrorCode.AUDIO_EXTRACTION_FAILED,
+            "视频没有产生有效音频。",
+        )
     return output_path

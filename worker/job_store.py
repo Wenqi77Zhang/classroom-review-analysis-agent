@@ -24,6 +24,12 @@ class JobStore(Protocol):
     def save_transcript(self, task_id: UUID, transcript: InternalTranscriptWrite) -> None: ...
 
 
+class ClaimingJobStore(JobStore, Protocol):
+    def claim(self, request: InternalTaskClaimRequest) -> InternalTaskClaim | None: ...
+
+    def heartbeat(self, task_id: UUID, heartbeat: InternalTaskHeartbeat) -> None: ...
+
+
 @dataclass(slots=True)
 class LocalJobStore:
     events: dict[UUID, list[InternalTaskStateUpdate]] = field(default_factory=dict)
@@ -45,11 +51,13 @@ class HttpJobStore:
         service_token: str,
         *,
         timeout_seconds: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout_seconds,
             headers={"Authorization": f"Bearer {service_token}"},
+            transport=transport,
         )
 
     def _request(self, method: str, path: str, *, json: dict[str, object]) -> httpx.Response:
