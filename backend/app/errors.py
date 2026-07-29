@@ -36,9 +36,11 @@ class AppError(Exception):
         message: str | None = None,
         *,
         details: dict[str, Any] | None = None,
+        commit_changes: bool = False,
     ) -> None:
         self.message = message or self.default_message
         self.details = details or {}
+        self.commit_changes = commit_changes
         super().__init__(self.message)
 
 
