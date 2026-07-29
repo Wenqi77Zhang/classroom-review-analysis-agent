@@ -54,10 +54,18 @@ export function ReportEditor() {
     "本报告用于验证编辑、预览和复核门禁。当前内容全部来自演示数据，不代表真实课堂分析。",
   );
   const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [printRequested, setPrintRequested] = useState(false);
+  const [showPrintFallback, setShowPrintFallback] = useState(false);
   useEffect(() => {
     setDraft(loadDemoReportDraft());
     setDraftChecked(true);
   }, []);
+  useEffect(() => {
+    if (!printRequested || mode !== "preview") return;
+    setPrintRequested(false);
+    setShowPrintFallback(true);
+    window.print();
+  }, [mode, printRequested]);
   const sourceConclusions = useMemo(() => {
     if (!draft) return demoConclusions;
     return demoConclusions.map((item) =>
@@ -175,8 +183,12 @@ export function ReportEditor() {
           className="button primary"
           type="button"
           onClick={() => {
+            if (mode === "preview") {
+              window.print();
+              return;
+            }
+            setPrintRequested(true);
             setMode("preview");
-            window.setTimeout(() => window.print(), 0);
           }}
         >
           打印 / 另存为 PDF
@@ -185,6 +197,12 @@ export function ReportEditor() {
           DOCX 导出等待后端
         </button>
       </footer>
+      {showPrintFallback && (
+        <p className="report-print-fallback" role="status">
+          如果没有出现系统打印窗口，请在 Chrome 或 Edge
+          中打开当前地址并按 Ctrl+P，然后选择“另存为 PDF”。内置浏览器可能会禁用打印弹窗。
+        </p>
+      )}
     </section>
   );
 }

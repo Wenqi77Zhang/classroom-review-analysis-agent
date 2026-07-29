@@ -9,6 +9,7 @@
 - 主持第一次跨模块集成验收，如实记录后端、Worker、Agent 与证据工作台尚未接通的阻塞项。
 - 复核 PR #6 的后端契约和安全边界，发现异常 traceback 绕过日志脱敏；协作补充最终文本脱敏、回归测试和后端 CI，并保留成员 3 的原始实现归属。
 - 完成 Day 2 流程前端审查：补充 Agent 必要追问、真实视频前置门禁、五阶段任务状态与失败重试预览、复核结果的会话级报告交接，以及报告编辑、预览、复核过滤和浏览器 PDF 导出；所有本地演示、未持久化和待后端能力均醒目标注。
+- Day 3 真实试用暂时延期；先完成静态流程审查，将核心内容改为默认可见、显现动画改为可选增强，并验证关闭 JavaScript 后任务页仍可阅读。此项不冒充真实用户试用或同任务复测。
 
 ## 可核验证据
 
@@ -19,6 +20,7 @@
 - `frontend/tests/backend-health.test.mjs`
 - `tests/manual/day1-integration-acceptance.md`
 - `tests/manual/day2-member1-flow-audit.md`
+- `tests/manual/day3-member1-static-audit.md`
 - `frontend/tests/task-status-panel.test.mjs`
 - `frontend/tests/report-flow.test.mjs`
 - `frontend/tests/complete-flow.test.mjs`
@@ -29,3 +31,4 @@
 - 成员 1 未独立完成平台后端、Worker、Agent 或证据工作台；跨模块修复均按协作贡献记录。
 - 当前仅接通后端基础健康检查；上传、任务、复核和报告仍在等待成员 3 的真实业务 API，真实媒体和 Agent 数据仍分别依赖成员 4、5。
 - Day 2 的复核交接只使用当前浏览器 `sessionStorage`；浏览器打印/PDF 可执行，但 DOCX、服务器保存和跨设备恢复尚未实现。
+- Day 3 尚未执行非开发同学独立试用、反馈驱动修改和同任务复测，因此退出条件尚未通过。
