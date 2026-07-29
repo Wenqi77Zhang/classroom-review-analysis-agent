@@ -2,14 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useLayoutEffect, type ReactNode } from "react";
 
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  useEffect(() => {
+  useLayoutEffect(() => {
     const items = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
-    const observer = new IntersectionObserver((entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add("is-visible")), { threshold: 0.12 });
-    items.forEach((item) => observer.observe(item));
+    const revealEnabled =
+      "IntersectionObserver" in window &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const observer = revealEnabled
+      ? new IntersectionObserver(
+          (entries) =>
+            entries.forEach(
+              (entry) =>
+                entry.isIntersecting &&
+                entry.target.classList.add("is-visible"),
+            ),
+          { threshold: 0.12 },
+        )
+      : null;
+    if (observer) {
+      document.documentElement.classList.add("reveal-enabled");
+      items.forEach((item) => observer.observe(item));
+    }
     const onScroll = () => {
       const max = document.documentElement.scrollHeight - innerHeight;
       document.documentElement.style.setProperty("--scroll-progress", `${max > 0 ? scrollY / max : 0}`);
@@ -17,7 +33,11 @@ export function SiteChrome({ children }: { children: ReactNode }) {
     };
     onScroll();
     addEventListener("scroll", onScroll, { passive: true });
-    return () => { observer.disconnect(); removeEventListener("scroll", onScroll); };
+    return () => {
+      observer?.disconnect();
+      document.documentElement.classList.remove("reveal-enabled");
+      removeEventListener("scroll", onScroll);
+    };
   }, [pathname]);
 
   const active = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(href));
@@ -37,4 +57,3 @@ export function SiteChrome({ children }: { children: ReactNode }) {
     <main>{children}</main>
   </>;
 }
-

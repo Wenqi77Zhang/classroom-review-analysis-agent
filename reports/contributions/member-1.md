@@ -10,6 +10,7 @@
 - 复核 PR #6 的后端契约和安全边界，发现异常 traceback 绕过日志脱敏；协作补充最终文本脱敏、回归测试和后端 CI，并保留成员 3 的原始实现归属。
 - 完成 Day 2 流程前端审查：补充 Agent 必要追问、真实视频前置门禁、五阶段任务状态与失败重试预览、复核结果的会话级报告交接，以及报告编辑、预览、复核过滤和浏览器 PDF 导出；所有本地演示、未持久化和待后端能力均醒目标注。
 - 在成员 3 已完成的 Schema、ORM、迁移、认证与课堂 API 基础上，协作补齐对象存储上传核验、任务创建/查询/事件/重试、Worker/Agent 最小权限写入，以及课堂—上传—任务—逐字稿—证据化结论的最短后端链路；原平台后端责任归属仍为成员 3。
+- Day 3 真实试用暂时延期；先完成静态流程审查，将核心内容改为默认可见、显现动画改为可选增强，并验证关闭 JavaScript 后任务页仍可阅读。此项不冒充真实用户试用或同任务复测。
 
 ## 可核验证据
 
@@ -20,6 +21,7 @@
 - `frontend/tests/backend-health.test.mjs`
 - `tests/manual/day1-integration-acceptance.md`
 - `tests/manual/day2-member1-flow-audit.md`
+- `tests/manual/day3-member1-static-audit.md`
 - `frontend/tests/task-status-panel.test.mjs`
 - `frontend/tests/report-flow.test.mjs`
 - `frontend/tests/complete-flow.test.mjs`
@@ -36,3 +38,4 @@
 - 后端上传、任务、逐字稿与结论接口已在协作分支实现，但前端尚未接入；真实媒体抽取、ASR、翻译和证据索引仍依赖成员 4，真实模型分析仍依赖成员 5。
 - 本地没有可用 PostgreSQL 服务，因此新增的真实数据库链路测试在本机跳过，必须以 PR 的 PostgreSQL 17 CI 结果作为合并门禁；B2 CORS 已核对，但尚未以第二段非预置真实视频完成端到端上传验收。
 - Day 2 的复核交接只使用当前浏览器 `sessionStorage`；浏览器打印/PDF 可执行，但 DOCX、服务器保存和跨设备恢复尚未实现。
+- Day 3 尚未执行非开发同学独立试用、反馈驱动修改和同任务复测，因此退出条件尚未通过。
