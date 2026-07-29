@@ -28,6 +28,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from backend.app.api.auth import router as auth_router
+from backend.app.api.classrooms import router as classrooms_router
 from backend.app.config import Settings, get_settings
 from backend.app.database import dispose_engine, get_session_factory
 from backend.app.errors import AppError, current_trace_id
@@ -114,9 +116,7 @@ class RedactingFormatter(logging.Formatter):
 def configure_logging(settings: Settings) -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(
-        RedactingFormatter(
-            "%(asctime)s %(levelname)s %(name)s [trace=%(trace_id)s] %(message)s"
-        )
+        RedactingFormatter("%(asctime)s %(levelname)s %(name)s [trace=%(trace_id)s] %(message)s")
     )
     handler.addFilter(RedactingFilter())
     handler.addFilter(_TraceIdLogFilter())
@@ -289,6 +289,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(app)
 
+    app.include_router(auth_router, prefix="/api")
+    app.include_router(classrooms_router, prefix="/api")
+
     @app.get("/health", tags=["health"], summary="存活检查")
     async def health() -> dict[str, str]:
         """不查数据库：存活检查必须在依赖故障时仍能回答，否则无法区分"进程死了"和"数据库挂了"。"""
@@ -301,8 +304,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await session.execute(text("SELECT 1"))
         return {"status": "ready", "database": "ok"}
 
-    # TODO(成员 3)：注册 auth / classrooms / uploads / tasks / transcripts /
-    # analyses / reports 以及 internal 路由。当前仅健康检查可用。
+    # TODO(成员 3)：注册 uploads / tasks / transcripts / analyses / reports
+    # 以及 internal 路由。auth 与 classrooms 已实现并注册。
     return app
 
 

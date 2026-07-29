@@ -68,7 +68,7 @@ alembic check -> No new upgrade operations detected
 **当前限制与下一步**
 
 - 登录 HTTP 路由、课堂/上传/任务仓储和业务 API 仍未实现，不得把安全原语描述成用户已可登录。
-- 下一步实现课程与课堂 CRUD，并把 owner-scoped 查询绑定到所有对外路由。
+- 下一步实现课程与课堂基础接口，并把 owner-scoped 查询绑定到所有对外路由。
 
 ### PR #10 — 成员 1 审核后协作修复
 
@@ -83,6 +83,19 @@ alembic check -> No new upgrade operations detected
 - 成员 1 与 Codex 协作把 PostgreSQL CI 从单向升级补强为
   `upgrade head → downgrade base → upgrade head`；最终 CI 往返和漂移检查均通过。
   该工作流第一负责人是成员 5，待其确认。
+
+**后续开发：认证与课程/课堂基础 API**
+
+- 实现 `POST /api/auth/login`、可配置的 `/api/auth/demo` 与 `GET /api/auth/me`。
+- 实现课程创建/列表及课堂创建/列表/读取/修改，并注册到 FastAPI/OpenAPI。
+- 普通登录对未知邮箱和错误密码返回相同 `UNAUTHENTICATED`；演示账号未配置时返回
+  `PERMISSION_DENIED`，无硬编码演示密码。
+- 所有课程/课堂查询带 `owner_id`，跨账号资源与随机 UUID 返回相同 404 语义。
+- 真实 HTTP + PostgreSQL 流程覆盖登录、创建、读取、越权、修改、输入边界和禁用删除；
+  课堂删除在对象清理与审计完成前返回 `STATE_CONFLICT`；完整测试结果为
+  `111 passed, 4 skipped`（具备 `TEST_DATABASE_URL` 时）。
+- 课程/课堂写操作尚未记录 `AuditEvent`，不得描述为已完成审计链路。
+- 当前仍未实现上传、任务、逐字稿、复核和报告 API，不将课堂基础接口描述成纵向链路已完成。
 
 ### Day 1 — 2026-07-26
 

@@ -6,58 +6,73 @@ login form contract. Security primitives do not depend on that UI decision.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from typing import Annotated
 
-import jwt
-from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHashError, VerificationError
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.config import Settings
-from backend.app.errors import UnauthenticatedError
+from backend.app.dependencies import get_app_settings, get_current_user, get_db
+from backend.app.errors import PermissionDeniedError, UnauthenticatedError
+from backend.app.models import User
+from backend.app.repositories.identity import find_user_by_email
+from backend.app.schemas.common import UserRef
+from backend.app.schemas.identity import AccessTokenResponse, LoginRequest
+from backend.app.services.authentication import (
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 
-JWT_ALGORITHM = "HS256"
-JWT_AUDIENCE = "classroom-review-web"
-JWT_ISSUER = "classroom-review-backend"
+_DUMMY_PASSWORD_HASH = hash_password("timing-only-password-that-is-never-valid")
+DEMO_ACCOUNT_EMAIL = "demo@classroom-review.local"
 
-_password_hasher = PasswordHasher()
-
-
-def hash_password(password: str) -> str:
-    if not password:
-        raise ValueError("密码不能为空。")
-    return _password_hasher.hash(password)
-
-
-def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        return _password_hasher.verify(password_hash, password)
-    except (VerificationError, InvalidHashError):
-        return False
+router = APIRouter(tags=["auth"])
 
 
-def create_access_token(user_id: UUID, settings: Settings, *, now: datetime | None = None) -> str:
-    issued_at = now or datetime.now(UTC)
-    payload = {
-        "sub": str(user_id),
-        "iat": issued_at,
-        "exp": issued_at + timedelta(minutes=settings.access_token_expire_minutes),
-        "iss": JWT_ISSUER,
-        "aud": JWT_AUDIENCE,
-    }
-    return jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm=JWT_ALGORITHM)
+def _token_response(user: User, settings: Settings) -> AccessTokenResponse:
+    return AccessTokenResponse(
+        access_token=create_access_token(user.id, settings),
+        expires_in_seconds=settings.access_token_expire_minutes * 60,
+        user=UserRef.model_validate(user),
+    )
 
 
-def decode_access_token(token: str, settings: Settings) -> UUID:
-    try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret.get_secret_value(),
-            algorithms=[JWT_ALGORITHM],
-            audience=JWT_AUDIENCE,
-            issuer=JWT_ISSUER,
-            options={"require": ["sub", "iat", "exp", "iss", "aud"]},
+@router.post("/auth/login", response_model=AccessTokenResponse)
+async def login(
+    body: LoginRequest,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> AccessTokenResponse:
+    user = await find_user_by_email(session, body.email)
+    password_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
+    valid = verify_password(body.password, password_hash)
+    if user is None or not user.is_active or not valid:
+        raise UnauthenticatedError("邮箱或密码错误。")
+    return _token_response(user, settings)
+
+
+@router.post("/auth/demo", response_model=AccessTokenResponse)
+async def demo_login(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> AccessTokenResponse:
+    if settings.demo_account_password is None:
+        raise PermissionDeniedError("当前环境未启用演示账号。")
+    user = await find_user_by_email(session, DEMO_ACCOUNT_EMAIL)
+    if user is None:
+        user = User(
+            email=DEMO_ACCOUNT_EMAIL,
+            display_name="演示教师",
+            password_hash=hash_password(settings.demo_account_password.get_secret_value()),
         )
-        return UUID(payload["sub"])
-    except (jwt.PyJWTError, ValueError, TypeError) as exc:
-        raise UnauthenticatedError("登录已失效，请重新登录。") from exc
+        session.add(user)
+        await session.flush()
+    request.state.demo_account = True
+    return _token_response(user, settings)
+
+
+@router.get("/auth/me", response_model=UserRef)
+async def me(user: Annotated[User, Depends(get_current_user)]) -> UserRef:
+    return UserRef.model_validate(user)
