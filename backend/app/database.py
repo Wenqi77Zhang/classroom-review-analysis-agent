@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from backend.app.config import Settings, get_settings
+from backend.app.errors import AppError
 
 
 class Base(DeclarativeBase):
@@ -72,8 +73,11 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
     async with factory() as session:
         try:
             yield session
-        except Exception:
-            await session.rollback()
+        except Exception as exc:
+            if isinstance(exc, AppError) and exc.commit_changes:
+                await session.commit()
+            else:
+                await session.rollback()
             raise
         else:
             await session.commit()

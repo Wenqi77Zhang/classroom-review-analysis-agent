@@ -28,12 +28,17 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from backend.app.api.analyses import router as analyses_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.classrooms import router as classrooms_router
+from backend.app.api.tasks import router as tasks_router
+from backend.app.api.transcripts import router as transcripts_router
+from backend.app.api.uploads import router as uploads_router
 from backend.app.config import Settings, get_settings
 from backend.app.database import dispose_engine, get_session_factory
 from backend.app.errors import AppError, current_trace_id
 from backend.app.schemas.common import ErrorBody, ErrorCode, ErrorResponse
+from backend.app.services.storage import S3ObjectStorage
 
 logger = logging.getLogger("backend")
 
@@ -261,6 +266,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.object_storage = S3ObjectStorage(settings)
 
     app.add_middleware(
         CORSMiddleware,
@@ -291,6 +297,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(auth_router, prefix="/api")
     app.include_router(classrooms_router, prefix="/api")
+    app.include_router(uploads_router, prefix="/api")
+    app.include_router(tasks_router, prefix="/api")
+    app.include_router(transcripts_router, prefix="/api")
+    app.include_router(analyses_router, prefix="/api")
 
     @app.get("/health", tags=["health"], summary="存活检查")
     async def health() -> dict[str, str]:
@@ -304,8 +314,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await session.execute(text("SELECT 1"))
         return {"status": "ready", "database": "ok"}
 
-    # TODO(成员 3)：注册 uploads / tasks / transcripts / analyses / reports
-    # 以及 internal 路由。auth 与 classrooms 已实现并注册。
+    # Reports remain a separate follow-up; this branch closes the shortest upload-to-result path.
     return app
 
 
