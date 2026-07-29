@@ -15,13 +15,13 @@ Agent 在教师已确认的分析契约和当前任务可定位证据范围内�
 - `providers/`：统一异步接口、OpenAI-compatible 结构化输出、本地/云端隐私路由；云端强制 HTTPS，本地模式只允许 loopback 地址。
 - `skills/common.py`：通用课堂结构、提问、等待、例证和总结规则。
 - `tools/retrieve_evidence.py`：只在当前 `task_id + owner_id` 范围内检索，模型引用未知证据 ID 时拒绝输出。
-- `orchestrator.py`：一次规划、选择 Skill、调用 Provider、校验模型 JSON、解析证据引用并生成后端写入批次。
+- `orchestrator.py`：执行已确认的时间范围和双语条件；调用前筛选证据，落地前复核引用范围；一次规划、选择 Skill、调用 Provider、校验模型 JSON并生成后端写入批次。不可信课堂文本以 Base64 数据区发送，不能充当 Prompt 指令。
 - `reporting/composer.py`：确定性过滤复核状态；只组合 `accepted/modified`，修改项使用 `reviewed_content`。
-- `observability/tracing.py`：记录规划、模型、校验和错误事件，并按敏感字段名脱敏。
+- `observability/tracing.py`：记录规划、模型、校验和错误事件；错误只保留稳定类型、错误码和阶段，不保存可能包含课堂原文或输入值的异常消息。
 
 ## 尚未完成与协作依赖
 
-- `skills/computer_ai.py`、`skills/humanities.py` 和 `validators/evidence_gate.py` 仍是成员 4 的 `TODO`。协调器已提供 Skill 注册表与校验回调，未提供时会明确记录 `unavailable_skills`，不会冒充专业能力已启用。
+- `skills/computer_ai.py`、`skills/humanities.py` 和 `validators/evidence_gate.py` 仍是成员 4 的 `TODO`。协调器已提供 Skill 注册表与校验回调；教师请求的专业 Skill 不可用时会在模型调用前以 `SKILL_UNAVAILABLE` 明确失败，不会降级为看似完整的通用分析。
 - 成员 3 的任务、结论与报告内部路由尚未实现，因此当前 Agent 只生成冻结 Schema 对象，尚未真实回写后端或持久化 Trace。
 - Worker 尚未生成真实证据索引，当前没有真实视频端到端运行证据。
 - Provider 已实现调用协议，但真实模型端点、模型名和密钥仍需通过后端配置注入；密钥不得来自前端或写入 Trace。
@@ -35,7 +35,7 @@ Agent 在教师已确认的分析契约和当前任务可定位证据范围内�
 .\.venv\Scripts\python.exe -m ruff check agent tests/unit/test_agent.py tests/integration/test_review_to_report.py
 ```
 
-2026-07-29 已在仓库根目录 Python 3.13.14 `.venv` 执行：两组定向测试共 13 项通过；全仓 Python 测试为 112 项通过、9 项跳过；`ruff check backend agent tests` 通过。跳过项是成员 4 的 Stage-0 Worker/视频链路，以及未配置 PostgreSQL `TEST_DATABASE_URL` 的账号隔离和持久化测试。该结果只证明已执行的离线规则、编排和报告门禁，不代表真实模型、Worker、后端回写或 E2E 已运行。
+2026-07-29 PR #13 审查修复后，在仓库根目录 Python 3.13.14 `.venv` 执行：两组定向测试共 20 项通过；全仓 Python 测试为 119 项通过、9 项跳过；`ruff check backend agent tests` 与路径级敏感文件检查通过。跳过项是成员 4 的 Stage-0 Worker/视频链路，以及未配置 PostgreSQL `TEST_DATABASE_URL` 的账号隔离和持久化测试。该结果只证明已执行的离线规则、编排、安全边界和报告门禁，不代表真实模型、Worker、后端回写或 E2E 已运行。
 
 ## 完成定义
 

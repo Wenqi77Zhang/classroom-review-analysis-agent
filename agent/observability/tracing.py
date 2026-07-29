@@ -68,10 +68,12 @@ class Tracer:
             )
         )
 
-    def error(self, error: BaseException, *, stage: str) -> None:
+    def error(self, error: BaseException, *, stage: str, error_code: str) -> None:
+        """只记录稳定分类，不记录可能包含输入值的异常消息。"""
+
         self.event(
             "agent.error",
             stage=stage,
             error_type=type(error).__name__,
-            error_message=str(error),
+            error_code=error_code,
         )

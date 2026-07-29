@@ -20,6 +20,6 @@
 .\.venv\Scripts\python.exe -m ruff check agent tests/unit/test_agent.py tests/integration/test_review_to_report.py
 ```
 
-`test_agent.py` 覆盖分析契约、账号/任务证据边界、状态机、隐私路由、结构化输出、未知证据拦截和 Trace 脱敏；`test_review_to_report.py` 覆盖 `pending/rejected` 过滤及 `modified` 使用教师改写内容。
+`test_agent.py` 覆盖分析契约、账号/任务证据边界、时间范围双重校验、双语硬门禁、Prompt 注入数据边界、专业 Skill 缺失失败、状态机、隐私路由、结构化输出、未知证据拦截和 Trace 异常脱敏；`test_review_to_report.py` 覆盖 `pending/rejected` 过滤及 `modified` 使用教师改写内容。
 
-2026-07-29 已安装 Python 3.13.14，并在仓库根目录 `.venv` 执行上述命令：13 项定向测试通过；全仓 pytest 为 112 项通过、9 项跳过；`ruff check backend agent tests` 通过。9 项跳过包括成员 4 尚未实现的 Worker/视频链路 2 项，以及缺少 `TEST_DATABASE_URL` 的 PostgreSQL 集成测试 7 项。这里是离线测试结果，不得扩写为真实模型、视频链路、数据库集成或浏览器 E2E 已通过。
+2026-07-29 PR #13 审查修复后执行上述命令：20 项定向测试通过；全仓 pytest 为 119 项通过、9 项跳过；`ruff check backend agent tests` 与路径级敏感文件检查通过。9 项跳过包括成员 4 尚未实现的 Worker/视频链路 2 项，以及缺少 `TEST_DATABASE_URL` 的 PostgreSQL 集成测试 7 项。这里是离线测试结果，不得扩写为真实模型、视频链路、数据库集成或浏览器 E2E 已通过。
