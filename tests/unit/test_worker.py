@@ -26,6 +26,7 @@ from backend.app.schemas.transcript import (
     InternalTranscriptSegmentWrite,
     InternalTranscriptWrite,
 )
+from worker.adapters.asr import LocalWhisperAdapter
 from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode
 from worker.job_store import HttpJobStore, LocalJobStore
@@ -163,8 +164,8 @@ def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
         AsrResult(
             language="zh",
             segments=(
-                AsrSegment(0.1254, 1.5004, "第一句"),
-                AsrSegment(1.5004, 1.9004, "第二句"),
+                AsrSegment(0.1254, 1.5000000000000002, "第一句"),
+                AsrSegment(1.5, 1.9004, "第二句"),
             ),
         )
     )
@@ -225,6 +226,38 @@ def test_transcribe_rejects_unreadable_audio_duration(tmp_path: Path) -> None:
         )
 
     assert raised.value.code is WorkerErrorCode.TRANSCRIPT_SCHEMA_INVALID
+
+
+def test_local_whisper_disables_nondeterministic_temperature_fallback(
+    tmp_path: Path,
+) -> None:
+    audio = tmp_path / "audio.wav"
+    _silent_wav(audio)
+    calls: list[dict[str, object]] = []
+
+    class FakeWhisperModel:
+        def transcribe(self, _: str, **options: object) -> dict[str, object]:
+            calls.append(options)
+            return {
+                "language": "zh",
+                "segments": [{"start": 0.0, "end": 0.8, "text": "固定结果"}],
+            }
+
+    adapter = LocalWhisperAdapter()
+    adapter._model = FakeWhisperModel()
+
+    result = adapter.transcribe(audio)
+
+    assert result.segments[0].text == "固定结果"
+    assert calls == [
+        {
+            "language": None,
+            "fp16": False,
+            "verbose": False,
+            "temperature": 0.0,
+            "condition_on_previous_text": False,
+        }
+    ]
 
 
 def test_pipeline_persists_transcript_and_real_states(tmp_path: Path) -> None:

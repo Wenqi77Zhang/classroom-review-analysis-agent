@@ -50,6 +50,13 @@ class LocalWhisperAdapter:
                 language=self.language,
                 fp16=False,
                 verbose=False,
+                # A temperature tuple enables fallback sampling and can change
+                # segment boundaries between identical runs. Evidence timestamps
+                # must be reproducible, so use deterministic greedy decoding.
+                temperature=0.0,
+                # Long-form context can repeat the final prompt into padded
+                # silence and emit timestamps past the real WAV duration.
+                condition_on_previous_text=False,
             )
         except Exception as exc:
             raise WorkerError(

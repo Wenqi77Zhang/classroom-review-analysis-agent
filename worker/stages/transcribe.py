@@ -46,7 +46,7 @@ def transcribe_audio(
     duration_ms = _milliseconds(duration_seconds)
     result = adapter.transcribe(audio_path)
     segments: list[InternalTranscriptSegmentWrite] = []
-    previous_end_seconds = 0.0
+    previous_end_ms = 0
     for item in result.segments:
         if not math.isfinite(item.start_seconds) or not math.isfinite(item.end_seconds):
             raise WorkerError(
@@ -63,22 +63,22 @@ def transcribe_audio(
                 WorkerErrorCode.INVALID_TIMESTAMP,
                 "ASR 片段结束时间必须大于开始时间。",
             )
-        if item.start_seconds < previous_end_seconds:
-            raise WorkerError(
-                WorkerErrorCode.INVALID_TIMESTAMP,
-                "ASR 片段必须按时间单调且不能重叠。",
-            )
-        if item.end_seconds > duration_seconds:
-            raise WorkerError(
-                WorkerErrorCode.INVALID_TIMESTAMP,
-                "ASR 片段超出真实音频时长。",
-            )
         start_ms = _milliseconds(item.start_seconds)
         end_ms = _milliseconds(item.end_seconds)
         if end_ms <= start_ms:
             raise WorkerError(
                 WorkerErrorCode.INVALID_TIMESTAMP,
                 "ASR 时间戳转换为毫秒后形成空区间。",
+            )
+        if start_ms < previous_end_ms:
+            raise WorkerError(
+                WorkerErrorCode.INVALID_TIMESTAMP,
+                "ASR 片段必须按时间单调且不能重叠。",
+            )
+        if end_ms > duration_ms:
+            raise WorkerError(
+                WorkerErrorCode.INVALID_TIMESTAMP,
+                "ASR 片段超出真实音频时长。",
             )
         segments.append(
             InternalTranscriptSegmentWrite(
@@ -90,7 +90,7 @@ def transcribe_audio(
                 translation=None,
             )
         )
-        previous_end_seconds = item.end_seconds
+        previous_end_ms = end_ms
     if not segments:
         raise WorkerError(
             WorkerErrorCode.TRANSCRIPT_SCHEMA_INVALID,
