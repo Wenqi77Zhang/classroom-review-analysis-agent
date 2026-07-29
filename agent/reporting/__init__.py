@@ -1,1 +1,1 @@
-"""Report composition package. Stage-0 scaffold only."""
+"""经教师复核内容的确定性报告组合。"""

@@ -1,1 +1,1 @@
-"""Database repository package. Stage-0 scaffold only."""
+"""Database repository package."""

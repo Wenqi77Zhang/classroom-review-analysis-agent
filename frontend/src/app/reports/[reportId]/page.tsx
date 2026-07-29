@@ -1,4 +1,12 @@
-// TODO(成员 1)：实现报告编辑、预览和导出。
+import { ReportEditor } from "@/components/reports/ReportEditor";
+import { SiteChrome } from "@/components/baseline/SiteChrome";
+
 export default function ReportPage() {
-  return <main>TODO：报告页面</main>;
+  return (
+    <SiteChrome>
+      <main className="report-page">
+        <ReportEditor />
+      </main>
+    </SiteChrome>
+  );
 }

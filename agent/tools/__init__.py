@@ -1,1 +1,1 @@
-"""Restricted agent tool package. Stage-0 scaffold only."""
+"""受限 Agent 工具，只操作传入的任务内证据。"""
