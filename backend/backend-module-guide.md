@@ -26,8 +26,8 @@
 | `app/models/` | **已实现**：15 张业务/关联表；跨资源关系用 `(资源 ID, owner_id)` 复合外键阻止跨账号串联 |
 | 认证与权限基础 | **已实现**：Argon2、JWT、当前用户依赖、Worker/Agent 独立令牌、owner-scoped 查询 |
 | `app/api/` 业务路由、`app/repositories/` | **尚未实现**，仍为 `TODO` 占位；`api/auth.py` 当前只有安全原语 |
-| `migrations/` | **已实现首个迁移** `0b5123afcf23`；本轮约束修订仍须由 PostgreSQL 17 CI 复验升降级与漂移 |
-| 后端自动测试 | 原 PR head 为 **99 项通过、4 项跳过**；本轮新增 7 项账号约束/审计保留测试，完整结果须以最新 PR CI 为准 |
+| `migrations/` | **已实现首个迁移** `0b5123afcf23`；PostgreSQL 17 CI 已验证 `upgrade → downgrade → upgrade` 与无模型漂移 |
+| 后端自动测试 | **106 项通过、4 项跳过**：含真实 PostgreSQL 持久化、跨账号写入拒绝与审计保留 |
 
 任何 `TODO`、占位实现均不代表已完成。跨模块契约见 `../docs/interface-contracts.md`（v1 已冻结）。
 
