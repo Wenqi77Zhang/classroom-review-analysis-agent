@@ -1,12 +1,13 @@
-"""Owner-scoped course and classroom CRUD routes."""
+"""Owner-scoped course and limited classroom management routes."""
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.dependencies import get_current_user, get_db
+from backend.app.errors import StateConflictError
 from backend.app.models import Classroom, User
 from backend.app.repositories.identity import (
     create_classroom,
@@ -78,15 +79,16 @@ async def patch_classroom(
 ) -> ClassroomRead:
     classroom = await get_owned_or_404(session, Classroom, classroom_id, user.id)
     for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(classroom, field, value.strip() if field == "title" else value)
+        setattr(classroom, field, value)
     await session.flush()
     # updated_at is database-generated on UPDATE. Load it before synchronous response serialization.
     await session.refresh(classroom)
     return ClassroomRead.model_validate(classroom)
 
 
-@router.delete("/classrooms/{classroom_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_classroom(classroom_id: UUID, session: Db, user: CurrentUser) -> Response:
-    classroom = await get_owned_or_404(session, Classroom, classroom_id, user.id)
-    await session.delete(classroom)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/classrooms/{classroom_id}", status_code=status.HTTP_409_CONFLICT)
+async def delete_classroom(classroom_id: UUID, session: Db, user: CurrentUser) -> None:
+    await get_owned_or_404(session, Classroom, classroom_id, user.id)
+    raise StateConflictError(
+        "课堂删除尚未启用：对象存储清理与删除审计实现后方可执行。"
+    )

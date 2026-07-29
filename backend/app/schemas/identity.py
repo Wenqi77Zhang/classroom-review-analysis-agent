@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from backend.app.schemas.common import ApiModel, OrmModel, ResourceId, UserRef
+
+RequiredName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
+]
 
 
 class LoginRequest(ApiModel):
@@ -23,7 +27,7 @@ class AccessTokenResponse(OrmModel):
 
 
 class CourseCreate(ApiModel):
-    name: str = Field(min_length=1, max_length=255)
+    name: RequiredName
     description: str | None = Field(default=None, max_length=4000)
 
 
@@ -36,19 +40,26 @@ class CourseRead(OrmModel):
 
 
 class ClassroomCreate(ApiModel):
-    title: str = Field(min_length=1, max_length=255)
+    title: RequiredName
     description: str | None = Field(default=None, max_length=4000)
     analysis_contract: dict[str, Any] = Field(default_factory=dict)
 
 
 class ClassroomUpdate(ApiModel):
-    title: str | None = Field(default=None, min_length=1, max_length=255)
+    title: RequiredName | None = None
     description: str | None = Field(default=None, max_length=4000)
     analysis_contract: dict[str, Any] | None = None
 
+    @field_validator("title", "analysis_contract", mode="before")
+    @classmethod
+    def _required_fields_cannot_be_cleared(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("必填字段不能设为 null。")
+        return value
+
     @model_validator(mode="after")
     def _require_any_field(self) -> ClassroomUpdate:
-        if self.title is None and self.description is None and self.analysis_contract is None:
+        if not self.model_fields_set:
             raise ValueError("title、description、analysis_contract 至少提供一个。")
         return self
 

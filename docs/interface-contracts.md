@@ -151,7 +151,7 @@ parse_courseware → build_evidence_index → analyze`
 | `GET /courses/{id}/classrooms` | 无 | 当前账号和课程下的 `ClassroomRead[]` |
 | `GET /classrooms/{id}` | 无 | `ClassroomRead` |
 | `PATCH /classrooms/{id}` | `title`、`description`、`analysis_contract` 至少一个 | `ClassroomRead` |
-| `DELETE /classrooms/{id}` | 无 | HTTP 204 |
+| `DELETE /classrooms/{id}` | 无 | 当前返回 `STATE_CONFLICT`；对象清理与删除审计实现后才启用 |
 
 课程名称和课堂名称来自成员 1 已确认的创建课堂页面。授课语言和课堂日期当前仍是可选页面字段，
 尚未纳入冻结数据库契约；成员 1 确认其持久化语义后再扩展，不在本轮静默加字段。
@@ -159,6 +159,10 @@ parse_courseware → build_evidence_index → analyze`
 登录失败统一返回 `UNAUTHENTICATED`，不区分“邮箱不存在”和“密码错误”。演示账号密码仅从
 `DEMO_ACCOUNT_PASSWORD` 读取；未配置时 `/auth/demo` 返回 `PERMISSION_DENIED`，不得使用
 硬编码默认密码。
+
+课程当前仅实现创建和列表；课堂实现创建、列表、读取和修改。课堂删除在对象存储清理及
+不含敏感值的删除审计完成前明确返回 `STATE_CONFLICT`，不得直接依赖数据库级联删除。
+本轮课程/课堂写操作尚未写入 `AuditEvent`，不能描述为已完成审计链路。
 
 ### 内部（服务令牌鉴权，**Worker 与 Agent 各持一个，不共用**）
 

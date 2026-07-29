@@ -33,7 +33,7 @@ def api_settings(database_url: str) -> Settings:
 
 
 @pytest.mark.asyncio
-async def test_login_and_owner_scoped_classroom_crud() -> None:
+async def test_login_and_owner_scoped_classroom_flow() -> None:
     database_url = os.environ.get("TEST_DATABASE_URL")
     if database_url is None:
         pytest.skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
@@ -112,11 +112,20 @@ async def test_login_and_owner_scoped_classroom_crud() -> None:
 
             classroom = await client.post(
                 f"/api/courses/{course_id}/classrooms",
-                json={"title": "Search Lecture"},
+                json={"title": "  Search Lecture  ", "description": "Initial description"},
                 headers=first_headers,
             )
             assert classroom.status_code == 201
+            assert classroom.json()["title"] == "Search Lecture"
             classroom_id = classroom.json()["id"]
+
+            blank_create = await client.post(
+                f"/api/courses/{course_id}/classrooms",
+                json={"title": "   "},
+                headers=first_headers,
+            )
+            assert blank_create.status_code == 422
+            assert blank_create.json()["error"]["code"] == "SCHEMA_INVALID"
 
             own = await client.get(f"/api/classrooms/{classroom_id}", headers=first_headers)
             assert own.status_code == 200
@@ -136,12 +145,60 @@ async def test_login_and_owner_scoped_classroom_crud() -> None:
             assert updated.status_code == 200
             assert updated.json()["title"] == "Updated Search Lecture"
 
-            deleted = await client.delete(f"/api/classrooms/{classroom_id}", headers=first_headers)
-            assert deleted.status_code == 204
-            after_delete = await client.get(
+            blank_title = await client.patch(
+                f"/api/classrooms/{classroom_id}",
+                json={"title": "   "},
+                headers=first_headers,
+            )
+            assert blank_title.status_code == 422
+            assert blank_title.json()["error"]["code"] == "SCHEMA_INVALID"
+
+            null_title = await client.patch(
+                f"/api/classrooms/{classroom_id}",
+                json={"title": None, "description": "must not be written"},
+                headers=first_headers,
+            )
+            assert null_title.status_code == 422
+            assert null_title.json()["error"]["code"] == "SCHEMA_INVALID"
+
+            after_invalid_patch = await client.get(
                 f"/api/classrooms/{classroom_id}", headers=first_headers
             )
-            assert after_delete.status_code == 404
+            assert after_invalid_patch.status_code == 200
+            assert after_invalid_patch.json()["title"] == "Updated Search Lecture"
+            assert after_invalid_patch.json()["description"] == "Initial description"
+
+            cleared_description = await client.patch(
+                f"/api/classrooms/{classroom_id}",
+                json={"description": None},
+                headers=first_headers,
+            )
+            assert cleared_description.status_code == 200
+            assert cleared_description.json()["description"] is None
+
+            unchanged = await client.get(
+                f"/api/classrooms/{classroom_id}", headers=first_headers
+            )
+            assert unchanged.status_code == 200
+            assert unchanged.json()["title"] == "Updated Search Lecture"
+            assert unchanged.json()["description"] is None
+
+            blocked_delete = await client.delete(
+                f"/api/classrooms/{classroom_id}", headers=first_headers
+            )
+            assert blocked_delete.status_code == 409
+            assert blocked_delete.json()["error"]["code"] == "STATE_CONFLICT"
+
+            cross_account_delete = await client.delete(
+                f"/api/classrooms/{classroom_id}", headers=second_headers
+            )
+            assert cross_account_delete.status_code == 404
+            assert cross_account_delete.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+            still_exists = await client.get(
+                f"/api/classrooms/{classroom_id}", headers=first_headers
+            )
+            assert still_exists.status_code == 200
     finally:
         async with factory.begin() as session:
             for user_id in (first_id, second_id):
