@@ -311,6 +311,49 @@ async def test_time_range_sends_only_in_scope_evidence() -> None:
 
 
 @pytest.mark.asyncio
+async def test_time_filter_runs_before_two_hundred_evidence_limit() -> None:
+    task_id = uuid4()
+    owner_id = uuid4()
+    inside = _evidence(
+        task_id=task_id,
+        owner_id=owner_id,
+        start_ms=2000,
+        end_ms=3000,
+    )
+    analysis_input = AnalysisInput(
+        task_id=task_id,
+        owner_id=owner_id,
+        contract=AnalysisContract(
+            goal="只分析指定片段",
+            scope=AnalysisScope.TIME_RANGE,
+            start_ms=1000,
+            end_ms=5000,
+            focus_areas=["提问"],
+            confirmed=True,
+        ),
+        evidence=[inside],
+    )
+    outside = [
+        _evidence(
+            task_id=task_id,
+            owner_id=owner_id,
+            start_ms=7000 + index * 10,
+            end_ms=7005 + index * 10,
+        )
+        for index in range(201)
+    ]
+    # 模拟校验后仓储按原始顺序返回大量范围外证据；范围过滤必须先于 200 条上限。
+    analysis_input.evidence[:] = [*outside, inside]
+    provider = FakeProvider(_model_data(inside.id))
+
+    await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(analysis_input)
+
+    prompt = provider.requests[0].user_prompt
+    assert str(inside.id) in prompt
+    assert all(str(item.id) not in prompt for item in outside)
+
+
+@pytest.mark.asyncio
 async def test_model_prompt_excludes_foreign_owner_and_task_evidence() -> None:
     task_id = uuid4()
     owner_id = uuid4()
