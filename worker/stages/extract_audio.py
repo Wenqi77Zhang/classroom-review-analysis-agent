@@ -17,7 +17,7 @@ def extract_audio(
     ffmpeg_binary: str = "ffmpeg",
 ) -> Path:
     if not input_path.is_file():
-        raise WorkerError(WorkerErrorCode.INPUT_NOT_FOUND, f"输入视频不存在：{input_path}")
+        raise WorkerError(WorkerErrorCode.INPUT_NOT_FOUND, "输入视频不存在。")
     if shutil.which(ffmpeg_binary) is None:
         raise WorkerError(
             WorkerErrorCode.FFMPEG_NOT_FOUND,
@@ -62,8 +62,12 @@ def extract_audio(
 
     if completed.returncode != 0:
         output_path.unlink(missing_ok=True)
-        detail = (completed.stderr or "未知 FFmpeg 错误").strip()[-1000:]
-        raise WorkerError(WorkerErrorCode.AUDIO_EXTRACTION_FAILED, f"音频抽取失败：{detail}")
+        # FFmpeg stderr can include full local paths, object keys and tenant
+        # identifiers. It must not enter an exception persisted as TaskEvent.
+        raise WorkerError(
+            WorkerErrorCode.AUDIO_EXTRACTION_FAILED,
+            f"音频抽取失败（FFmpeg 退出码 {completed.returncode}）。",
+        )
     if not output_path.is_file() or output_path.stat().st_size <= 44:
         output_path.unlink(missing_ok=True)
         raise WorkerError(

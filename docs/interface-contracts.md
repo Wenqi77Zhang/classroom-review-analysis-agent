@@ -177,6 +177,8 @@ parse_courseware → build_evidence_index → analyze`
 身份由令牌区分：`WORKER_SERVICE_TOKEN` → `worker`，`AGENT_SERVICE_TOKEN` → `agent`。
 两者**必须配置为不同的值**。共用一个令牌意味着 Agent 也能覆盖逐字稿、Worker 也能写入
 教学结论，违反最小权限。权威定义见 `backend/app/schemas/task.py::INTERNAL_ENDPOINT_SCOPES`。
+服务令牌只能通过部署环境变量或密钥管理器注入，Worker CLI 不提供令牌参数，避免密钥进入
+Shell 历史、进程命令行、录屏或报错截图。
 
 `PATCH /internal/tasks/{id}/state` 两个身份都能调，但**可写的阶段不同**：
 
@@ -186,6 +188,12 @@ parse_courseware → build_evidence_index → analyze`
 | `worker` | 其余全部媒体处理阶段（`WORKER_WRITABLE_STAGES`） |
 
 越界回写返回 `PERMISSION_DENIED`。
+
+**租约隔离门禁**：Heartbeat 只能减少过期概率，不能独立阻止旧 Worker 回写。服务端实现
+内部 `state` 与 `transcript` 写入端点时，必须校验写入者仍持有当前且未过期的租约；旧租约
+过期或任务被重新领取后，其状态与逐字稿写入必须返回 `STATE_CONFLICT`。当前该服务端端点
+仍在成员 1/3 的后端集成分支实现中，因此 PR #14 只能声明 Worker 侧停止写入，不能声明
+已经完成跨 Worker 的服务端防重与覆盖隔离。
 
 这组接口是 `worker/job_store.py` 与 Agent 回写的**唯一**落库入口；Worker 与 Agent
 不直连数据库。

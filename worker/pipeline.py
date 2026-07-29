@@ -10,7 +10,7 @@ from backend.app.schemas.common import ErrorCode
 from backend.app.schemas.task import InternalTaskStateUpdate, TaskStage, TaskStatus
 from worker.adapters.asr import AsrAdapter
 from worker.cleanup import cleanup_path
-from worker.errors import WorkerError, WorkerErrorCode
+from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_message
 from worker.job_store import JobStore
 from worker.stages.extract_audio import extract_audio
 from worker.stages.transcribe import transcribe_audio
@@ -101,7 +101,7 @@ def run_pipeline(
                 TaskStatus.FAILED,
                 0.0,
                 task.trace_id,
-                message=f"{exc.code}: {exc}",
+                message=f"{exc.code.value}: {public_worker_error_message(exc.code)}",
                 error_code=exc.platform_code,
             ),
         )
@@ -148,7 +148,10 @@ def run_pipeline(
                         TaskStatus.FAILED,
                         0.0,
                         task.trace_id,
-                        message=f"{cleanup_error.code}: {cleanup_error}",
+                        message=(
+                            f"{cleanup_error.code.value}: "
+                            f"{public_worker_error_message(cleanup_error.code)}"
+                        ),
                         error_code=cleanup_error.platform_code,
                     ),
                 )

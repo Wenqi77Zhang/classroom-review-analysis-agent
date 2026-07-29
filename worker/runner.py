@@ -24,6 +24,19 @@ from worker.pipeline import run_pipeline
 from worker.types import PipelineTask
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="从真实课堂视频生成带时间戳逐字稿")
+    parser.add_argument("video", type=Path, nargs="?")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--model", default=os.getenv("WHISPER_MODEL", "tiny"))
+    parser.add_argument("--language", default=None)
+    parser.add_argument("--api-base-url")
+    parser.add_argument("--worker-id", default=os.getenv("WORKER_ID", "media-worker-local"))
+    parser.add_argument("--lease-seconds", type=int, default=300)
+    parser.add_argument("--object-root", type=Path)
+    return parser
+
+
 class HeartbeatLease:
     """Renew a claimed task until work completes or renewal fails."""
 
@@ -121,23 +134,15 @@ def _claimed_input_path(claim: InternalTaskClaim, object_root: Path) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="从真实课堂视频生成带时间戳逐字稿")
-    parser.add_argument("video", type=Path, nargs="?")
-    parser.add_argument("--output", type=Path)
-    parser.add_argument("--model", default=os.getenv("WHISPER_MODEL", "tiny"))
-    parser.add_argument("--language", default=None)
-    parser.add_argument("--api-base-url")
-    parser.add_argument("--service-token", default=os.getenv("WORKER_SERVICE_TOKEN"))
-    parser.add_argument("--worker-id", default=os.getenv("WORKER_ID", "media-worker-local"))
-    parser.add_argument("--lease-seconds", type=int, default=300)
-    parser.add_argument("--object-root", type=Path)
+    parser = _build_parser()
     args = parser.parse_args()
 
-    adapter = LocalWhisperAdapter(args.model, language=args.language)
     if args.api_base_url:
-        if not args.service_token or args.object_root is None:
-            parser.error("远程模式必须提供 --service-token 和 --object-root")
-        store = HttpJobStore(args.api_base_url, args.service_token)
+        service_token = os.getenv("WORKER_SERVICE_TOKEN")
+        if not service_token or args.object_root is None:
+            parser.error("远程模式必须配置 WORKER_SERVICE_TOKEN 环境变量并提供 --object-root")
+        adapter = LocalWhisperAdapter(args.model, language=args.language)
+        store = HttpJobStore(args.api_base_url, service_token)
         request = InternalTaskClaimRequest(
             worker_id=args.worker_id,
             stages=[TaskStage.EXTRACT_AUDIO, TaskStage.TRANSCRIBE],
@@ -165,6 +170,7 @@ def main() -> int:
 
     if args.video is None or args.output is None:
         parser.error("本地模式必须提供 video 和 --output")
+    adapter = LocalWhisperAdapter(args.model, language=args.language)
     store = LocalJobStore()
     task = PipelineTask(input_path=args.video)
     result = run_pipeline(

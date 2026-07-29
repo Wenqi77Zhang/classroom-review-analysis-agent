@@ -31,7 +31,7 @@ from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode
 from worker.job_store import HttpJobStore, LocalJobStore
 from worker.pipeline import run_pipeline
-from worker.runner import run_claimed_once
+from worker.runner import _build_parser, run_claimed_once
 from worker.stages.extract_audio import extract_audio
 from worker.stages.transcribe import transcribe_audio
 from worker.types import AsrResult, AsrSegment, PipelineTask
@@ -155,6 +155,42 @@ def test_extract_audio_rejects_missing_input(tmp_path: Path) -> None:
     with pytest.raises(WorkerError) as raised:
         extract_audio(tmp_path / "missing.mp4", tmp_path / "audio.wav")
     assert raised.value.code is WorkerErrorCode.INPUT_NOT_FOUND
+
+
+def test_extract_audio_does_not_expose_ffmpeg_stderr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "tenant-a" / "private-class.mp4"
+    source.parent.mkdir()
+    source.write_bytes(b"not-a-real-video")
+    target = tmp_path / "audio.wav"
+    sensitive = r"C:\private\tenant-a\class.mp4 applicationKey=do-not-persist"
+
+    class FailedProcess:
+        returncode = 1
+        stderr = sensitive
+
+    monkeypatch.setattr("worker.stages.extract_audio.shutil.which", lambda _: "ffmpeg")
+    monkeypatch.setattr(
+        "worker.stages.extract_audio.subprocess.run",
+        lambda *_args, **_kwargs: FailedProcess(),
+    )
+
+    with pytest.raises(WorkerError) as raised:
+        extract_audio(source, target)
+
+    assert raised.value.code is WorkerErrorCode.AUDIO_EXTRACTION_FAILED
+    assert sensitive not in str(raised.value)
+    assert "applicationKey" not in str(raised.value)
+    assert str(source) not in str(raised.value)
+
+
+def test_remote_runner_has_no_cli_service_token_option() -> None:
+    help_text = _build_parser().format_help()
+
+    assert "--service-token" not in help_text
+    assert "WORKER_SERVICE_TOKEN" not in help_text
 
 
 def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
@@ -415,6 +451,34 @@ def test_pipeline_does_not_persist_after_lease_stop(tmp_path: Path) -> None:
     assert raised.value.code is WorkerErrorCode.STOPPED
     assert task.task_id not in store.transcripts
     assert store.events[task.task_id][-1].status is TaskStatus.FAILED
+
+
+def test_pipeline_failure_event_does_not_persist_sensitive_worker_detail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "private-class.mp4"
+    source.write_bytes(b"video")
+    store = LocalJobStore()
+    task = PipelineTask(input_path=source)
+    sensitive = r"C:\private\tenant-a\class.mp4 applicationKey=do-not-persist"
+
+    def fail_extract(*_: object, **__: object) -> None:
+        raise WorkerError(WorkerErrorCode.AUDIO_EXTRACTION_FAILED, sensitive)
+
+    monkeypatch.setattr("worker.pipeline.extract_audio", fail_extract)
+
+    with pytest.raises(WorkerError):
+        run_pipeline(
+            task,
+            FakeAsr(AsrResult(language="zh", segments=(AsrSegment(0.0, 0.1, "x"),))),
+            store,
+        )
+
+    persisted = store.events[task.task_id][-1].message or ""
+    assert sensitive not in persisted
+    assert "applicationKey" not in persisted
+    assert persisted == "AUDIO_EXTRACTION_FAILED: 课堂视频音频抽取失败。"
 
 
 def test_pipeline_records_actionable_failure(tmp_path: Path) -> None:
