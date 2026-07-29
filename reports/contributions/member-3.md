@@ -17,21 +17,72 @@
 | 异步数据库引擎与请求级事务 | `backend/app/database.py` | `GET /health/ready` |
 | 领域异常体系 | `backend/app/errors.py` | 测试中"统一错误格式"一节 |
 | FastAPI 应用、CORS、trace_id、统一错误、日志脱敏、健康检查 | `backend/app/main.py` | 同上 |
-| 后端测试 85 项 | `tests/unit/test_backend.py` | `pytest -q` |
+| 后端相关测试 99 项 | 后端单元与集成测试 | `pytest -q` |
+| 15 张 ORM 表与首个迁移 | `backend/app/models/`、`backend/migrations/` | `alembic upgrade head`、`alembic check` |
 | 本地基础设施（PostgreSQL 17 + MinIO，自动建桶） | `docker-compose.yml` | `docker compose --profile local-infra ps` |
 | 后端依赖声明与已验证版本 | `pyproject.toml`、`backend/backend-module-guide.md` | `pip freeze` |
 
 ## 二、尚未实现（不得写成已完成）
 
 - 业务路由 `backend/app/api/*`：`docs/interface-contracts.md` 的端点表目前只是契约，**不可调用**。
-- ORM 模型 `backend/app/models/*` 与 Alembic 迁移：数据库可连接，但**库中尚无任何表**。
 - 仓储 `repositories/*`、领域服务 `services/*`（含预签名、权限、审计落库）。
-- 账号隔离测试 `tests/integration/test_account_isolation.py` 仍为占位。
+- 账号隔离测试已使用真实 PostgreSQL；跨账号写入拒绝与审计保留用例已由最新 PR CI 验证。
 - MinIO 镜像仍用 `latest` 标签，可复现性不足。
 
 ---
 
 ## 三、每日工作证据包
+
+### Day 3 — 2026-07-29（持久化与账号隔离基础）
+
+**当天完成**
+
+- 从最新 `main`（`cfa63cc`，已包含 PR #6）建立开发分支。远端分支名中的 `day2`
+  是创建时的日期编号误判；实际开发日按团队时间线记为 Day 3。
+- 实现身份、课堂、对象、任务、事件、逐字稿、证据、结论、复核、报告与审计 ORM，共 15 张业务/关联表。
+- 每张业务表显式保存 `owner_id`；视频表只保存对象 key、类型、大小和校验元数据，不含二进制列。
+- 接通异步 Alembic 环境并生成首迁移 `0b5123afcf23`，数据库 URL 只从 `Settings` 读取。
+- 新增 5 项元数据不变量测试和 1 项真实 PostgreSQL 新会话读写测试。
+- 实现 Argon2 密码哈希、带 issuer/audience/过期校验的 JWT、当前用户依赖和 Worker/Agent 独立服务身份校验。
+- 将账号隔离占位测试替换为真实 PostgreSQL 测试：本人资源可读，他人资源与不存在资源均返回同一 404 语义。
+
+**验证证据**
+
+```text
+alembic upgrade head -> 0b5123afcf23
+public schema -> 15 business/association tables + alembic_version
+alembic downgrade base -> only alembic_version remains
+alembic upgrade head -> success
+pytest -> 99 passed, 4 skipped
+alembic check -> No new upgrade operations detected
+```
+
+**问题与处理**
+
+- Alembic 在中文 Windows 上按系统区域编码读取 INI，中文注释触发 GBK 解码失败；将 INI 保持纯 ASCII。
+- 纯关联表误用了 ORM `mapped_column`；改用 Core `Column`，并增加 mapper 配置测试。
+- PR #10 首轮 CI 未给真实 PostgreSQL 测试提供数据库和配置，导致 2 项测试在读取 `Settings`
+  时失败；为 `backend-check` 增加 PostgreSQL 17 service、Alembic 迁移和 `TEST_DATABASE_URL`。
+  数据库地址不写进全局 `DATABASE_URL`，避免污染“缺少配置应失败”和 B2 默认值单元测试。
+
+**当前限制与下一步**
+
+- 登录 HTTP 路由、课堂/上传/任务仓储和业务 API 仍未实现，不得把安全原语描述成用户已可登录。
+- 下一步实现课程与课堂 CRUD，并把 owner-scoped 查询绑定到所有对外路由。
+
+### PR #10 — 成员 1 审核后协作修复
+
+- 成员 1 复核发现：原实现虽有 `owner_id` 与 `assert_same_owner()`，数据库仍允许跨账号
+  课程—课堂、任务—资料、结论—证据、报告—结论关联；该问题不归为成员 3 已独立完成。
+- 成员 1 与 Codex 协作把关键关系改为 `(资源 ID, owner_id)` 复合外键，并给两张关联表
+  增加 `owner_id`，使调用者即使漏掉服务层校验，PostgreSQL 仍会拒绝跨账号写入。
+- 将 `AuditEvent.owner_id` 从级联删除改为限制删除；M1 暂行策略为停用账号，不得在未确认
+  保留期限和匿名化流程前硬删除有审计记录的账号。
+- 新增 5 项真实 PostgreSQL 写入/删除测试与 2 项元数据不变量测试；GitHub CI 使用
+  PostgreSQL 17 实测为 `106 passed, 4 skipped`，Ruff 全部通过。
+- 成员 1 与 Codex 协作把 PostgreSQL CI 从单向升级补强为
+  `upgrade head → downgrade base → upgrade head`；最终 CI 往返和漂移检查均通过。
+  该工作流第一负责人是成员 5，待其确认。
 
 ### Day 1 — 2026-07-26
 
