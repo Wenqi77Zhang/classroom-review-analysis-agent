@@ -6,6 +6,9 @@ const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
 const sessionRoute = read("src/app/api/session/demo/route.ts");
+const presignRoute = read(
+  "src/app/api/classrooms/[classroomId]/uploads/presign/route.ts",
+);
 const serverBackend = read("src/lib/server/backend.ts");
 const classroom = read("src/components/baseline/ClassroomBaseline.tsx");
 const api = read("src/lib/api.ts");
@@ -24,6 +27,11 @@ assert.doesNotMatch(
 );
 assert.match(serverBackend, /Authorization: `Bearer \$\{token\}`/, "BFF 必须在服务端附加 Bearer 令牌");
 assert.match(serverBackend, /cache: "no-store"/, "鉴权业务响应不得缓存");
+assert.match(
+  presignRoute,
+  /\/uploads\/presign/,
+  "干净检出必须包含预签名上传 BFF 路由",
+);
 assert.match(
   serverBackend,
   /\[204, 205, 304\]\.includes\(response\.status\)/,

@@ -28,7 +28,7 @@ frontend/out/
 *.sqlite
 *.sqlite3
 data/
-uploads/
+/uploads/
 artifacts/
 tmp/
 
