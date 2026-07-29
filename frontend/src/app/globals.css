@@ -3015,6 +3015,14 @@ textarea {
     flex-direction: column;
   }
 
+    .evidence-card,
+  .transcript-timeline,
+  .review-controls {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
   .transcript-item {
     grid-template-columns: 1fr;
   }

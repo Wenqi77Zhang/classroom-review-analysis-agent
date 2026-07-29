@@ -1,3 +1,4 @@
+// frontend/src/components/evidence/EvidenceCard.tsx
 import type { ReviewStatus } from "./ReviewControls";
 
 type EvidenceCardProps = {
@@ -7,6 +8,8 @@ type EvidenceCardProps = {
   sourceLabel: string;
   reviewStatus: ReviewStatus;
   isDemo?: boolean;
+  // 👇 新增：接收一个点击跳转的回调函数
+  onSeekEvidence?: () => void; 
 };
 
 const reviewCopy: Record<ReviewStatus, string> = {
@@ -23,6 +26,7 @@ export function EvidenceCard({
   sourceLabel,
   reviewStatus,
   isDemo = false,
+  onSeekEvidence, // 👈 接收这个函数
 }: EvidenceCardProps) {
   return (
     <article className="evidence-card" aria-labelledby="evidence-card-title">
@@ -57,9 +61,30 @@ export function EvidenceCard({
         </div>
       </dl>
 
+      {/* 👇 在 footer 区域加上了点击触发跳转的联动逻辑 👇 */}
       <footer className="evidence-source">
         <span>证据定位</span>
-        <strong>{sourceLabel}</strong>
+        {/* 如果是 demo 模式，强调查看；如果有跳转函数，变成可点击的按钮 */}
+        {onSeekEvidence ? (
+          <button 
+            type="button"
+            onClick={onSeekEvidence}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#2563eb',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              fontSize: 'inherit',
+              fontWeight: 'bold',
+              padding: 0
+            }}
+          >
+            {sourceLabel} → 定位证据
+          </button>
+        ) : (
+          <strong>{sourceLabel}</strong>
+        )}
       </footer>
     </article>
   );
