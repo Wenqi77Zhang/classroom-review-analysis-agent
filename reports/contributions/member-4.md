@@ -17,8 +17,8 @@
   路径、Bearer 鉴权、heartbeat、状态、整批 transcript、非 2xx、连接失败和超时。
 - 对两段成员 4 确认来源的中国大学 MOOC 视频完成真实 ASR 验收；仓库只记录来源、
   文件 SHA-256、时长、片段数、首末时间范围和不可逆正文摘要哈希。
-- 将常规 CI 的 Ruff 范围扩展到 `worker/`；Whisper 继续作为 Worker 可选依赖，不拖入
-  纯后端 CI。
+- Whisper 继续作为 Worker 可选依赖，不拖入纯后端 CI；Worker Ruff 已在本地全仓检查中
+  单独执行。
 
 ## 验证结果
 

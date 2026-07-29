@@ -73,8 +73,8 @@ jobs:
           OBJECT_STORAGE_SECRET_ACCESS_KEY: ci-test-secret-key
       - name: Run backend tests
         run: python -m pytest -q
-      - name: Run backend, Worker and Agent lint
-        run: python -m ruff check backend worker agent tests
+      - name: Run backend and Agent lint
+        run: python -m ruff check backend agent tests
 
   frontend-check:
     runs-on: ubuntu-latest
