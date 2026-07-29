@@ -79,7 +79,11 @@ function formatBytes(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-export function UploadPanel() {
+export function UploadPanel({
+  onVideoReadinessChange,
+}: {
+  onVideoReadinessChange?: (hasVideo: boolean) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [assets, setAssets] = useState<SelectedAsset[]>([]);
   const [error, setError] = useState("");
@@ -145,6 +149,10 @@ export function UploadPanel() {
   }
 
   const hasVideo = assets.some((asset) => asset.kind === "video");
+
+  useEffect(() => {
+    onVideoReadinessChange?.(hasVideo);
+  }, [hasVideo, onVideoReadinessChange]);
 
   return (
     <section
