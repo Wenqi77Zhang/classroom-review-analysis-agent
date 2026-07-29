@@ -1,1 +1,1 @@
-"""Agent validator package. Stage-0 scaffold only."""
+"""成员 4 证据校验器的 Agent 集成包；专业校验仍为 TODO。"""

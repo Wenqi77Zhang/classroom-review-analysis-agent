@@ -1,1 +1,1 @@
-"""Agent observability package. Stage-0 scaffold only."""
+"""Agent Trace、脱敏与可替换记录 Sink。"""
