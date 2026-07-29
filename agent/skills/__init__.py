@@ -1,1 +1,1 @@
-"""Analysis skill package. Stage-0 scaffold only."""
+"""课堂分析 Skill；通用规则已实现，学科规则等待成员 4 提供。"""
