@@ -311,6 +311,72 @@ async def test_time_range_sends_only_in_scope_evidence() -> None:
 
 
 @pytest.mark.asyncio
+async def test_model_prompt_excludes_foreign_owner_and_task_evidence() -> None:
+    task_id = uuid4()
+    owner_id = uuid4()
+    own = _evidence(
+        task_id=task_id,
+        owner_id=owner_id,
+        text="当前教师课堂原文",
+        translation="Current teacher transcript",
+    )
+    analysis_input = AnalysisInput(
+        task_id=task_id,
+        owner_id=owner_id,
+        contract=AnalysisContract(
+            goal="双语复盘",
+            focus_areas=["结构"],
+            bilingual_required=True,
+            confirmed=True,
+        ),
+        evidence=[own],
+    )
+    foreign_owner = _evidence(
+        task_id=task_id,
+        owner_id=uuid4(),
+        text="其他账号课堂原文，绝不能发送",
+    )
+    foreign_task = _evidence(
+        task_id=uuid4(),
+        owner_id=owner_id,
+        text="其他任务课堂原文，绝不能发送",
+    )
+    # 模拟 Schema 校验后仓储/调用方错误地混入外部证据；Agent 必须再次 fail closed。
+    analysis_input.evidence.extend([foreign_owner, foreign_task])
+    provider = FakeProvider(_model_data(own.id))
+
+    result = await AgentOrchestrator(
+        providers=ProviderRouter(local=provider)
+    ).analyze(analysis_input)
+
+    prompt = provider.requests[0].user_prompt
+    assert str(own.id) in prompt
+    for foreign in (foreign_owner, foreign_task):
+        assert str(foreign.id) not in prompt
+        encoded_text = base64.b64encode(foreign.text.encode()).decode()
+        assert encoded_text not in prompt
+    assert result.conclusions.conclusions[0].evidence_refs == [own.reference]
+
+
+@pytest.mark.asyncio
+async def test_model_cannot_reference_filtered_foreign_evidence() -> None:
+    analysis_input = _input()
+    foreign = _evidence(
+        task_id=analysis_input.task_id,
+        owner_id=uuid4(),
+        text="其他账号课堂原文",
+    )
+    analysis_input.evidence.append(foreign)
+    provider = FakeProvider(_model_data(foreign.id))
+
+    with pytest.raises(AgentRunError) as captured:
+        await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(analysis_input)
+
+    assert captured.value.code is AgentErrorCode.EVIDENCE_NOT_FOUND
+    assert isinstance(captured.value.__cause__, EvidenceNotFoundError)
+
+
+@pytest.mark.asyncio
 async def test_time_range_rejects_model_reference_to_outside_evidence() -> None:
     task_id = uuid4()
     owner_id = uuid4()

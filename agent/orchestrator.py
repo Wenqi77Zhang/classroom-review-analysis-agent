@@ -195,7 +195,9 @@ class AgentOrchestrator:
         evidence = [
             item
             for item in analysis_input.evidence
-            if self._is_in_scope(item, analysis_input.contract)
+            if item.task_id == analysis_input.task_id
+            and item.owner_id == analysis_input.owner_id
+            and self._is_in_scope(item, analysis_input.contract)
         ]
         if not evidence:
             raise AgentRunError(
