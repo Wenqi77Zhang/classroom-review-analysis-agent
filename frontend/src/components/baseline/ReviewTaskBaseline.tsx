@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { EvidenceCard } from "../evidence/EvidenceCard";
+import {
+  ReviewControls,
+  type ReviewStatus,
+} from "../evidence/ReviewControls";
+import {
+  TranscriptTimeline,
+  type TranscriptItem,
+} from "../evidence/TranscriptTimeline";
+import { VideoPlayer } from "../evidence/VideoPlayer";
 import { UploadPanel } from "../upload/UploadPanel";
 import { SiteChrome } from "./SiteChrome";
 
@@ -11,6 +21,34 @@ const stateCopy: Record<PreviewState, [string,string,string]> = {
   failure: ["!", "处理失败，可安全重试", "页面必须展示失败原因，不伪造完成结果。"],
   ready: ["✓", "待教师复核", "结论仍需逐条核对证据并由教师确认。"],
 };
+
+const demoTranscript: TranscriptItem[] = [
+  {
+    id: "demo-1",
+    startMs: 12_000,
+    endMs: 18_000,
+    speaker: "Teacher",
+    originalText: "What evidence supports your answer?",
+    translatedText: "什么证据可以支持你的答案？",
+  },
+  {
+    id: "demo-2",
+    startMs: 18_000,
+    endMs: 23_000,
+    speaker: "Class",
+    originalText: "[Five seconds of classroom silence]",
+    translatedText: "[课堂沉默五秒]",
+  },
+  {
+    id: "demo-3",
+    startMs: 23_000,
+    endMs: 31_000,
+    speaker: "Student",
+    originalText: "The repeated phrase shows the character is uncertain.",
+    translatedText: "反复出现的短语说明人物并不确定。",
+  },
+];
+
 export function ReviewTaskBaseline() {
   const [classroom, setClassroom] = useState("尚未创建课堂");
   const [messages, setMessages] = useState<string[]>([]);
@@ -19,6 +57,11 @@ export function ReviewTaskBaseline() {
   const [confirmed, setConfirmed] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewState>("empty");
+  const [currentVideoTimeMs, setCurrentVideoTimeMs] = useState(12_000);
+  const [seekToMs, setSeekToMs] = useState(12_000);
+  const [reviewStatus, setReviewStatus] =
+    useState<ReviewStatus>("pending");
+  const [reviewNote, setReviewNote] = useState("");
   useEffect(() => setClassroom(sessionStorage.getItem("classroomName") || "演示课堂 · 尚未保存到后端"), []);
   function send(event: FormEvent) { event.preventDefault(); if (!goal.trim()) return; setMessages((list) => [...list, goal.trim()]); setGoal(""); setContract(true); }
   const state = stateCopy[preview];
@@ -33,5 +76,56 @@ export function ReviewTaskBaseline() {
     </aside></div>
     {uploadOpen && <UploadPanel />}
     <section className="state-lab" data-reveal aria-labelledby="state-lab-title"><div><span className="mock-pill">原型控制台</span><h2 id="state-lab-title">人工查看关键状态</h2><p>状态由用户手动切换，不用计时器伪造真实处理进度。</p></div><div className="state-buttons">{(["empty","processing","failure","ready"] as PreviewState[]).map((item) => <button type="button" key={item} className={preview === item ? "active" : ""} onClick={() => setPreview(item)}>{{empty:"空状态",processing:"处理中",failure:"失败可重试",ready:"待教师复核"}[item]}</button>)}</div><div className={`state-preview ${preview}`}><span className="state-symbol">{state[0]}</span><div><strong>{state[1]}</strong><p>{state[2]}</p></div></div></section>
+    {preview === "ready" && (
+      <section
+        className="evidence-workbench"
+        aria-labelledby="evidence-workbench-title"
+      >
+        <header className="evidence-workbench-heading">
+          <div>
+            <span className="mock-pill">Mock 证据工作台</span>
+            <h2 id="evidence-workbench-title">逐条核对证据，再决定是否进入报告</h2>
+          </div>
+          <p>以下内容全部是交互演示数据，不代表真实课堂处理已经完成。</p>
+        </header>
+        <div className="evidence-workbench-grid">
+          <div className="evidence-media-column">
+            <VideoPlayer
+              seekToMs={seekToMs}
+              onTimeUpdate={setCurrentVideoTimeMs}
+            />
+            <TranscriptTimeline
+              items={demoTranscript}
+              currentTimeMs={currentVideoTimeMs}
+              onSeek={(timeMs) => {
+                setSeekToMs(timeMs);
+                setCurrentVideoTimeMs(timeMs);
+              }}
+            />
+          </div>
+          <div className="evidence-review-column">
+            <EvidenceCard
+              fact="教师提出证据追问后，课堂出现约五秒等待时间，随后学生给出文本依据。"
+              judgment="该片段可作为“提问后留出思考时间”的候选证据，但仍需教师结合完整上下文判断。"
+              suggestion="复核前后片段并确认时间边界；若上下文一致，可保留等待时间并继续追问证据。"
+              sourceLabel="演示逐字稿 00:12–00:31"
+              reviewStatus={reviewStatus}
+              isDemo
+            />
+            <ReviewControls
+              status={reviewStatus}
+              note={reviewNote}
+              onStatusChange={(nextStatus) => {
+                setReviewStatus(nextStatus);
+                if (nextStatus === "accepted") {
+                  setReviewNote("");
+                }
+              }}
+              onNoteChange={setReviewNote}
+            />
+          </div>
+        </div>
+      </section>
+    )}
   </div></section></SiteChrome>;
 }
