@@ -22,12 +22,12 @@
 | `app/config.py` | **已实现**，启动即校验、密钥 `SecretStr` 不可打印 |
 | `app/database.py` | **已实现**，async 引擎、会话工厂、请求级事务 |
 | `app/errors.py` | **已实现**（新增文件，见下） |
-| `app/main.py` | **部分实现**：应用工厂、CORS、trace_id、统一错误处理、日志脱敏、健康检查。**业务路由尚未注册** |
-| `app/models/` | **已实现**：15 张业务/关联表；跨资源关系用 `(资源 ID, owner_id)` 复合外键阻止跨账号串联 |
-| 认证与权限基础 | **已实现**：Argon2、JWT、当前用户依赖、Worker/Agent 独立令牌、owner-scoped 查询 |
-| `app/api/` 业务路由、`app/repositories/` | **尚未实现**，仍为 `TODO` 占位；`api/auth.py` 当前只有安全原语 |
+| `app/main.py` | **部分实现**：全局能力、健康检查，并已注册认证、课程和课堂路由 |
+| `app/models/` | **已实现**：15 张业务/关联表；关键跨资源关系用 `(资源 ID, owner_id)` 复合外键阻止跨账号串联 |
+| 认证与课程/课堂 API | **已实现**：登录、可选演示账号、`/auth/me`、课程与课堂 CRUD、owner-scoped 查询 |
+| 其余 `app/api/`、任务/复核仓储 | **尚未实现**：上传、任务、逐字稿、分析与报告仍为 `TODO` |
 | `migrations/` | **已实现首个迁移** `0b5123afcf23`；PostgreSQL 17 CI 已验证 `upgrade → downgrade → upgrade` 与无模型漂移 |
-| 后端自动测试 | **106 项通过、4 项跳过**：含真实 PostgreSQL 持久化、跨账号写入拒绝与审计保留 |
+| 后端自动测试 | **已实现**：含真实 PostgreSQL 持久化、跨账号写入拒绝、审计保留与 HTTP 登录/课堂流程 |
 
 任何 `TODO`、占位实现均不代表已完成。跨模块契约见 `../docs/interface-contracts.md`（v1 已冻结）。
 
@@ -134,11 +134,10 @@ B2），否则会出现"本地能传、上线传不了"。该抽象层**尚未�
 
 ## 已知限制
 
-- 业务端点尚未实现，`docs/interface-contracts.md` 的端点表目前只是契约，不可调用。
-- 业务路由、仓储和领域服务尚未实现；当前有表结构，但还没有可调用的课堂、上传或任务 API。
-- 持久化和 owner-scoped 读取已有真实 PostgreSQL 测试；登录 HTTP 路由和任务状态机服务仍未覆盖。
-- 每张业务表都有 `owner_id`；当前关键父子关系和两张关联表已由复合外键强制同 owner。
-  仓储仍须使用 owner-scoped 查询并统一返回 404，数据库约束只负责最后一道写入防线。
+- `docs/interface-contracts.md` 中认证、课程与课堂端点已实现；其余业务端点仍只是契约，不可调用。
+- 上传、任务、逐字稿、分析和报告路由及其领域服务尚未实现；认证、课程和课堂 API 已可调用。
+- 持久化、登录 HTTP 路由和 owner-scoped 课堂 CRUD 已有真实 PostgreSQL 测试；任务状态机服务仍未覆盖。
+- 每张业务表都有 `owner_id`；关键父子关系和两张关联表已由复合外键强制同 owner。仓储仍须使用 owner-scoped 查询并统一返回 404，数据库约束只负责最后一道写入防线。
 - `docker-compose.yml` 的 MinIO 部分由成员 3 加入，该文件第一负责人是成员 5，**待其确认**。
 - MinIO 与 mc 镜像已固定为本机实际验证过的 RELEASE 标签
   （`RELEASE.2025-09-07T16-13-09Z` / `RELEASE.2025-08-13T08-35-41Z`，digest 记在

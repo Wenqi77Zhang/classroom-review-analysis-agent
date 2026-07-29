@@ -138,6 +138,28 @@ parse_courseware → build_evidence_index → analyze`
 | `analyses` | `GET /classrooms/{id}/conclusions`、`POST /conclusions/{id}/review`、`GET /conclusions/{id}/history` |
 | `reports` | `GET\|PUT /classrooms/{id}/report`、`POST /reports/{id}/export`、`GET /reports/{id}/export/{fmt}` |
 
+### 认证、课程与课堂字段（Day 3）
+
+| 端点 | 请求 | 响应 |
+|---|---|---|
+| `POST /auth/login` | `{email, password}` | `{access_token, token_type, expires_in_seconds, user}` |
+| `POST /auth/demo` | 无请求体；仅在服务端配置演示口令时可用 | 同登录响应 |
+| `GET /auth/me` | Bearer token | `{id, display_name}` |
+| `POST /courses` | `{name, description?}` | `CourseRead` |
+| `GET /courses` | 无 | 当前账号的 `CourseRead[]` |
+| `POST /courses/{id}/classrooms` | `{title, description?, analysis_contract?}` | `ClassroomRead` |
+| `GET /courses/{id}/classrooms` | 无 | 当前账号和课程下的 `ClassroomRead[]` |
+| `GET /classrooms/{id}` | 无 | `ClassroomRead` |
+| `PATCH /classrooms/{id}` | `title`、`description`、`analysis_contract` 至少一个 | `ClassroomRead` |
+| `DELETE /classrooms/{id}` | 无 | HTTP 204 |
+
+课程名称和课堂名称来自成员 1 已确认的创建课堂页面。授课语言和课堂日期当前仍是可选页面字段，
+尚未纳入冻结数据库契约；成员 1 确认其持久化语义后再扩展，不在本轮静默加字段。
+
+登录失败统一返回 `UNAUTHENTICATED`，不区分“邮箱不存在”和“密码错误”。演示账号密码仅从
+`DEMO_ACCOUNT_PASSWORD` 读取；未配置时 `/auth/demo` 返回 `PERMISSION_DENIED`，不得使用
+硬编码默认密码。
+
 ### 内部（服务令牌鉴权，**Worker 与 Agent 各持一个，不共用**）
 
 | 端点 | 请求 Schema | 允许身份 | 使用方 |

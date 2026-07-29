@@ -4,17 +4,19 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import ValidationError
 
-from backend.app.api.auth import (
+from backend.app.config import Settings
+from backend.app.dependencies import identify_service
+from backend.app.errors import UnauthenticatedError
+from backend.app.schemas.identity import ClassroomUpdate
+from backend.app.schemas.task import ServiceIdentity
+from backend.app.services.authentication import (
     create_access_token,
     decode_access_token,
     hash_password,
     verify_password,
 )
-from backend.app.config import Settings
-from backend.app.dependencies import identify_service
-from backend.app.errors import UnauthenticatedError
-from backend.app.schemas.task import ServiceIdentity
 
 
 def make_settings(*, jwt_secret: str | None = None) -> Settings:
@@ -76,3 +78,8 @@ def test_service_tokens_identify_distinct_identities() -> None:
 def test_unknown_service_token_is_rejected() -> None:
     with pytest.raises(UnauthenticatedError):
         identify_service("unknown", make_settings())
+
+
+def test_empty_classroom_patch_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ClassroomUpdate()

@@ -10,14 +10,18 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.api.auth import decode_access_token
-from backend.app.config import Settings, get_settings
+from backend.app.config import Settings
 from backend.app.database import session_scope
 from backend.app.errors import PermissionDeniedError, UnauthenticatedError
 from backend.app.models import User
 from backend.app.schemas.task import INTERNAL_ENDPOINT_SCOPES, ServiceIdentity
+from backend.app.services.authentication import decode_access_token
 
 _bearer = HTTPBearer(auto_error=False)
+
+
+def get_app_settings(request: Request) -> Settings:
+    return request.app.state.settings
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
@@ -28,7 +32,7 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     session: Annotated[AsyncSession, Depends(get_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> User:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise UnauthenticatedError()
@@ -57,7 +61,7 @@ def require_service_identity(scope: str) -> Callable[..., ServiceIdentity]:
     def dependency(
         request: Request,
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-        settings: Annotated[Settings, Depends(get_settings)],
+        settings: Annotated[Settings, Depends(get_app_settings)],
     ) -> ServiceIdentity:
         if credentials is None or credentials.scheme.lower() != "bearer":
             raise UnauthenticatedError("缺少服务身份令牌。")
