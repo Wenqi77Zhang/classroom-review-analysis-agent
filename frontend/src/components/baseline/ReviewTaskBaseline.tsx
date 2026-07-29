@@ -121,6 +121,11 @@ export function ReviewTaskBaseline() {
               sourceLabel="演示逐字稿 00:12–00:31"
               reviewStatus={reviewStatus}
               isDemo
+              onSeekEvidence={() => {
+                const evidenceStartMs = demoTranscript[0].startMs;
+                setSeekToMs(evidenceStartMs);
+                setCurrentVideoTimeMs(evidenceStartMs);
+              }}
             />
             <ReviewControls
               status={reviewStatus}

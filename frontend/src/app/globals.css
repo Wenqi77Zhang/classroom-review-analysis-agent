@@ -2482,6 +2482,22 @@ textarea {
   font-size: 13px;
 }
 
+.evidence-source-button {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--indigo-deep);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.evidence-source-button:hover {
+  color: var(--success);
+}
+
 .review-controls > div:first-child > p {
   margin: 7px 0 0;
   color: var(--ink-soft);
@@ -2507,6 +2523,20 @@ textarea {
 .review-actions button.active {
   background: rgba(211, 228, 224, 0.86);
   border-color: rgba(82, 109, 114, 0.36);
+}
+
+.review-actions .review-reset {
+  grid-column: 1 / -1;
+}
+
+.review-current-status {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.review-current-status strong {
+  color: var(--ink);
 }
 
 .review-note {
@@ -3015,7 +3045,7 @@ textarea {
     flex-direction: column;
   }
 
-    .evidence-card,
+  .evidence-card,
   .transcript-timeline,
   .review-controls {
     width: 100%;
