@@ -10,8 +10,14 @@
 
 ## 本地运行
 
-项目要求 Python 3.13，并要求系统能直接运行 `ffmpeg`。Whisper 模型在第一次运行时
-下载到本机缓存，不得提交模型目录。
+项目要求 Python 3.13，并要求系统能直接运行 `ffmpeg`。先安装 Worker 专用依赖：
+
+```bash
+python -m pip install -e ".[dev,worker]"
+```
+
+Whisper 模型在第一次运行时下载到本机缓存，不得提交模型目录。只运行后端和常规测试的
+环境继续安装 `.[dev]`，无需下载 Whisper 或 PyTorch。
 
 ```bash
 python -m worker.runner "/绝对路径/课堂.mp4" \

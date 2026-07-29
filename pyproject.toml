@@ -22,8 +22,6 @@ dependencies = [
   "pyjwt>=2.13,<3.0",
   "argon2-cffi>=25.1,<26.0",
   "boto3>=1.43,<2.0",
-  # Worker 本地 ASR；模型权重运行时下载，不进入仓库。
-  "openai-whisper>=20250625,<2027",
   # TODO(成员 5)：Agent 模型与可观测依赖在此追加。
 ]
 
@@ -34,6 +32,10 @@ dev = [
   "httpx>=0.28,<1.0",
   # ruff 跨小版本会调整规则集，锁到小版本让 CI 结果稳定。
   "ruff>=0.16,<0.17",
+]
+worker = [
+  # 本地 ASR 运行时；模型权重运行时下载，不进入仓库，也不拖累纯后端 CI。
+  "openai-whisper>=20250625,<2027",
 ]
 
 [tool.pytest.ini_options]
