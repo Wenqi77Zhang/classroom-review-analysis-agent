@@ -5,23 +5,35 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Self
 
 from backend.app.schemas.task import (
     AssetKind,
+    InternalAssetRead,
     InternalTaskClaim,
     InternalTaskClaimRequest,
     InternalTaskHeartbeat,
+    InternalTaskStateUpdate,
     TaskStage,
+    TaskStatus,
 )
-from worker.adapters.asr import LocalWhisperAdapter
-from worker.errors import WorkerError, WorkerErrorCode
+from worker.adapters.asr import AsrAdapter, LocalWhisperAdapter
+from worker.cleanup import cleanup_path
+from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_message
 from worker.job_store import ClaimingJobStore, HttpJobStore, LocalJobStore
 from worker.pipeline import run_pipeline
-from worker.types import PipelineTask
+from worker.types import PipelineResult, PipelineTask
+
+WORKER_CLAIM_STAGES = [
+    TaskStage.UPLOADED,
+    TaskStage.EXTRACT_AUDIO,
+    TaskStage.TRANSCRIBE,
+]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -116,21 +128,94 @@ def run_claimed_once[T](
         return result
 
 
-def _claimed_input_path(claim: InternalTaskClaim, object_root: Path) -> Path:
+def _claimed_video_asset(claim: InternalTaskClaim) -> InternalAssetRead:
     video_assets = [asset for asset in claim.assets if asset.kind is AssetKind.VIDEO]
     if not video_assets:
         raise WorkerError(
             WorkerErrorCode.INPUT_NOT_FOUND,
             "领取任务中没有视频资源。",
         )
+    return video_assets[0]
+
+
+@contextmanager
+def _claimed_input_path(
+    claim: InternalTaskClaim,
+    store: HttpJobStore,
+    object_root: Path | None,
+) -> Iterator[Path]:
+    asset = _claimed_video_asset(claim)
+    if object_root is None:
+        work_dir = Path(tempfile.mkdtemp(prefix=f"classroom-download-{claim.task_id}-"))
+        candidate = work_dir / "source-media"
+        primary_failure: BaseException | None = None
+        try:
+            store.download_asset(asset, candidate)
+            yield candidate
+        except BaseException as exc:
+            primary_failure = exc
+            raise
+        finally:
+            try:
+                cleanup_path(work_dir)
+            except WorkerError as cleanup_error:
+                if primary_failure is not None:
+                    primary_failure.add_note(f"{cleanup_error.code.value}: {cleanup_error}")
+                else:
+                    raise
+        return
+
     root = object_root.resolve()
-    candidate = (root / video_assets[0].object_key).resolve()
+    candidate = (root / asset.object_key).resolve()
     if not candidate.is_relative_to(root):
         raise WorkerError(
             WorkerErrorCode.INPUT_NOT_FOUND,
             "视频对象地址越出允许的媒体目录。",
         )
-    return candidate
+    yield candidate
+
+
+def _process_claimed_media(
+    claim: InternalTaskClaim,
+    stop: threading.Event,
+    store: HttpJobStore,
+    adapter: AsrAdapter,
+    object_root: Path | None,
+) -> PipelineResult:
+    pipeline_started = False
+    pipeline_completed = False
+    try:
+        with _claimed_input_path(claim, store, object_root) as input_path:
+            pipeline_started = True
+            result = run_pipeline(
+                PipelineTask(
+                    task_id=claim.task_id,
+                    trace_id=claim.trace_id,
+                    input_path=input_path,
+                ),
+                adapter,
+                store,
+                stop_event=stop,
+            )
+            pipeline_completed = True
+            return result
+    except WorkerError as exc:
+        # run_pipeline 自己记录其内部失败。下载尚未进入 pipeline，或 pipeline
+        # 成功后外层下载目录清理失败时，必须由 runner 补写真实失败状态。
+        if not pipeline_started or pipeline_completed:
+            stage = TaskStage.EXTRACT_AUDIO if not pipeline_started else TaskStage.TRANSCRIBE
+            store.update_state(
+                claim.task_id,
+                InternalTaskStateUpdate(
+                    stage=stage,
+                    status=TaskStatus.FAILED,
+                    progress=0.0,
+                    message=f"{exc.code.value}: {public_worker_error_message(exc.code)}",
+                    error_code=exc.platform_code,
+                    trace_id=claim.trace_id,
+                ),
+            )
+        raise
 
 
 def main() -> int:
@@ -139,28 +224,26 @@ def main() -> int:
 
     if args.api_base_url:
         service_token = os.getenv("WORKER_SERVICE_TOKEN")
-        if not service_token or args.object_root is None:
-            parser.error("远程模式必须配置 WORKER_SERVICE_TOKEN 环境变量并提供 --object-root")
+        if not service_token:
+            parser.error("远程模式必须配置 WORKER_SERVICE_TOKEN 环境变量")
         adapter = LocalWhisperAdapter(args.model, language=args.language)
         store = HttpJobStore(args.api_base_url, service_token)
         request = InternalTaskClaimRequest(
             worker_id=args.worker_id,
-            stages=[TaskStage.EXTRACT_AUDIO, TaskStage.TRANSCRIBE],
+            stages=WORKER_CLAIM_STAGES,
             lease_seconds=args.lease_seconds,
         )
+
         try:
             completed = run_claimed_once(
                 store,
                 request,
-                lambda claim, stop: run_pipeline(
-                    PipelineTask(
-                        task_id=claim.task_id,
-                        trace_id=claim.trace_id,
-                        input_path=_claimed_input_path(claim, args.object_root),
-                    ),
-                    adapter,
+                lambda claim, stop: _process_claimed_media(
+                    claim,
+                    stop,
                     store,
-                    stop_event=stop,
+                    adapter,
+                    args.object_root,
                 ),
             )
         finally:

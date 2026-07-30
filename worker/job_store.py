@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 from uuid import UUID
 
 import httpx
 
 from backend.app.schemas.task import (
+    InternalAssetRead,
     InternalTaskClaim,
     InternalTaskClaimRequest,
     InternalTaskHeartbeat,
@@ -52,12 +54,20 @@ class HttpJobStore:
         *,
         timeout_seconds: float = 30.0,
         transport: httpx.BaseTransport | None = None,
+        download_transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.client = httpx.Client(
             base_url=base_url.rstrip("/"),
             timeout=timeout_seconds,
             headers={"Authorization": f"Bearer {service_token}"},
             transport=transport,
+        )
+        # 对象下载必须使用独立、无 Authorization 默认头的客户端。否则 Worker
+        # 服务令牌会被转发到 B2/MinIO，造成跨服务凭据泄露。
+        self.download_client = httpx.Client(
+            timeout=timeout_seconds,
+            follow_redirects=False,
+            transport=download_transport,
         )
 
     def _request(self, method: str, path: str, *, json: dict[str, object]) -> httpx.Response:
@@ -103,5 +113,59 @@ class HttpJobStore:
             json=transcript.model_dump(mode="json"),
         )
 
+    def download_asset(self, asset: InternalAssetRead, target: Path) -> None:
+        received = 0
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with self.download_client.stream("GET", asset.download_url) as response:
+                response.raise_for_status()
+                expected_etag = self._normalize_etag(asset.verified_etag)
+                response_etag = self._normalize_etag(response.headers.get("etag"))
+                if expected_etag is not None and response_etag != expected_etag:
+                    raise WorkerError(
+                        WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
+                        "对象下载 ETag 与上传核验结果不一致。",
+                        retryable=True,
+                    )
+                with target.open("wb") as output:
+                    for chunk in response.iter_bytes():
+                        received += len(chunk)
+                        if received > asset.size_bytes:
+                            raise WorkerError(
+                                WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
+                                "对象下载大小超过后端登记值。",
+                                retryable=True,
+                            )
+                        output.write(chunk)
+            if received != asset.size_bytes:
+                raise WorkerError(
+                    WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
+                    "对象下载大小与后端登记值不一致。",
+                    retryable=True,
+                )
+        except WorkerError:
+            self._remove_partial_download(target)
+            raise
+        except (httpx.HTTPError, OSError):
+            self._remove_partial_download(target)
+            raise WorkerError(
+                WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
+                "无法从限时对象地址下载课堂视频。",
+                retryable=True,
+            ) from None
+
+    @staticmethod
+    def _normalize_etag(value: str | None) -> str | None:
+        return value.strip().strip('"') if value else None
+
+    @staticmethod
+    def _remove_partial_download(target: Path) -> None:
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            # 外层下载临时目录仍会执行递归清理；不得让清理异常覆盖原始下载错误。
+            pass
+
     def close(self) -> None:
         self.client.close()
+        self.download_client.close()

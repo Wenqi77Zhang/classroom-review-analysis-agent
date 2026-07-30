@@ -35,7 +35,8 @@ dev = [
 ]
 worker = [
   # 本地 ASR 运行时；模型权重运行时下载，不进入仓库，也不拖累纯后端 CI。
-  "openai-whisper>=20250625,<2027",
+  # Whisper 使用 YYYYMMDD 日期版本；上界也必须使用同一量级。
+  "openai-whisper>=20250625,<20270000",
 ]
 
 [tool.pytest.ini_options]

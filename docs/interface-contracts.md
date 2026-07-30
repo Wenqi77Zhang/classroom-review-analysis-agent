@@ -178,6 +178,13 @@ parse_courseware → build_evidence_index → analyze`
 | `POST /internal/tasks/{id}/transcript` | `InternalTranscriptWrite` | `worker` | 成员 4 |
 | `POST /internal/tasks/{id}/conclusions` | `InternalConclusionBatchWrite` | `agent` | 成员 5 |
 
+`InternalTaskClaim.assets` 使用 `InternalAssetRead`：在对外 `AssetRead` 字段之外，仅增加后端
+即时签发的 `download_url`。该地址限时、限当前对象、只允许 GET，不持久化也不进入日志。
+Worker 必须使用不携带 `Authorization` 默认头的独立客户端访问它，严禁把
+`WORKER_SERVICE_TOKEN` 转发给对象存储。Worker 下载后核对实际字节数与 `size_bytes`，
+并把响应 ETag 与后端上传完成时 HEAD 保存的 `verified_etag` 对照，防止限时 PUT 地址
+过期前发生同大小对象替换；无论成功、失败或租约停止都清理本地临时文件。
+
 身份由令牌区分：`WORKER_SERVICE_TOKEN` → `worker`，`AGENT_SERVICE_TOKEN` → `agent`。
 两者**必须配置为不同的值**。共用一个令牌意味着 Agent 也能覆盖逐字稿、Worker 也能写入
 教学结论，违反最小权限。权威定义见 `backend/app/schemas/task.py::INTERNAL_ENDPOINT_SCOPES`。
