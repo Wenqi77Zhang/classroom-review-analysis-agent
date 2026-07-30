@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -9,13 +10,13 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app.config import Settings
 from backend.app.dependencies import get_db
 from backend.app.main import create_app
-from backend.app.models import AuditEvent, ProcessingTask, User
+from backend.app.models import AuditEvent, ProcessingTask, TaskEvent, User
 from backend.app.services.authentication import hash_password
 from backend.app.services.storage import ObjectMetadata
 
@@ -215,6 +216,25 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert download.status_code == 200
             assert download.json()["url"].startswith("https://storage.invalid/download/")
 
+            legacy_task_id = uuid.uuid4()
+            async with factory.begin() as session:
+                session.add(
+                    ProcessingTask(
+                        id=legacy_task_id,
+                        owner_id=first_id,
+                        classroom_id=uuid.UUID(classroom_id),
+                        status="queued",
+                        stage="uploaded",
+                        progress=0,
+                        privacy_mode="local",
+                        analysis_contract={
+                            "review_goal": "legacy-private-classroom-content"
+                        },
+                        trace_id="legacy-contract-trace",
+                        created_at=datetime.now(UTC) - timedelta(minutes=1),
+                    )
+                )
+
             task_response = await client.post(
                 f"/api/classrooms/{classroom_id}/tasks",
                 json={
@@ -234,6 +254,28 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 headers=worker_headers,
             )
             assert forbidden_claim.status_code == 403
+
+            quarantined_claim = await client.post(
+                "/api/internal/tasks/claim",
+                json={"worker_id": "worker-1", "stages": ["uploaded"]},
+                headers=worker_headers,
+            )
+            assert quarantined_claim.status_code == 200
+            assert quarantined_claim.json() is None
+            async with factory() as session:
+                legacy_task = await session.get(ProcessingTask, legacy_task_id)
+                assert legacy_task is not None
+                assert legacy_task.status == "failed"
+                assert legacy_task.last_error_code == "VALIDATION_ERROR"
+                legacy_events = list(
+                    await session.scalars(
+                        select(TaskEvent).where(TaskEvent.task_id == legacy_task_id)
+                    )
+                )
+                serialized_legacy_events = repr(
+                    [(event.message, event.error_code) for event in legacy_events]
+                )
+                assert "legacy-private-classroom-content" not in serialized_legacy_events
 
             claimed = await client.post(
                 "/api/internal/tasks/claim",
@@ -471,6 +513,65 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 headers=agent_headers,
             )
             assert service_cannot_read_audit.status_code == 401
+
+            second_trace_task_id = uuid.uuid4()
+            second_trace_id = uuid.uuid4().hex
+            async with factory.begin() as session:
+                session.add(
+                    ProcessingTask(
+                        id=second_trace_task_id,
+                        owner_id=first_id,
+                        classroom_id=uuid.UUID(classroom_id),
+                        status="running",
+                        stage="analyze",
+                        progress=0.5,
+                        privacy_mode="local",
+                        analysis_contract=analysis_contract,
+                        trace_id=second_trace_id,
+                        claimed_by="agent-concurrent",
+                        lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                    )
+                )
+            concurrent_event_id = str(uuid.uuid4())
+            first_concurrent_payload = {
+                **trace_payload,
+                "event_id": concurrent_event_id,
+            }
+            second_concurrent_payload = {
+                **trace_payload,
+                "event_id": concurrent_event_id,
+                "trace_id": second_trace_id,
+            }
+            async with (
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://trace-first"
+                ) as first_trace_client,
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://trace-second"
+                ) as second_trace_client,
+            ):
+                concurrent_trace_responses = await asyncio.gather(
+                    first_trace_client.post(
+                        f"/api/internal/tasks/{task_id}/trace-events",
+                        json=first_concurrent_payload,
+                        headers=agent_headers,
+                    ),
+                    second_trace_client.post(
+                        f"/api/internal/tasks/{second_trace_task_id}/trace-events",
+                        json=second_concurrent_payload,
+                        headers=agent_headers,
+                    ),
+                )
+            assert sorted(response.status_code for response in concurrent_trace_responses) == [
+                201,
+                409,
+            ]
+            conflict_response = next(
+                response
+                for response in concurrent_trace_responses
+                if response.status_code == 409
+            )
+            assert conflict_response.json()["error"]["code"] == "STATE_CONFLICT"
 
             wrong_conclusion_trace = await client.post(
                 f"/api/internal/tasks/{task_id}/conclusions",
