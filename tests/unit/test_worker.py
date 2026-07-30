@@ -12,8 +12,10 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from backend.app.schemas.agent_runtime import InternalAgentHandoff
 from backend.app.schemas.common import ErrorCode
 from backend.app.schemas.task import (
+    AnalysisContract,
     AssetKind,
     InternalAssetRead,
     InternalTaskClaim,
@@ -67,6 +69,7 @@ class FakeClaimingStore(LocalJobStore):
         self.heartbeat_failure = heartbeat_failure
         self.claim_requests: list[InternalTaskClaimRequest] = []
         self.heartbeat_calls = 0
+        self.handoffs: list[tuple[object, InternalAgentHandoff]] = []
 
     def claim(self, request: InternalTaskClaimRequest) -> InternalTaskClaim | None:
         self.claim_requests.append(request)
@@ -77,6 +80,13 @@ class FakeClaimingStore(LocalJobStore):
         if self.heartbeat_failure is not None:
             raise self.heartbeat_failure
 
+    def handoff_agent(
+        self,
+        task_id: object,
+        handoff: InternalAgentHandoff,
+    ) -> None:
+        self.handoffs.append((task_id, handoff))
+
 
 def _claim() -> InternalTaskClaim:
     return InternalTaskClaim(
@@ -86,6 +96,12 @@ def _claim() -> InternalTaskClaim:
         stage=TaskStage.TRANSCRIBE,
         privacy_mode=PrivacyMode.LOCAL,
         assets=[],
+        analysis_contract=AnalysisContract(
+            goal="Review the lesson",
+            focus_areas=["content structure"],
+            evidence_requirements=["timestamped transcript"],
+            confirmed=True,
+        ),
         lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
         trace_id="trace-claim",
     )
@@ -629,6 +645,26 @@ def test_http_job_store_claim_parses_frozen_contract() -> None:
     assert actual == expected
 
 
+def test_http_job_store_treats_json_null_as_empty_queue() -> None:
+    store = HttpJobStore(
+        "https://backend.example",
+        "token",
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=None)),
+    )
+    try:
+        assert (
+            store.claim(
+                InternalTaskClaimRequest(
+                    worker_id="worker-test",
+                    stages=[TaskStage.UPLOADED],
+                )
+            )
+            is None
+        )
+    finally:
+        store.close()
+
+
 def _download_asset(
     *,
     size_bytes: int,
@@ -810,6 +846,7 @@ def test_download_failure_is_persisted_as_retryable_task_failure() -> None:
                 store,
                 FakeAsr(AsrResult(language="zh", segments=())),
                 None,
+                "worker-test",
             )
     finally:
         store.close()
@@ -871,6 +908,10 @@ def test_http_job_store_heartbeat_state_and_batch_transcript_paths() -> None:
             ),
         )
         store.save_transcript(task_id, transcript)
+        store.handoff_agent(
+            task_id,
+            InternalAgentHandoff(worker_id="worker-test"),
+        )
     finally:
         store.close()
 
@@ -878,9 +919,11 @@ def test_http_job_store_heartbeat_state_and_batch_transcript_paths() -> None:
         ("POST", f"/api/internal/tasks/{task_id}/heartbeat"),
         ("PATCH", f"/api/internal/tasks/{task_id}/state"),
         ("POST", f"/api/internal/tasks/{task_id}/transcript"),
+        ("POST", f"/api/internal/tasks/{task_id}/handoff-agent"),
     ]
     assert seen[0][2] == {"worker_id": "worker-test", "lease_seconds": 60}
     assert seen[2][2] == transcript.model_dump(mode="json")
+    assert seen[3][2] == {"worker_id": "worker-test"}
 
 
 @pytest.mark.parametrize(

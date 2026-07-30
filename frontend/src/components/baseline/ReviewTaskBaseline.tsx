@@ -69,6 +69,7 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
   const [reviewNote, setReviewNote] = useState("");
   const [realTask, setRealTask] = useState<TaskRead | null>(null);
   const realClassroomId = UUID_PATTERN.test(classroomId) ? classroomId : "";
+  const bilingualRequired = /双语|翻译|英文原文/.test(messages[1] ?? "");
 
   useEffect(() => setClassroom(sessionStorage.getItem("classroomName") || "演示课堂 · 尚未保存到后端"), []);
   useEffect(() => {
@@ -103,18 +104,22 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
       <form className="composer" onSubmit={send}><label htmlFor="goal-input" className="sr-only">复盘目标</label><textarea id="goal-input" rows={3} value={goal} disabled={conversationStep === 2} onChange={(event) => setGoal(event.target.value)} placeholder={conversationStep === 0 ? "例如：请分析内容组织、讲解清晰度和提问后的等待时间……" : conversationStep === 1 ? "例如：分析整节课堂，每条判断保留时间戳和中英原文……" : "分析契约已形成；如需修改，请重新开始本地演示。"} /><div className="composer-footer"><button className="text-button" type="button" disabled={conversationStep === 2} onClick={() => setGoal(conversationStep === 0 ? "请分析整节课堂的内容组织、讲解清晰度和提问后的等待时间，并为每条判断附上原文证据。" : "分析整节课堂；每条判断必须保留时间戳、课堂原文和中文翻译。")}>使用示例回答</button><button className="button primary compact" type="submit" disabled={conversationStep === 2}>{conversationStep === 0 ? "发送目标" : "回答追问"}</button></div></form>
     </section>
     <aside className="contract-panel" data-reveal aria-labelledby="contract-title"><div className="panel-heading"><div><span className="contract-icon">✓</span><span><strong id="contract-title">分析契约</strong><small>教师确认后才开始处理</small></span></div><span className={`status-badge ${confirmed ? "ready" : "pending"}`}>{confirmed ? "已确认" : contract ? "待确认" : "待补充"}</span></div>
-      {!contract ? <div className="contract-empty"><span aria-hidden>✦</span><strong>尚未形成契约</strong><p>Agent 完成必要追问后，这里将展示可修改的分析范围与证据条件。</p></div> : <form className="contract-form"><label>分析范围<select><option>整节课堂</option><option>指定时间范围</option></select></label><fieldset><legend>关注维度</legend><label><input type="checkbox" defaultChecked /> 内容组织</label><label><input type="checkbox" defaultChecked /> 讲解清晰度</label><label><input type="checkbox" defaultChecked /> 提问等待时间</label></fieldset><div className="contract-rule"><span>证据条件</span><strong>每条判断必须连接视频时间或课堂原文</strong></div><div className="contract-rule"><span>双语要求</span><strong>保留英文原文并提供逐句中文翻译</strong></div><label className="permission-check compact-check"><input type="checkbox" checked={confirmed} onChange={(event) => { setConfirmed(event.target.checked); if (!event.target.checked) setUploadOpen(false); }} /><span>我已核对范围、证据条件和隐私边界</span></label><button className="button primary wide" type="button" disabled={!confirmed} onClick={() => { setUploadOpen(true); setPreview("empty"); requestAnimationFrame(() => document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>确认契约，进入资料上传</button></form>}
+      {!contract ? <div className="contract-empty"><span aria-hidden>✦</span><strong>尚未形成契约</strong><p>Agent 完成必要追问后，这里将展示可修改的分析范围与证据条件。</p></div> : <form className="contract-form"><label>分析范围<select><option>整节课堂</option><option>指定时间范围</option></select></label><fieldset><legend>关注维度</legend><label><input type="checkbox" defaultChecked /> 内容组织</label><label><input type="checkbox" defaultChecked /> 讲解清晰度</label><label><input type="checkbox" defaultChecked /> 提问等待时间</label></fieldset><div className="contract-rule"><span>证据条件</span><strong>每条判断必须连接视频时间或课堂原文</strong></div><div className="contract-rule"><span>双语要求</span><strong>{bilingualRequired ? "保留英文原文并提供逐句中文翻译" : "本次不要求逐句翻译"}</strong></div><label className="permission-check compact-check"><input type="checkbox" checked={confirmed} onChange={(event) => { setConfirmed(event.target.checked); if (!event.target.checked) setUploadOpen(false); }} /><span>我已核对范围、证据条件和隐私边界</span></label><button className="button primary wide" type="button" disabled={!confirmed} onClick={() => { setUploadOpen(true); setPreview("empty"); requestAnimationFrame(() => document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>确认契约，进入资料上传</button></form>}
     </aside></div>
     {uploadOpen && (
       <UploadPanel
-        classroomId={realClassroomId}
-        analysisContract={{
-          scope: "full_class",
-          focus: ["content_structure", "clarity", "wait_time"],
-          bilingual: true,
-          teacher_goal: messages[0] ?? "",
-          teacher_constraints: messages[1] ?? "",
-        }}
+          classroomId={realClassroomId}
+          analysisContract={{
+            goal: messages[0] ?? "",
+            scope: "full_lesson",
+            focus_areas: ["内容组织", "讲解清晰度", "提问等待时间"],
+            judgment_criteria: ["区分事实、判断与建议"],
+            evidence_requirements: ["每条结论必须连接时间戳或课堂原文"],
+            bilingual_required: bilingualRequired,
+            privacy_mode: "local",
+            course_domain: "general",
+            confirmed: true,
+          }}
         onVideoReadinessChange={setHasVideo}
         onTaskCreated={(task) => {
           setRealTask(task);

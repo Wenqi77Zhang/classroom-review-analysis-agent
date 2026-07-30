@@ -16,17 +16,36 @@ Agent 在教师已确认的分析契约和当前任务可定位证据范围内�
 - `skills/common.py`：通用课堂结构、提问、等待、例证和总结规则。
 - `tools/retrieve_evidence.py`：只在当前 `task_id + owner_id` 范围内检索，模型引用未知证据 ID 时拒绝输出。
 - `orchestrator.py`：执行已确认的时间范围和双语条件；调用前筛选证据，落地前复核引用范围；一次规划、选择 Skill、调用 Provider、校验模型 JSON并生成后端写入批次。不可信课堂文本以 Base64 数据区发送，不能充当 Prompt 指令。
+- `job_store.py`：使用独立 `AGENT_SERVICE_TOKEN` 领取当前任务证据、续租、写入结论和状态；
+  错误不记录响应正文、服务令牌或课堂原文。
+- `runner.py`：单次领取 `analyze` 任务，维持 Agent 租约，调用协调器并批量写入
+  `pending` 结论；失败只写稳定错误码与教师可读脱敏提示，不写半成品结论。
 - `reporting/composer.py`：确定性过滤复核状态；只组合 `accepted/modified`，修改项使用 `reviewed_content`。
 - `observability/tracing.py`：记录规划、模型、校验和错误事件；错误只保留稳定类型、错误码和阶段，不保存可能包含课堂原文或输入值的异常消息。
 
 ## 尚未完成与协作依赖
 
 - 学科 Skill 与证据门禁已有确定性实现和单元测试，但尚未用真实 Worker 证据索引完成端到端验证。
-- 成员 3 的 Agent 结论写入路由已经实现；当前缺少持续领取 `analyze` 任务、调用
-  协调器并回写结论/状态的 Agent 运行器，因此不能把 API 可写描述成 Agent 已自动运行。
+- Worker → Agent 的显式交棒、Agent 领取/心跳、一次运行与结论/状态回写已实现并有离线
+  自动化测试；尚未用真实 PostgreSQL、真实 Worker 逐字稿和真实模型完成端到端验收，
+  因此不能描述成生产链路已经通过。
 - 报告后端路由仍未实现，Trace 也尚未形成可由后端审计找回的持久化链路。
-- Worker 尚未生成真实证据索引，当前没有真实视频端到端运行证据。
-- Provider 已实现调用协议，但真实模型端点、模型名和密钥仍需通过后端配置注入；密钥不得来自前端或写入 Trace。
+- 当前 Agent 领取包只包含真实逐字稿片段证据；课件页、画面证据和独立证据索引尚未串联。
+- Provider 已实现调用协议，但真实模型端点与模型名仍需通过环境配置注入；云端密钥不得
+  来自前端或写入 Trace，本地模式只允许 loopback 地址。
+
+## 单次运行
+
+后端与模型服务启动且 `.env` 已配置后，在仓库根目录执行：
+
+```powershell
+.\.venv\Scripts\python.exe -m agent.runner
+```
+
+必要配置为 `BACKEND_URL`、`AGENT_SERVICE_TOKEN`，以及与任务隐私模式对应的一组模型
+配置。私有课堂使用 `LOCAL_MODEL_CHAT_COMPLETIONS_URL` 与 `LOCAL_MODEL_NAME`；公开课堂
+明确选择云模式时才读取 `CLOUD_MODEL_CHAT_COMPLETIONS_URL`、`CLOUD_MODEL_NAME` 和
+`CLOUD_MODEL_API_KEY`。命令行不接收令牌或密钥，避免进入 Shell 历史和进程列表。
 
 ## 测试
 
@@ -41,4 +60,6 @@ Agent 在教师已确认的分析契约和当前任务可定位证据范围内�
 
 ## 完成定义
 
-真实完成还要求：成员 3、4 接口接通；至少一个真实模型按隐私模式运行；无证据结论被拒；新结论保持 `pending`；教师复核后报告过滤测试通过；Trace 可由后端审计找回；相关自动化与真实 E2E 均留下脱敏证据。
+真实完成还要求：至少一个真实模型按隐私模式运行；无证据结论被拒；新结论保持
+`pending`；教师复核后报告过滤测试通过；Trace 可由后端审计找回；相关自动化与真实
+E2E 均留下脱敏证据。

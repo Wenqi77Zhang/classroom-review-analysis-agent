@@ -27,8 +27,20 @@ Perceive–Reason–Action–Learn 作为产品级框架；Learn 只记录教师
   确定性实现和自动化测试，但尚未用真实 Worker 证据索引完成端到端验收。
 - 报告组合不调用模型，只按复核状态确定性过滤；`modified` 使用教师改写内容。
 - Provider 协议和离线 Fake Provider 测试已完成；后端结论写入 API 已合并。
-  持续领取 `analyze` 任务的 Agent 运行器、真实模型配置、Worker 证据、Trace/报告
-  持久化和 E2E 仍未完成。
+  Worker → Agent 原子交棒、Agent 领取/心跳、一次运行及结论/状态回写已实现并通过离线
+  测试；真实模型配置、真实 PostgreSQL 集成复验、课件/画面证据、Trace/报告持久化和
+  E2E 仍未完成。
+
+## Worker → Agent 接力
+
+Worker 完成转写后不直接调用模型，而是向后端提交一次受租约约束的 handoff。后端确认
+逐字稿已持久化后，原子地将任务从 `transcribe / running` 切到 `analyze / queued`，
+清除 Worker 租约。Agent 使用独立服务令牌领取，只得到当前任务和账号范围内的分析契约
+及证据。Agent 在模型调用期间续租，运行中状态不释放租约；成功或失败才进入终态。
+
+这一设计避免用一个大进程混合媒体处理与教学推理，也避免 Worker 和 Agent 同时认为自己
+拥有任务。它是确定性编排，不需要用 ReAct 来决定基础设施状态迁移；ReAct 只适合后续
+受限的分析工具选择。
 
 ## MCP
 

@@ -125,7 +125,17 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 f"/api/courses/{course.json()['id']}/classrooms",
                 json={
                     "title": "Processing Classroom",
-                    "analysis_contract": {"goal": "Review the lesson"},
+                    "analysis_contract": {
+                        "goal": "Review the lesson",
+                        "scope": "full_lesson",
+                        "focus_areas": ["content structure"],
+                        "judgment_criteria": [],
+                        "evidence_requirements": ["timestamped transcript"],
+                        "bilingual_required": False,
+                        "privacy_mode": "local",
+                        "course_domain": "general",
+                        "confirmed": True,
+                    },
                 },
                 headers=first_headers,
             )
@@ -289,6 +299,13 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert transcript.status_code == 201
             segment_id = transcript.json()["segments"][0]["id"]
 
+            transcribed = await client.patch(
+                f"/api/internal/tasks/{task_id}/state",
+                json={"stage": "transcribe", "status": "running", "progress": 1.0},
+                headers=worker_headers,
+            )
+            assert transcribed.status_code == 200
+
             forbidden_agent_stage = await client.patch(
                 f"/api/internal/tasks/{task_id}/state",
                 json={"stage": "transcribe", "status": "running", "progress": 0.6},
@@ -296,12 +313,68 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert forbidden_agent_stage.status_code == 403
 
+            forbidden_handoff = await client.post(
+                f"/api/internal/tasks/{task_id}/handoff-agent",
+                json={"worker_id": "worker-2"},
+                headers=worker_headers,
+            )
+            assert forbidden_handoff.status_code == 409
+
+            handed_off = await client.post(
+                f"/api/internal/tasks/{task_id}/handoff-agent",
+                json={"worker_id": "worker-1"},
+                headers=worker_headers,
+            )
+            assert handed_off.status_code == 200
+            assert handed_off.json()["stage"] == "analyze"
+            assert handed_off.json()["status"] == "queued"
+            assert handed_off.json()["progress"] == 0
+
+            forbidden_agent_claim = await client.post(
+                "/api/internal/agent/tasks/claim",
+                json={"agent_id": "agent-1"},
+                headers=worker_headers,
+            )
+            assert forbidden_agent_claim.status_code == 403
+
+            agent_claim = await client.post(
+                "/api/internal/agent/tasks/claim",
+                json={"agent_id": "agent-1"},
+                headers=agent_headers,
+            )
+            assert agent_claim.status_code == 200
+            assert agent_claim.json()["task_id"] == task_id
+            assert agent_claim.json()["analysis_contract"]["confirmed"] is True
+            assert agent_claim.json()["evidence"][0]["id"] == segment_id
+            assert agent_claim.json()["evidence"][0]["reference"]["segment_id"] == segment_id
+            assert agent_claim.json()["evidence"][0]["text"] == "请说明检索的第一步。"
+
+            wrong_agent_heartbeat = await client.post(
+                f"/api/internal/agent/tasks/{task_id}/heartbeat",
+                json={"agent_id": "agent-2"},
+                headers=agent_headers,
+            )
+            assert wrong_agent_heartbeat.status_code == 409
+            agent_heartbeat = await client.post(
+                f"/api/internal/agent/tasks/{task_id}/heartbeat",
+                json={"agent_id": "agent-1"},
+                headers=agent_headers,
+            )
+            assert agent_heartbeat.status_code == 200
+
             analyzing = await client.patch(
                 f"/api/internal/tasks/{task_id}/state",
                 json={"stage": "analyze", "status": "running", "progress": 0.2},
                 headers=agent_headers,
             )
             assert analyzing.status_code == 200
+
+            heartbeat_during_analysis = await client.post(
+                f"/api/internal/agent/tasks/{task_id}/heartbeat",
+                json={"agent_id": "agent-1"},
+                headers=agent_headers,
+            )
+            assert heartbeat_during_analysis.status_code == 200
 
             ungrounded = await client.post(
                 f"/api/internal/tasks/{task_id}/conclusions",

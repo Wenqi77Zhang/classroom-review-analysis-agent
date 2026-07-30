@@ -26,7 +26,7 @@
 
 ## 当前合并基线说明
 
-截至 `main@d27c592`，PR #14 已补充本地真实视频 Worker 测试，PR #18、#19
+截至 `main@f2349d6`，PR #14 已补充本地真实视频 Worker 测试，PR #18、#19
 已补充后端处理接口、账号隔离和前端业务 API 测试，PR #20 又覆盖 B2 下载、大小/ETag
 校验、失败清理与真实逐字稿写回。合并最新 `main` 前的最终回归为 Ruff 通过、
 169 项通过、10 项按外部环境条件跳过；PR #20 的三项 GitHub CI 全部成功。
@@ -34,3 +34,18 @@
 前端当前基线已执行 `npm test`、`npm run typecheck` 和 `npm run build`。这些结果
 证明前端门禁；PR #20 另有单输入 Worker/B2 真实链路证据，但仍不证明 Agent、
 教师复核和报告的完整 E2E。
+
+## Agent 运行时集成分支验证
+
+`member-1/agent-runtime-integration` 已增加 Worker→Agent 交接、Agent HTTP
+领取/续租、编排、结论写回、完成状态和安全失败测试。合并最新 `main` 前执行：
+
+- Ruff 全仓通过；
+- Python 全仓 `174 passed, 10 skipped`；
+- 前端 `npm test`、`npm run typecheck`、`npm run build` 通过；
+- `verify.ps1`、路径级敏感文件检查和 `git diff --check` 通过。
+
+10 项跳过包含需要独立 `TEST_DATABASE_URL` 或真实外部媒体条件的用例。Python 测试
+通过主仓库已安装的 `.venv` 执行，并将 `PYTHONPATH` 指向当前工作树；当前工作树自己的
+`.venv` 因外部 PyPI 域名解析失败未完成依赖安装。因此这些结果是源码回归证据，
+不是独立环境安装、真实 PostgreSQL、真实模型或浏览器完整 E2E 证据。
