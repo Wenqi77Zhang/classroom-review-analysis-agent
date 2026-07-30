@@ -9,7 +9,8 @@
    完整 Agent Schema 使用明确的合成时间戳证据返回 3 条结构化结论，模型、Prompt、
    Skill、Trace 和证据范围校验通过。
 2. `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\verify.ps1`：
-   Python `183 passed, 10 skipped`；Ruff、前端契约测试、TypeScript 和 Next.js 生产构建通过。
+   初次结果为 Python `183 passed, 10 skipped`；恢复复核/报告专用回归并修复 CI 后复跑为
+   `184 passed, 11 skipped`。Ruff、前端契约测试、TypeScript 和 Next.js 生产构建通过。
 3. `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-readme.ps1`：
    README 命令/模型契约及完整发布门禁通过。
 4. `start.ps1` / `start.sh`：四服务静态覆盖、PowerShell 语法、服务令牌不进入命令行、

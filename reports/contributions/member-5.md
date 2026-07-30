@@ -74,9 +74,10 @@
 - 将 `verify.ps1` / `verify.sh` 从阶段 0 棐架检查升级为 Python 全仓测试、Ruff、前端
   契约测试、TypeScript、生产构建、README 契约和敏感文件路径检查；无 `.git` 的源码
   快照使用排除虚拟环境、依赖、缓存、日志和临时目录的保守回退扫描。
-- 本机 `verify.ps1` 实际结果为 `183 passed, 10 skipped`，Ruff、前端测试、类型检查和
-  Next.js 生产构建全部通过；`scripts/verify-readme.ps1` 再次执行同一发布门禁并通过。
-  10 项跳过来自未配置 PostgreSQL 等外部环境条件，不能算数据库验收通过。
+- 本机 `verify.ps1` 初次结果为 `183 passed, 10 skipped`；恢复复核/报告专用回归并修复
+  CI 后复跑为 `184 passed, 11 skipped`。Ruff、前端测试、类型检查和 Next.js 生产构建
+  全部通过；`scripts/verify-readme.ps1` 再次执行同一发布门禁并通过。
+  11 项跳过来自未配置 PostgreSQL 等外部环境条件，不能算数据库验收通过。
 - 复核成员 3 新增接口后确认：教师复核/历史、报告保存读取以及仅收录
   `accepted/modified` 的数据库集成测试代码已经存在；当前机器没有 PostgreSQL/Docker，
   前端证据工作台也仍使用本地 Mock 状态和 `/reports/demo`，故只标记“局部通过”。

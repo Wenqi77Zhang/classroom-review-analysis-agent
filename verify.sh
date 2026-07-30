@@ -45,6 +45,11 @@ if ! grep -Eq '^requires-python = ">=3\.13,<3\.14"$' pyproject.toml; then
   exit 1
 fi
 
+if [[ "${1:-}" == "--scaffold-only" ]]; then
+  echo "Stage-0 scaffold verification passed."
+  exit 0
+fi
+
 python="$PROJECT_ROOT/.venv/bin/python"
 [[ -x "$python" ]] || { echo "Missing .venv; run ./setup.sh before verification." >&2; exit 1; }
 

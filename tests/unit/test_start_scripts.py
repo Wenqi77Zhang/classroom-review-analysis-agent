@@ -36,3 +36,12 @@ def test_service_loop_reads_tokens_only_from_environment_and_forwards_stop() -> 
     assert "agent.runner" in script
     assert "signal.SIGTERM" in script
     assert "current.terminate()" in script
+
+
+def test_scaffold_ci_does_not_require_a_prebuilt_virtual_environment() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    verifier = (ROOT / "verify.sh").read_text(encoding="utf-8")
+
+    assert "bash verify.sh --scaffold-only" in workflow
+    assert '"${1:-}" == "--scaffold-only"' in verifier
+    assert verifier.index('"${1:-}" == "--scaffold-only"') < verifier.index("Missing .venv")

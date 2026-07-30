@@ -8,12 +8,13 @@ from collections.abc import AsyncIterator
 
 import httpx
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app.config import Settings
 from backend.app.dependencies import get_db
 from backend.app.main import create_app
-from backend.app.models import User
+from backend.app.models import AuditEvent, User
 from backend.app.services.authentication import hash_password
 from backend.app.services.storage import ObjectMetadata
 
@@ -555,6 +556,9 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert retried.json()["retry_count"] == 1
     finally:
         async with factory.begin() as session:
+            await session.execute(
+                delete(AuditEvent).where(AuditEvent.owner_id.in_([first_id, second_id]))
+            )
             for user_id in (first_id, second_id):
                 user = await session.get(User, user_id)
                 if user is not None:
