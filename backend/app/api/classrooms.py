@@ -22,6 +22,7 @@ from backend.app.schemas.identity import (
     CourseCreate,
     CourseRead,
 )
+from backend.app.services.audit import record_audit_event
 from backend.app.services.permissions import get_owned_or_404
 
 router = APIRouter(tags=["classrooms"])
@@ -32,6 +33,14 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 @router.post("/courses", response_model=CourseRead, status_code=status.HTTP_201_CREATED)
 async def post_course(body: CourseCreate, session: Db, user: CurrentUser) -> CourseRead:
     course = await create_course(session, user.id, name=body.name, description=body.description)
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="course.created",
+        resource_type="course",
+        resource_id=course.id,
+    )
     return CourseRead.model_validate(course)
 
 
@@ -56,6 +65,15 @@ async def post_classroom(
         description=body.description,
         analysis_contract=body.analysis_contract,
     )
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="classroom.created",
+        resource_type="classroom",
+        resource_id=classroom.id,
+        details={"course_id": str(course_id)},
+    )
     return ClassroomRead.model_validate(classroom)
 
 
@@ -78,11 +96,21 @@ async def patch_classroom(
     classroom_id: UUID, body: ClassroomUpdate, session: Db, user: CurrentUser
 ) -> ClassroomRead:
     classroom = await get_owned_or_404(session, Classroom, classroom_id, user.id)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    for field, value in changes.items():
         setattr(classroom, field, value)
     await session.flush()
     # updated_at is database-generated on UPDATE. Load it before synchronous response serialization.
     await session.refresh(classroom)
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="classroom.updated",
+        resource_type="classroom",
+        resource_id=classroom.id,
+        details={"updated_fields": sorted(changes)},
+    )
     return ClassroomRead.model_validate(classroom)
 
 

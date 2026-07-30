@@ -27,6 +27,7 @@ from backend.app.schemas.task import (
     PresignResponse,
     UploadStatus,
 )
+from backend.app.services.audit import record_audit_event
 from backend.app.services.permissions import get_owned_or_404
 from backend.app.services.storage import ObjectStorage, get_object_storage
 
@@ -85,6 +86,15 @@ async def post_presign(
         size_bytes=body.size_bytes,
         object_key=object_key,
     )
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="asset.upload_requested",
+        resource_type="asset",
+        resource_id=asset_id,
+        details={"kind": body.kind.value, "size_bytes": body.size_bytes},
+    )
     upload_url = await storage.presign_upload(object_key, body.content_type.strip().lower())
     expires_at = datetime.now(UTC) + timedelta(
         seconds=settings.object_storage_presigned_url_ttl_seconds
@@ -127,6 +137,15 @@ async def post_complete(
 
     if problems:
         asset.upload_status = UploadStatus.FAILED
+        await record_audit_event(
+            session,
+            owner_id=user.id,
+            actor_user_id=user.id,
+            action="asset.upload_verification_failed",
+            resource_type="asset",
+            resource_id=asset.id,
+            details={"failed_check_count": len(problems)},
+        )
         await session.flush()
         raise ValidationFailedError(
             "上传文件核验失败。",
@@ -140,6 +159,14 @@ async def post_complete(
     asset.checksum = metadata.checksum
     await session.flush()
     await session.refresh(asset)
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="asset.upload_verified",
+        resource_type="asset",
+        resource_id=asset.id,
+    )
     return AssetRead.model_validate(asset)
 
 
@@ -173,5 +200,14 @@ async def delete_asset(
     if await asset_task_count(session, asset.id, user.id):
         raise StateConflictError("文件已关联处理任务，不能删除。")
     await storage.delete(asset.object_key)
+    asset_id = asset.id
     await session.delete(asset)
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="asset.deleted",
+        resource_type="asset",
+        resource_id=asset_id,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
