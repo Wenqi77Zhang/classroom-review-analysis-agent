@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -20,6 +21,19 @@ class AsrResult:
     segments: tuple[AsrSegment, ...]
 
 
+class DetectedLanguage(StrEnum):
+    ZH = "zh"
+    EN = "en"
+    MIXED = "en-zh"
+    OTHER = "other"
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationBatch:
+    translations: tuple[str, ...]
+    model_name: str
+
+
 @dataclass(frozen=True, slots=True)
 class PipelineTask:
     input_path: Path
@@ -31,4 +45,5 @@ class PipelineTask:
 class PipelineResult:
     task_id: UUID
     transcript_segments: int
+    translated_segments: int
     duration_ms: int

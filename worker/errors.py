@@ -21,6 +21,10 @@ class WorkerErrorCode(StrEnum):
     CLEANUP_FAILED = "CLEANUP_FAILED"
     JOB_STORE_FAILED = "JOB_STORE_FAILED"
     JOB_STORE_AUTH_FAILED = "JOB_STORE_AUTH_FAILED"
+    TRANSLATION_UNAVAILABLE = "TRANSLATION_UNAVAILABLE"
+    TRANSLATION_TIMEOUT = "TRANSLATION_TIMEOUT"
+    TRANSLATION_SCHEMA_INVALID = "TRANSLATION_SCHEMA_INVALID"
+    UNSUPPORTED_LANGUAGE = "UNSUPPORTED_LANGUAGE"
     STOPPED = "STOPPED"
 
 
@@ -38,6 +42,10 @@ _PUBLIC_MESSAGES: dict[WorkerErrorCode, str] = {
     WorkerErrorCode.CLEANUP_FAILED: "临时媒体清理失败。",
     WorkerErrorCode.JOB_STORE_FAILED: "任务状态服务当前不可用。",
     WorkerErrorCode.JOB_STORE_AUTH_FAILED: "Worker 服务凭据无效或无权访问内部接口。",
+    WorkerErrorCode.TRANSLATION_UNAVAILABLE: "逐句翻译服务当前不可用。",
+    WorkerErrorCode.TRANSLATION_TIMEOUT: "逐句翻译处理超时。",
+    WorkerErrorCode.TRANSLATION_SCHEMA_INVALID: "逐句译文未通过对齐校验。",
+    WorkerErrorCode.UNSUPPORTED_LANGUAGE: "逐字稿包含当前翻译阶段不支持的语言片段。",
     WorkerErrorCode.STOPPED: "任务租约已停止，Worker 已放弃继续处理。",
 }
 
@@ -69,6 +77,8 @@ class WorkerError(RuntimeError):
         if self.code in {
             WorkerErrorCode.INVALID_TIMESTAMP,
             WorkerErrorCode.TRANSCRIPT_SCHEMA_INVALID,
+            WorkerErrorCode.TRANSLATION_SCHEMA_INVALID,
+            WorkerErrorCode.UNSUPPORTED_LANGUAGE,
         }:
             return ErrorCode.VALIDATION_ERROR
         if self.code in {
@@ -78,6 +88,8 @@ class WorkerError(RuntimeError):
             WorkerErrorCode.ASR_TIMEOUT,
             WorkerErrorCode.UPSTREAM_UNAVAILABLE,
             WorkerErrorCode.JOB_STORE_FAILED,
+            WorkerErrorCode.TRANSLATION_UNAVAILABLE,
+            WorkerErrorCode.TRANSLATION_TIMEOUT,
         }:
             return ErrorCode.UPSTREAM_UNAVAILABLE
         return ErrorCode.INTERNAL_ERROR

@@ -9,11 +9,13 @@ from threading import Event
 from backend.app.schemas.common import ErrorCode
 from backend.app.schemas.task import InternalTaskStateUpdate, TaskStage, TaskStatus
 from worker.adapters.asr import AsrAdapter
+from worker.adapters.translation import TranslationAdapter
 from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_message
 from worker.job_store import JobStore
 from worker.stages.extract_audio import extract_audio
 from worker.stages.transcribe import transcribe_audio
+from worker.stages.translate import translate_transcript
 from worker.types import PipelineResult, PipelineTask
 
 
@@ -51,6 +53,7 @@ def run_pipeline(
     store: JobStore,
     *,
     stop_event: Event | None = None,
+    translation_adapter: TranslationAdapter | None = None,
 ) -> PipelineResult:
     work_dir = Path(tempfile.mkdtemp(prefix=f"classroom-worker-{task.task_id}-"))
     audio_path = work_dir / "audio.wav"
@@ -87,9 +90,36 @@ def run_pipeline(
                 message="逐字稿已生成，等待下一阶段",
             ),
         )
+
+        current_stage = TaskStage.TRANSLATE
+        store.update_state(
+            task.task_id,
+            _state(current_stage, TaskStatus.RUNNING, 0.0, task.trace_id, message="正在逐句翻译"),
+        )
+        translated = translate_transcript(
+            transcript,
+            translation_adapter,
+            stop_event=stop_event,
+        )
+        _raise_if_stopped(stop_event)
+        store.save_transcript(task.task_id, translated)
+        store.update_state(
+            task.task_id,
+            _state(
+                current_stage,
+                TaskStatus.RUNNING,
+                1.0,
+                task.trace_id,
+                message="逐句翻译完成，等待下一阶段",
+            ),
+        )
         return PipelineResult(
             task_id=task.task_id,
             transcript_segments=len(transcript.segments),
+            translated_segments=sum(
+                bool((segment.translation or "").strip())
+                for segment in translated.segments
+            ),
             duration_ms=transcript.duration_ms,
         )
     except WorkerError as exc:

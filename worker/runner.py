@@ -25,6 +25,7 @@ from backend.app.schemas.task import (
     TaskStatus,
 )
 from worker.adapters.asr import AsrAdapter, LocalWhisperAdapter
+from worker.adapters.translation import TranslationAdapter
 from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_message
 from worker.job_store import ClaimingJobStore, HttpJobStore, LocalJobStore
@@ -195,6 +196,7 @@ def _process_claimed_media(
     store: HttpJobStore,
     adapter: AsrAdapter,
     object_root: Path | None,
+    translation_adapter: TranslationAdapter | None = None,
 ) -> PipelineResult:
     pipeline_started = False
     pipeline_completed = False
@@ -210,6 +212,7 @@ def _process_claimed_media(
                 adapter,
                 store,
                 stop_event=stop,
+                translation_adapter=translation_adapter,
             )
             pipeline_completed = True
             return result

@@ -46,7 +46,7 @@ from worker.runner import (
 )
 from worker.stages.extract_audio import extract_audio
 from worker.stages.transcribe import transcribe_audio
-from worker.types import AsrResult, AsrSegment, PipelineTask
+from worker.types import AsrResult, AsrSegment, PipelineTask, TranslationBatch
 
 
 class FakeAsr:
@@ -79,6 +79,38 @@ class FakeClaimingStore(LocalJobStore):
         self.heartbeat_calls += 1
         if self.heartbeat_failure is not None:
             raise self.heartbeat_failure
+
+
+class RecordingTranscriptStore(LocalJobStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.transcript_writes: list[InternalTranscriptWrite] = []
+
+    def save_transcript(
+        self,
+        task_id,
+        transcript: InternalTranscriptWrite,
+    ) -> None:
+        self.transcript_writes.append(transcript.model_copy(deep=True))
+        super().save_transcript(task_id, transcript)
+
+
+class FakePipelineTranslation:
+    model_name = "fake-translation-for-tests"
+
+    def translate_batch(
+        self,
+        texts: tuple[str, ...],
+        *,
+        source_language: str,
+        target_language: str,
+    ) -> TranslationBatch:
+        assert source_language == "en"
+        assert target_language == "zh"
+        return TranslationBatch(
+            translations=tuple(f"[测试译文]{text}" for text in texts),
+            model_name=self.model_name,
+        )
 
 
 def _claim() -> InternalTaskClaim:
@@ -117,6 +149,10 @@ def test_worker_error_codes_match_media_design() -> None:
         "CLEANUP_FAILED",
         "JOB_STORE_FAILED",
         "JOB_STORE_AUTH_FAILED",
+        "TRANSLATION_UNAVAILABLE",
+        "TRANSLATION_TIMEOUT",
+        "TRANSLATION_SCHEMA_INVALID",
+        "UNSUPPORTED_LANGUAGE",
         "STOPPED",
     }
     assert {code.value for code in WorkerErrorCode} == expected
@@ -401,15 +437,96 @@ def test_pipeline_persists_transcript_and_real_states(tmp_path: Path) -> None:
     result = run_pipeline(task, adapter, store)
 
     assert result.transcript_segments == 1
+    assert result.translated_segments == 0
     assert store.transcripts[task.task_id].segments[0].text == "真实输入结果"
     final_event = store.events[task.task_id][-1]
     assert final_event.status is TaskStatus.RUNNING
-    assert final_event.stage is TaskStage.TRANSCRIBE
+    assert final_event.stage is TaskStage.TRANSLATE
     assert final_event.progress == 1.0
     assert all(
         event.status is not TaskStatus.SUCCEEDED
         for event in store.events[task.task_id]
     )
+
+
+def test_pipeline_persists_original_then_aligned_translation(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "class.wav"
+    _silent_wav(source)
+    store = RecordingTranscriptStore()
+    task = PipelineTask(input_path=source)
+
+    result = run_pipeline(
+        task,
+        FakeAsr(
+            AsrResult(
+                language="en",
+                segments=(AsrSegment(0.0, 0.8, "Explain AI."),),
+            )
+        ),
+        store,
+        translation_adapter=FakePipelineTranslation(),
+    )
+
+    assert [event.stage for event in store.events[task.task_id]][-2:] == [
+        TaskStage.TRANSLATE,
+        TaskStage.TRANSLATE,
+    ]
+    assert len(store.transcript_writes) == 2
+    assert store.transcript_writes[0].segments[0].translation is None
+    assert store.transcript_writes[1].segments[0].text == "Explain AI."
+    assert (
+        store.transcript_writes[1].segments[0].translation
+        == "[测试译文]Explain AI."
+    )
+    assert result.translated_segments == 1
+
+
+def test_pipeline_stop_during_translation_keeps_only_original_write(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "class.wav"
+    _silent_wav(source)
+    store = RecordingTranscriptStore()
+    task = PipelineTask(input_path=source)
+    stop = threading.Event()
+
+    class StopAfterTranslation(FakePipelineTranslation):
+        def translate_batch(
+            self,
+            texts: tuple[str, ...],
+            *,
+            source_language: str,
+            target_language: str,
+        ) -> TranslationBatch:
+            result = super().translate_batch(
+                texts,
+                source_language=source_language,
+                target_language=target_language,
+            )
+            stop.set()
+            return result
+
+    with pytest.raises(WorkerError) as raised:
+        run_pipeline(
+            task,
+            FakeAsr(
+                AsrResult(
+                    language="en",
+                    segments=(AsrSegment(0.0, 0.8, "Explain AI."),),
+                )
+            ),
+            store,
+            stop_event=stop,
+            translation_adapter=StopAfterTranslation(),
+        )
+
+    assert raised.value.code is WorkerErrorCode.STOPPED
+    assert len(store.transcript_writes) == 1
+    assert store.transcript_writes[0].segments[0].translation is None
+    assert store.events[task.task_id][-1].stage is TaskStage.TRANSLATE
+    assert store.events[task.task_id][-1].progress == 0.0
 
 
 def test_claim_204_equivalent_does_not_start_heartbeat() -> None:
@@ -672,7 +789,7 @@ def test_pipeline_cleanup_failure_overrides_success(
     with pytest.raises(WorkerError) as raised:
         run_pipeline(
             task,
-            FakeAsr(AsrResult(language="zh", segments=(AsrSegment(0, 0.8, "x"),))),
+            FakeAsr(AsrResult(language="zh", segments=(AsrSegment(0, 0.8, "中文"),))),
             store,
         )
 
