@@ -8,14 +8,18 @@ import os
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Self
 
 from agent.contracts import AgentErrorCode, AnalysisInput, EvidenceItem
 from agent.job_store import AgentJobStore, AgentJobStoreError, HttpAgentJobStore
+from agent.observability.tracing import JsonlTraceSink
 from agent.orchestrator import AgentOrchestrator, AgentRunError
 from agent.providers import ProviderRouter
 from agent.providers.cloud import CloudModelProvider
 from agent.providers.local import LocalModelProvider
+from agent.skills import load_domain_skills
+from agent.validators import load_conclusion_validator
 from backend.app.schemas.agent_runtime import (
     InternalAgentClaimRequest,
     InternalAgentHeartbeat,
@@ -164,11 +168,16 @@ async def run_claimed_once(
 def build_provider_router_from_env() -> ProviderRouter:
     local_endpoint = os.getenv("LOCAL_MODEL_CHAT_COMPLETIONS_URL", "").strip()
     local_model = os.getenv("LOCAL_MODEL_NAME", "").strip()
+    local_reasoning_effort = os.getenv("LOCAL_MODEL_REASONING_EFFORT", "").strip() or None
     cloud_endpoint = os.getenv("CLOUD_MODEL_CHAT_COMPLETIONS_URL", "").strip()
     cloud_model = os.getenv("CLOUD_MODEL_NAME", "").strip()
     cloud_key = os.getenv("CLOUD_MODEL_API_KEY", "").strip()
     local = (
-        LocalModelProvider(endpoint=local_endpoint, model=local_model)
+        LocalModelProvider(
+            endpoint=local_endpoint,
+            model=local_model,
+            reasoning_effort=local_reasoning_effort,
+        )
         if local_endpoint and local_model
         else None
     )
@@ -182,6 +191,13 @@ def build_provider_router_from_env() -> ProviderRouter:
         else None
     )
     return ProviderRouter(local=local, cloud=cloud)
+
+
+def build_trace_sink_from_env() -> JsonlTraceSink:
+    path = os.getenv("AGENT_TRACE_PATH", "logs/agent-traces.jsonl").strip()
+    if not path:
+        raise ValueError("AGENT_TRACE_PATH 不能为空。")
+    return JsonlTraceSink(Path(path))
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -210,7 +226,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         claim = asyncio.run(
             run_claimed_once(
                 store,
-                AgentOrchestrator(providers=build_provider_router_from_env()),
+                AgentOrchestrator(
+                    providers=build_provider_router_from_env(),
+                    skill_registry=load_domain_skills(),
+                    conclusion_validator=load_conclusion_validator(),
+                    trace_sink=build_trace_sink_from_env(),
+                ),
                 InternalAgentClaimRequest(
                     agent_id=args.agent_id,
                     lease_seconds=args.lease_seconds,

@@ -22,12 +22,10 @@ for path in \
   [[ -e "$path" ]] || { echo "阶段 0 骨架缺少：$path" >&2; exit 1; }
 done
 
-# 只检查 Git 跟踪的文件。find 会扫到被忽略目录里的第三方 README.md
-# （pytest 生成 .pytest_cache/README.md，node_modules 与 .venv 里也有大量 README.md），
-# 导致任何人装过依赖或跑过一次测试之后本检查就永久误报。
-if ! readme_files="$(git ls-files '*README.md' | sort)"; then
-  echo "无法读取 Git 跟踪文件，README 唯一性检查未执行；请确认当前目录是可访问的 Git 仓库。" >&2
-  exit 1
+if readme_files="$(git ls-files '*README.md' 2>/dev/null | sort)"; then
+  :
+else
+  readme_files="$(find . -type d \( -name .venv -o -name node_modules -o -name .next -o -name .pytest_cache -o -name .ruff_cache -o -name logs \) -prune -o -type f -name README.md -print | sed 's#^./##' | sort)"
 fi
 if [[ "$readme_files" != "README.md" ]]; then
   echo "仓库必须且只能在根目录保留一个 README.md；子目录说明文件应使用职责明确的唯一名称。" >&2
@@ -47,4 +45,23 @@ if ! grep -Eq '^requires-python = ">=3\.13,<3\.14"$' pyproject.toml; then
   exit 1
 fi
 
-echo "阶段 0 骨架检查通过。核心流程测试将在实现后启用。"
+if [[ "${1:-}" == "--scaffold-only" ]]; then
+  echo "Stage-0 scaffold verification passed."
+  exit 0
+fi
+
+python="$PROJECT_ROOT/.venv/bin/python"
+[[ -x "$python" ]] || { echo "Missing .venv; run ./setup.sh before verification." >&2; exit 1; }
+
+if [[ -d .git ]]; then
+  bash scripts/check-secrets.sh
+else
+  forbidden="$(find . -type d \( -name .venv -o -name node_modules -o -name .next -o -name .pytest_cache -o -name .ruff_cache -o -name logs \) -prune -o -type f \( -name .env -o -iregex '.*\.\(mp4\|mov\|avi\|mkv\|wav\|mp3\|pem\|key\|sqlite\|sqlite3\)' \) -print)"
+  [[ -z "$forbidden" ]] || { echo "Forbidden source files:" >&2; echo "$forbidden" >&2; exit 1; }
+fi
+
+"$python" -m pytest -q
+"$python" -m ruff check backend agent tests
+(cd frontend && npm test && npm run typecheck && npm run build)
+
+echo "Release verification passed: Python tests/lint and frontend test/typecheck/build."

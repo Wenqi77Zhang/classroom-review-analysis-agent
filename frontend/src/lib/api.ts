@@ -1,5 +1,6 @@
 import type {
   AnalysisContract,
+  AnalysisConclusion,
   ApiErrorBody,
   AssetKind,
   AssetRead,
@@ -7,6 +8,9 @@ import type {
   ClassroomRead,
   CourseRead,
   PresignResponse,
+  ReportRead,
+  ReviewAction,
+  ReviewDecision,
   TaskRead,
   UserRef,
 } from "@/types/contracts";
@@ -196,4 +200,55 @@ export async function createTask(
 
 export async function getTask(taskId: string): Promise<TaskRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}`);
+}
+
+export async function getConclusions(
+  classroomId: string,
+): Promise<AnalysisConclusion[]> {
+  return requestJson(
+    `/api/classrooms/${encodeURIComponent(classroomId)}/conclusions`,
+  );
+}
+
+export async function reviewConclusion(
+  conclusionId: string,
+  input: {
+    action: ReviewAction;
+    editedContent?: string | null;
+    note?: string | null;
+  },
+): Promise<AnalysisConclusion> {
+  return requestJson(
+    `/api/conclusions/${encodeURIComponent(conclusionId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action: input.action,
+        edited_content: input.editedContent ?? null,
+        note: input.note ?? null,
+      }),
+    },
+  );
+}
+
+export async function getReviewHistory(
+  conclusionId: string,
+): Promise<ReviewDecision[]> {
+  return requestJson(
+    `/api/conclusions/${encodeURIComponent(conclusionId)}/history`,
+  );
+}
+
+export async function getReport(classroomId: string): Promise<ReportRead> {
+  return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/report`);
+}
+
+export async function updateReport(
+  classroomId: string,
+  input: { title?: string; content?: string },
+): Promise<ReportRead> {
+  return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/report`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
 }

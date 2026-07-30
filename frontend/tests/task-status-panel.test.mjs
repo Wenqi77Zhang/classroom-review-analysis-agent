@@ -38,6 +38,11 @@ test("任务状态面板覆盖处理阶段、失败原因和安全重试", () =>
   );
 });
 
+test("真实任务面板展示后端可回溯 trace_id", () => {
+  assert.match(panel, /task\.trace_id/);
+  assert.match(panel, /Trace ID：/);
+});
+
 test("复盘流程使用共享任务状态面板并仅在待复核预览展示证据", () => {
   assert.match(
     workspace,

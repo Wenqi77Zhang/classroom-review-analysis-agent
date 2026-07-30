@@ -76,6 +76,11 @@ export function TaskStatusPanel({
               状态来自后端任务记录，不使用前端计时器伪造进度。任务 ID：
               <code>{task.id}</code>
             </p>
+            {task.trace_id && (
+              <p>
+                Trace ID：<code>{task.trace_id}</code>
+              </p>
+            )}
           </div>
           <span className={`status-badge ${task.status}`}>
             {realStatusCopy[task.status]}
