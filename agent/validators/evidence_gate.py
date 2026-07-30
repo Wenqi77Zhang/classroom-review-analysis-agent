@@ -28,7 +28,9 @@ def _require_translation(
     bilingual_required: bool,
 ) -> None:
     if bilingual_required and any(
-        not (item.translation or "").strip() for item in evidence
+        item.reference.source_type is EvidenceSourceType.TRANSCRIPT
+        and not (item.translation or "").strip()
+        for item in evidence
     ):
         raise ProfessionalEvidenceError(
             "PROFESSIONAL_TRANSLATION_REQUIRED",

@@ -161,6 +161,34 @@ def test_professional_rules_require_translation_when_bilingual(
 @pytest.mark.parametrize(
     "validator",
     [
+        lambda evidence: validate_computer_ai_evidence(
+            evidence,
+            requires_visual_proof=True,
+            bilingual_required=True,
+        ),
+        lambda evidence: validate_humanities_evidence(
+            evidence,
+            bilingual_required=True,
+        ),
+    ],
+)
+def test_professional_bilingual_gate_ignores_courseware_translation(
+    validator,
+) -> None:
+    validator(
+        [
+            _evidence(
+                EvidenceSourceType.COURSEWARE,
+                text="中文课件内容",
+                translation=None,
+            )
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "validator",
+    [
         lambda: validate_computer_ai_evidence(
             [],
             requires_visual_proof=False,
