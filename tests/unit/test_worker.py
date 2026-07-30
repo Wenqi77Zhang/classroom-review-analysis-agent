@@ -460,12 +460,44 @@ def test_pipeline_persists_transcript_and_real_states(tmp_path: Path) -> None:
     assert store.transcripts[task.task_id].segments[0].text == "真实输入结果"
     final_event = store.events[task.task_id][-1]
     assert final_event.status is TaskStatus.RUNNING
-    assert final_event.stage is TaskStage.TRANSLATE
+    assert final_event.stage is TaskStage.TRANSCRIBE
     assert final_event.progress == 1.0
+    assert all(
+        event.stage is not TaskStage.TRANSLATE
+        for event in store.events[task.task_id]
+    )
     assert all(
         event.status is not TaskStatus.SUCCEEDED
         for event in store.events[task.task_id]
     )
+
+
+def test_pipeline_without_adapter_preserves_english_original_and_skips_translate(
+    tmp_path: Path,
+) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "english.wav"
+    _silent_wav(source)
+    store = RecordingTranscriptStore()
+    task = PipelineTask(input_path=source)
+
+    result = run_pipeline(
+        task,
+        FakeAsr(
+            AsrResult(
+                language="en",
+                segments=(AsrSegment(0.0, 0.8, "Explain AI."),),
+            )
+        ),
+        store,
+    )
+
+    assert result.translated_segments == 0
+    assert len(store.transcript_writes) == 1
+    assert store.transcript_writes[0].segments[0].text == "Explain AI."
+    assert store.transcript_writes[0].segments[0].translation is None
+    assert store.events[task.task_id][-1].stage is TaskStage.TRANSCRIBE
 
 
 def test_pipeline_persists_original_then_aligned_translation(tmp_path: Path) -> None:

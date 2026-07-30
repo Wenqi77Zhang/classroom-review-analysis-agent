@@ -91,6 +91,14 @@ def run_pipeline(
             ),
         )
 
+        if translation_adapter is None:
+            return PipelineResult(
+                task_id=task.task_id,
+                transcript_segments=len(transcript.segments),
+                translated_segments=0,
+                duration_ms=transcript.duration_ms,
+            )
+
         current_stage = TaskStage.TRANSLATE
         store.update_state(
             task.task_id,
