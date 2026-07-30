@@ -23,3 +23,14 @@
 `test_agent.py` 覆盖分析契约、账号/任务证据边界、时间范围双重校验、双语硬门禁、Prompt 注入数据边界、专业 Skill 缺失失败、状态机、隐私路由、结构化输出、未知证据拦截和 Trace 异常脱敏；`test_review_to_report.py` 覆盖 `pending/rejected` 过滤及 `modified` 使用教师改写内容。
 
 2026-07-29 PR #13 审查修复后执行上述命令：20 项定向测试通过；全仓 pytest 为 119 项通过、9 项跳过；`ruff check backend agent tests` 与路径级敏感文件检查通过。9 项跳过包括成员 4 尚未实现的 Worker/视频链路 2 项，以及缺少 `TEST_DATABASE_URL` 的 PostgreSQL 集成测试 7 项。这里是离线测试结果，不得扩写为真实模型、视频链路、数据库集成或浏览器 E2E 已通过。
+
+## 当前合并基线说明
+
+截至 `main@1e52c9c`，PR #14 已补充本地真实视频 Worker 测试，PR #18、#19
+已补充后端处理接口、账号隔离和前端业务 API 测试。上述 PR 的 CI 均有通过记录。
+当前检出目录缺少项目 `.venv`，因此本轮文档同步没有把旧的 Python 测试数字改写成
+“当前 main 本地全量复跑”；如需新的总数，应先按 `setup.ps1` 建立项目环境并从头
+执行测试。
+
+前端当前基线已执行 `npm test`、`npm run typecheck` 和 `npm run build`。这些结果
+证明前端门禁，不证明 Worker/B2、Agent、教师复核和报告的完整 E2E。

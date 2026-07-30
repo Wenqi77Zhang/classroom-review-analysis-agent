@@ -5,6 +5,10 @@
 > 协作核验：Codex  
 > 结论：**已执行，未通过；当前只完成流程前端与本地文件校验，尚未形成真实纵向链路。**
 
+> 历史记录说明：本文件保留 2026-07-28 当时的实际审查结论，不随之后实现倒改。
+> 截至 `main@1e52c9c`，其中课堂、上传、任务、Worker/Agent 核心等若干阻塞已经
+> 局部完成；最新状态请查看 `../../docs/current-progress.md`。
+
 ## 1. 验收目标
 
 核对当前仓库是否已经实现从“创建课堂—说明复盘目标—确认分析契约—上传真实视频—后台处理—证据化分析—教师复核—报告输出”的最短纵向链路，并把真实完成项、依赖和阻塞项分开记录。
@@ -58,4 +62,3 @@
 - PR #8：<https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/pull/8>
 - `main` 合并提交：`81d77e80b897bbcfca287ea74b5d661822b2e4cd`
 - `main` CI run #14：<https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/actions/runs/30301621347>
-

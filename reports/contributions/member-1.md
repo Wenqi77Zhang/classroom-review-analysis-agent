@@ -31,12 +31,15 @@
 - `backend/app/api/transcripts.py`
 - `backend/app/api/analyses.py`
 - `tests/integration/test_processing_api.py`
-- PR #6、#7、#8、#9 及 `docs/ai-collaboration-log.md`
+- PR #6、#7、#8、#9、#15、#17、#18、#19 及 `docs/ai-collaboration-log.md`
 
 ## 当前限制
 
 - 成员 1 未独立完成平台后端、Worker、Agent 或证据工作台；跨模块修复均按协作贡献记录。
 - 前端已接入课程、课堂、上传和任务 API，但真实媒体抽取、ASR、翻译和证据索引仍依赖成员 4，真实模型分析仍依赖成员 5；证据和报告持久化尚未替换当前明确标注的演示数据。
-- PostgreSQL 17.10、Alembic head、后端认证/课堂以及真实 B2 `presign → PUT → HEAD complete → download/delete` 已在同轮协作验收通过；当前沙箱无法再次访问 B2 外网套接字，因此仍需由成员 1 在浏览器中使用一段获授权真实视频完成新增前端链路的人工验收。
+- PostgreSQL、Alembic head、后端认证/课堂以及真实 B2
+  `presign → PUT → HEAD complete → task` 已在协作验收中通过；成员 1 已在
+  浏览器完成真实视频上传和任务创建人工验证。任务停留在 `queued`，因此该证据
+  只证明上传与任务创建，不证明 Worker 或后续分析已经运行。
 - Day 2 的复核交接只使用当前浏览器 `sessionStorage`；浏览器打印/PDF 可执行，但 DOCX、服务器保存和跨设备恢复尚未实现。
 - Day 3 尚未执行非开发同学独立试用、反馈驱动修改和同任务复测，因此退出条件尚未通过。

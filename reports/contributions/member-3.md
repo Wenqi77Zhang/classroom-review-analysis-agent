@@ -8,7 +8,20 @@
 
 ---
 
-## 一、当前可核对成果
+## 2026-07-30 合并状态补充
+
+本节更新 `main@1e52c9c` 的仓库事实；下方按日期保存的“当时尚未实现”记录属于历史
+证据，不应再当作当前状态。
+
+- 已合并：认证、课程/课堂、统一 S3 Provider、预签名上传与 HEAD 核验、任务
+  创建/领取/心跳/状态/重试、逐字稿读写和结论读写的最短后端边界。
+- 自动化已覆盖 PostgreSQL 账号隔离和跨账号资源拒绝；PR #18、#19 的 CI 已通过。
+- 尚未完成：教师接受/修改/驳回和版本历史 API、报告保存/读取/导出 API、完整部署
+  E2E。真实 Worker/B2 任务消费正在其他对话实现，尚未合并验收。
+- 上述后续 API 由成员 1 与 Codex 在成员 3 原始后端基础上协作补齐，必须保留成员 3
+  原始平台实现与后续协作修复的分别归属。
+
+## 一、历史累计证据（后续状态以上方补充为准）
 
 | 内容 | 位置 | 可核对方式 |
 |---|---|---|
@@ -22,12 +35,13 @@
 | 本地基础设施（PostgreSQL 17 + MinIO，自动建桶） | `docker-compose.yml` | `docker compose --profile local-infra ps` |
 | 后端依赖声明与已验证版本 | `pyproject.toml`、`backend/backend-module-guide.md` | `pip freeze` |
 
-## 二、尚未实现（不得写成已完成）
+## 二、历史状态（写于后续 API 合并之前）
 
-- 业务路由 `backend/app/api/*`：`docs/interface-contracts.md` 的端点表目前只是契约，**不可调用**。
-- 仓储 `repositories/*`、领域服务 `services/*`（含预签名、权限、审计落库）。
+- 本节原记录了当时业务路由、仓储和领域服务尚未实现的事实；这些项目中的一部分
+  已由后续 PR #18、#19 补齐，当前状态以上方补充和
+  `../../docs/current-progress.md` 为准。
 - 账号隔离测试已使用真实 PostgreSQL；跨账号写入拒绝与审计保留用例已由最新 PR CI 验证。
-- MinIO 镜像仍用 `latest` 标签，可复现性不足。
+- 当时 MinIO 镜像仍用 `latest` 标签；后续已固定为实际验证过的 RELEASE 标签。
 
 ---
 
@@ -178,7 +192,9 @@ TODO(成员 3)：按 `reports/evidence/evidence-index.md` 的命名规则补截�
 - 处理：本分支原按本地 MinIO 搭建，已对齐——预签名有效期变量统一到 `main` 的 `OBJECT_STORAGE_PRESIGNED_URL_TTL_SECONDS`（本分支原用同义的 `PRESIGN_EXPIRE_SECONDS`，已废弃）；新增 `OBJECT_STORAGE_PROVIDER`（枚举）与 `OBJECT_STORAGE_RETENTION_DAYS`；`OBJECT_STORAGE_USE_PATH_STYLE` 默认值由 `true` 改为 `false`（B2 用 virtual-host 寻址，原默认值只对 MinIO 正确）。
 - MinIO 保留但降级为「离线开发替代品」，已在 `docker-compose.yml` 与模块说明中显著标注，不是 M1 交付目标。
 - 复测：新增 4 项配置测试（默认供应商、未知供应商被拒、保留天数边界）。
-- 待办：统一 S3 Provider 抽象层**尚未实现**，B2 凭据**尚未申请**，均已列入已知限制。
+- 当时待办：统一 S3 Provider 抽象层和 B2 凭据在本段记录时尚未完成；Provider
+  后续已由 PR #18 实现，B2 配置已用于 PR #19 人工验收，当前状态以上方
+  “2026-07-30 合并状态补充”为准。
 
 *问题 E：Docker Desktop 反复启动即崩溃，阻塞审查意见 6。*
 - 现象：引擎始终起不来，`docker-desktop` WSL 发行版 Stopped，`docker info` 报找不到管道。
