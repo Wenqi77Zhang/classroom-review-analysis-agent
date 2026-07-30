@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import json
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -33,8 +32,48 @@ from backend.app.schemas.analysis_report import (
     InternalConclusionWrite,
 )
 
-PROMPT_VERSION = "analysis-v1"
+PROMPT_VERSION = "analysis-v2"
 _PROMPT_PATH = Path(__file__).with_name("prompts") / "analysis.md"
+_GRAMMAR_SCHEMA_KEYS = frozenset(
+    {"type", "properties", "required", "items", "enum", "additionalProperties"}
+)
+
+
+def _model_grammar_schema() -> dict:
+    """把 Pydantic Schema 精简为本地 grammar 引擎稳定支持的结构子集。
+
+    模型侧只负责约束 JSON 形状；完整的 UUID、长度、数量与枚举校验仍由下游
+    ``ModelAnalysis.model_validate`` 执行，所以精简不会绕过服务端门禁。
+    """
+
+    root = ModelAnalysis.model_json_schema(mode="serialization")
+    definitions = root.get("$defs", {})
+
+    def compact(node: object) -> object:
+        if isinstance(node, list):
+            return [compact(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        reference = node.get("$ref")
+        if isinstance(reference, str) and reference.startswith("#/$defs/"):
+            name = reference.removeprefix("#/$defs/")
+            target = definitions.get(name)
+            if isinstance(target, dict):
+                return compact(target)
+        result: dict[str, object] = {}
+        for key, value in node.items():
+            if key not in _GRAMMAR_SCHEMA_KEYS:
+                continue
+            if key == "properties" and isinstance(value, dict):
+                result[key] = {name: compact(schema) for name, schema in value.items()}
+            else:
+                result[key] = compact(value)
+        return result
+
+    compacted = compact(root)
+    if not isinstance(compacted, dict):
+        raise TypeError("模型输出 Schema 精简失败。")
+    return compacted
 
 
 class AgentRunError(RuntimeError):
@@ -117,7 +156,7 @@ class AgentOrchestrator:
                 system_prompt=_PROMPT_PATH.read_text(encoding="utf-8"),
                 user_prompt=self._build_user_prompt(analysis_input, plan, evidence),
                 trace_id=tracer.trace_id,
-                response_schema=ModelAnalysis.model_json_schema(),
+                response_schema=_model_grammar_schema(),
             )
 
             workflow.transition(AgentState.ANALYZING)
@@ -251,10 +290,10 @@ class AgentOrchestrator:
         trusted_context = {
             "analysis_contract": analysis_input.contract.model_dump(mode="json"),
             "plan": plan.model_dump(mode="json"),
-            "required_output_schema": ModelAnalysis.model_json_schema(mode="serialization"),
+            "required_output_schema": _model_grammar_schema(),
         }
         untrusted_evidence = {
-            "encoding": "base64-utf8",
+            "encoding": "json-utf8",
             "items": [
                 {
                     "evidence_id": str(item.id),
@@ -270,12 +309,8 @@ class AgentOrchestrator:
                         "end_ms": item.reference.end_ms,
                         "page_no": item.reference.page_no,
                     },
-                    "text_b64": base64.b64encode(item.text.encode("utf-8")).decode("ascii"),
-                    "translation_b64": base64.b64encode(item.translation.encode("utf-8")).decode(
-                        "ascii"
-                    )
-                    if item.translation is not None
-                    else None,
+                    "text": item.text,
+                    "translation": item.translation,
                 }
                 for item in evidence
             ],
@@ -284,8 +319,8 @@ class AgentOrchestrator:
             [
                 "TRUSTED_ANALYSIS_CONTEXT_JSON",
                 json.dumps(trusted_context, ensure_ascii=False, separators=(",", ":")),
-                "BEGIN_UNTRUSTED_EVIDENCE_JSON_BASE64",
-                json.dumps(untrusted_evidence, ensure_ascii=True, separators=(",", ":")),
-                "END_UNTRUSTED_EVIDENCE_JSON_BASE64",
+                "BEGIN_UNTRUSTED_EVIDENCE_JSON",
+                json.dumps(untrusted_evidence, ensure_ascii=False, separators=(",", ":")),
+                "END_UNTRUSTED_EVIDENCE_JSON",
             ]
         )

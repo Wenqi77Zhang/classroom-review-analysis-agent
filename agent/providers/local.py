@@ -25,7 +25,7 @@ class LocalModelProvider(OpenAICompatibleProvider):
         endpoint: str,
         model: str,
         timeout_seconds: float = 120.0,
-        reasoning_effort: Literal["none", "low", "medium", "high"] | None = None,
+        reasoning_effort: Literal["none", "low", "medium", "high"] | None = "none",
     ) -> None:
         parsed = urlparse(endpoint)
         if parsed.scheme not in {"http", "https"} or not _is_loopback(parsed.hostname):
@@ -35,6 +35,8 @@ class LocalModelProvider(OpenAICompatibleProvider):
             model=model,
             api_key=None,
             timeout_seconds=timeout_seconds,
+            # Qwen3.5 等推理模型若先输出长篇隐藏推理，可能在本地有限上下文中
+            # 尚未生成结构化正文就耗尽预算。调用方仍可按模型能力显式覆盖。
             reasoning_effort=reasoning_effort,
         )
 
