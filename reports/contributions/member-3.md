@@ -33,7 +33,7 @@
   生成，`modified` 使用教师改写内容；驳回会同步移除既有报告正文和关联。
 - 复核与报告操作记录脱敏审计元数据，不保存教师备注、改写内容或报告正文。
 - 新增真实 PostgreSQL HTTP 集成测试，覆盖复核、报告门禁、跨账号拒绝和审计脱敏。
-- 已验证：后端全量 `179 passed, 1 skipped`、`ruff check backend tests`，以及前端测试、
+- 已验证：合入最新 `main` 后端全量 `184 passed, 1 skipped`、`ruff check backend tests`，以及前端测试、
   TypeScript 类型检查和生产构建。报告导出、浏览器端实际接线和真实视频 E2E 不在本项中。
 
 | 内容 | 位置 | 可核对方式 |

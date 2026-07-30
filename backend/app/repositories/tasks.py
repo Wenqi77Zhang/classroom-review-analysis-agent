@@ -10,10 +10,11 @@ from sqlalchemy import and_, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.errors import NotFoundError, StateConflictError, ValidationFailedError
-from backend.app.models import Asset, Classroom, ProcessingTask, TaskEvent
+from backend.app.models import Asset, Classroom, ProcessingTask, TaskEvent, TranscriptSegment
 from backend.app.models.processing import task_assets
 from backend.app.schemas.common import ErrorCode
 from backend.app.schemas.task import (
+    AnalysisContract,
     PrivacyMode,
     TaskStage,
     TaskStatus,
@@ -51,10 +52,10 @@ async def create_processing_task(
     classroom_id: UUID,
     asset_ids: list[UUID],
     privacy_mode: PrivacyMode,
-    analysis_contract: dict[str, object],
+    analysis_contract: AnalysisContract,
     trace_id: str,
 ) -> ProcessingTask:
-    classroom = await get_owned_or_404(session, Classroom, classroom_id, owner_id)
+    await get_owned_or_404(session, Classroom, classroom_id, owner_id)
     if len(set(asset_ids)) != len(asset_ids):
         raise ValidationFailedError("asset_ids 不允许重复。")
 
@@ -78,7 +79,7 @@ async def create_processing_task(
         progress=0.0,
         privacy_mode=privacy_mode,
         retry_count=0,
-        analysis_contract=analysis_contract or classroom.analysis_contract,
+        analysis_contract=analysis_contract.model_dump(mode="json"),
         trace_id=trace_id,
     )
     session.add(task)
@@ -142,6 +143,7 @@ async def claim_task(
     worker_id: str,
     stages: list[TaskStage],
     lease_seconds: int,
+    claimant_label: str = "Worker",
 ) -> tuple[ProcessingTask, list[Asset]] | None:
     now = datetime.now(UTC)
     task = await session.scalar(
@@ -172,9 +174,58 @@ async def claim_task(
     await append_task_event(
         session,
         task,
-        message="租约到期后重新领取。" if reclaimed else "Worker 已领取任务。",
+        message=(
+            f"{claimant_label} 在租约到期后重新领取。"
+            if reclaimed
+            else f"{claimant_label} 已领取任务。"
+        ),
     )
     return task, await get_task_assets(session, task.id, task.owner_id)
+
+
+async def handoff_task_to_agent(
+    session: AsyncSession,
+    *,
+    task_id: UUID,
+    worker_id: str,
+) -> ProcessingTask:
+    """Worker 成功写入逐字稿后，显式释放租约并进入 Agent 队列。"""
+
+    now = datetime.now(UTC)
+    task = await get_internal_task(session, task_id)
+    if (
+        TaskStatus(task.status) is not TaskStatus.RUNNING
+        or TaskStage(task.stage) is not TaskStage.TRANSCRIBE
+        or task.progress < 1.0
+    ):
+        raise StateConflictError("只有已完成转写的运行中任务可以交给 Agent。")
+    if (
+        task.claimed_by != worker_id
+        or task.lease_expires_at is None
+        or task.lease_expires_at < now
+    ):
+        raise StateConflictError("任务租约不存在、已过期或不属于该 Worker。")
+    segment_exists = await session.scalar(
+        select(TranscriptSegment.id)
+        .where(
+            TranscriptSegment.task_id == task.id,
+            TranscriptSegment.owner_id == task.owner_id,
+        )
+        .limit(1)
+    )
+    if segment_exists is None:
+        raise StateConflictError("逐字稿尚未持久化，不能交给 Agent。")
+
+    task.stage = TaskStage.ANALYZE
+    task.status = TaskStatus.QUEUED
+    task.progress = 0.0
+    task.claimed_by = None
+    task.lease_expires_at = None
+    task.finished_at = None
+    await append_task_event(session, task, message="Worker 已完成转写，等待 Agent 分析。")
+    await session.flush()
+    await session.refresh(task)
+    return task
 
 
 async def get_internal_task(session: AsyncSession, task_id: UUID) -> ProcessingTask:

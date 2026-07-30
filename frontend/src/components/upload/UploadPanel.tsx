@@ -18,6 +18,7 @@ import {
   putPresignedUpload,
 } from "@/lib/api";
 import type {
+  AnalysisContract,
   AssetKind,
   PresignResponse,
   TaskRead,
@@ -44,7 +45,7 @@ type SelectedAsset = {
 
 type UploadPanelProps = {
   classroomId: string;
-  analysisContract: Record<string, unknown>;
+  analysisContract: AnalysisContract;
   onVideoReadinessChange?: (hasVideo: boolean) => void;
   onTaskCreated?: (task: TaskRead) => void;
 };

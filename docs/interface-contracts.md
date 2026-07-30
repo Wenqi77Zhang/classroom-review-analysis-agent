@@ -121,6 +121,11 @@ parse_courseware → build_evidence_index → analyze`
 - 每次 `(stage, status)` 变更由**后端**追加一条 `TaskEvent`（含 `progress`、`message`、
   `trace_id`）。Worker 不直接写事件表。前端进度条读事件流，因此不需要模拟计时器。
 - `lease_expires_at` 到期任务可被重新领取，Worker 进程被杀不会让任务永久卡在 `running`。
+- Worker 完成逐字稿写入并把 `transcribe / running` 更新到 `progress=1.0` 后，必须调用
+  `/internal/tasks/{id}/handoff-agent`。后端原子地把任务切为
+  `analyze / queued`、释放 Worker 租约，再由 Agent 独立领取；不得让两个服务共享同一租约。
+- Agent 更新 `analyze / running` 时保留租约并继续心跳；仅在
+  `succeeded / failed / cancelled` 时释放，避免长模型调用期间被重复领取。
 
 ## 端点契约
 
@@ -179,6 +184,9 @@ parse_courseware → build_evidence_index → analyze`
 |---|---|---|---|
 | `POST /internal/tasks/claim` | `InternalTaskClaimRequest` → `InternalTaskClaim` | `worker` | 成员 4 |
 | `POST /internal/tasks/{id}/heartbeat` | `InternalTaskHeartbeat` | `worker` | 成员 4 |
+| `POST /internal/tasks/{id}/handoff-agent` | `InternalAgentHandoff` | `worker` | 成员 4、5 |
+| `POST /internal/agent/tasks/claim` | `InternalAgentClaimRequest` → `InternalAgentTaskClaim` | `agent` | 成员 5 |
+| `POST /internal/agent/tasks/{id}/heartbeat` | `InternalAgentHeartbeat` | `agent` | 成员 5 |
 | `PATCH /internal/tasks/{id}/state` | `InternalTaskStateUpdate` | `worker`、`agent` | 成员 4、5 |
 | `POST /internal/tasks/{id}/transcript` | `InternalTranscriptWrite` | `worker` | 成员 4 |
 | `POST /internal/tasks/{id}/conclusions` | `InternalConclusionBatchWrite` | `agent` | 成员 5 |
@@ -189,6 +197,10 @@ Worker 必须使用不携带 `Authorization` 默认头的独立客户端访问�
 `WORKER_SERVICE_TOKEN` 转发给对象存储。Worker 下载后核对实际字节数与 `size_bytes`，
 并把响应 ETag 与后端上传完成时 HEAD 保存的 `verified_etag` 对照，防止限时 PUT 地址
 过期前发生同大小对象替换；无论成功、失败或租约停止都清理本地临时文件。
+
+`InternalAgentTaskClaim` 只包含当前 `task_id + owner_id` 的分析契约与可定位证据，不包含
+对象存储密钥、预签名 URL 或其他课堂内容。当前最短集成链路把逐字稿片段映射为
+`InternalAgentEvidence`；课件页、画面证据和独立证据索引仍待成员 4 补齐。
 
 身份由令牌区分：`WORKER_SERVICE_TOKEN` → `worker`，`AGENT_SERVICE_TOKEN` → `agent`。
 两者**必须配置为不同的值**。共用一个令牌意味着 Agent 也能覆盖逐字稿、Worker 也能写入
