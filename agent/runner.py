@@ -168,7 +168,11 @@ async def run_claimed_once(
 def build_provider_router_from_env() -> ProviderRouter:
     local_endpoint = os.getenv("LOCAL_MODEL_CHAT_COMPLETIONS_URL", "").strip()
     local_model = os.getenv("LOCAL_MODEL_NAME", "").strip()
-    local_reasoning_effort = os.getenv("LOCAL_MODEL_REASONING_EFFORT", "").strip() or None
+    # 本地结构化分析默认关闭隐藏推理；否则小显存设备可能在生成最终 JSON 前
+    # 已耗尽上下文。需要推理模式的其他本地模型仍可通过环境变量显式覆盖。
+    local_reasoning_effort = (
+        os.getenv("LOCAL_MODEL_REASONING_EFFORT", "none").strip() or "none"
+    )
     cloud_endpoint = os.getenv("CLOUD_MODEL_CHAT_COMPLETIONS_URL", "").strip()
     cloud_model = os.getenv("CLOUD_MODEL_NAME", "").strip()
     cloud_key = os.getenv("CLOUD_MODEL_API_KEY", "").strip()
