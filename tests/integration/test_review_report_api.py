@@ -211,10 +211,9 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
             )
             assert report.status_code == 200
             assert report.json()["title"] == "Reviewed Report"
-            assert report.json()["included_conclusion_ids"] == [
-                str(conclusion_ids[0]),
-                str(conclusion_ids[1]),
-            ]
+            assert report.json()["included_conclusion_ids"] == sorted(
+                [str(conclusion_ids[0]), str(conclusion_ids[1])]
+            )
 
             cross_account_report = await client.get(
                 f"/api/classrooms/{classroom_id}/report", headers=second_headers

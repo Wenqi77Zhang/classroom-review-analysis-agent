@@ -26,7 +26,10 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 def _report_read(report: Report) -> ReportRead:
     included_ids = [
         item.id
-        for item in report.conclusions
+        for item in sorted(
+            report.conclusions,
+            key=lambda conclusion: (conclusion.created_at, conclusion.id),
+        )
         if ReviewStatus(item.review_status) in REPORTABLE_REVIEW_STATUSES
     ]
     return ReportRead(
