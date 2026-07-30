@@ -220,6 +220,10 @@ class InternalAssetRead(AssetRead):
     """
 
     download_url: str = Field(min_length=1)
+    verified_etag: str | None = Field(
+        default=None,
+        description="上传完成时由后端 HEAD 核验并保存的 ETag。",
+    )
 
 
 class DownloadUrlResponse(OrmModel):

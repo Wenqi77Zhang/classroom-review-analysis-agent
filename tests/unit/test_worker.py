@@ -629,7 +629,12 @@ def test_http_job_store_claim_parses_frozen_contract() -> None:
     assert actual == expected
 
 
-def _download_asset(*, size_bytes: int, url: str = "https://storage.example/object"):
+def _download_asset(
+    *,
+    size_bytes: int,
+    url: str = "https://storage.example/object",
+    verified_etag: str | None = "verified-etag",
+):
     return InternalAssetRead(
         id=uuid4(),
         classroom_id=uuid4(),
@@ -641,6 +646,7 @@ def _download_asset(*, size_bytes: int, url: str = "https://storage.example/obje
         object_key="owners/test/classrooms/test/assets/test/source",
         created_at=datetime.now(UTC),
         download_url=url,
+        verified_etag=verified_etag,
     )
 
 
@@ -650,7 +656,11 @@ def test_http_job_store_downloads_without_forwarding_service_token(tmp_path: Pat
 
     def download_handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return httpx.Response(200, content=payload)
+        return httpx.Response(
+            200,
+            content=payload,
+            headers={"ETag": '"verified-etag"'},
+        )
 
     store = HttpJobStore(
         "https://backend.example",
@@ -680,7 +690,11 @@ def test_http_job_store_rejects_size_mismatch_and_removes_partial_file(
         "worker-secret",
         transport=httpx.MockTransport(lambda _: httpx.Response(204)),
         download_transport=httpx.MockTransport(
-            lambda _: httpx.Response(200, content=payload)
+            lambda _: httpx.Response(
+                200,
+                content=payload,
+                headers={"ETag": '"verified-etag"'},
+            )
         ),
     )
     target = tmp_path / "partial"
@@ -692,6 +706,32 @@ def test_http_job_store_rejects_size_mismatch_and_removes_partial_file(
 
     assert raised.value.code is WorkerErrorCode.OBJECT_DOWNLOAD_FAILED
     assert raised.value.retryable is True
+    assert not target.exists()
+
+
+@pytest.mark.parametrize("response_etag", [None, '"different-etag"'])
+def test_http_job_store_rejects_missing_or_changed_verified_etag(
+    tmp_path: Path,
+    response_etag: str | None,
+) -> None:
+    payload = b"same-size-content"
+    headers = {"ETag": response_etag} if response_etag is not None else {}
+    store = HttpJobStore(
+        "https://backend.example",
+        "worker-secret",
+        transport=httpx.MockTransport(lambda _: httpx.Response(204)),
+        download_transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, content=payload, headers=headers)
+        ),
+    )
+    target = tmp_path / "replaced-object"
+    try:
+        with pytest.raises(WorkerError) as raised:
+            store.download_asset(_download_asset(size_bytes=len(payload)), target)
+    finally:
+        store.close()
+
+    assert raised.value.code is WorkerErrorCode.OBJECT_DOWNLOAD_FAILED
     assert not target.exists()
 
 
@@ -727,7 +767,11 @@ def test_claimed_input_download_is_private_and_cleaned(tmp_path: Path) -> None:
         "worker-secret",
         transport=httpx.MockTransport(lambda _: httpx.Response(204)),
         download_transport=httpx.MockTransport(
-            lambda _: httpx.Response(200, content=payload)
+            lambda _: httpx.Response(
+                200,
+                content=payload,
+                headers={"ETag": '"verified-etag"'},
+            )
         ),
     )
     try:

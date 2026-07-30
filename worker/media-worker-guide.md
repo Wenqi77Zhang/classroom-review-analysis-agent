@@ -42,8 +42,9 @@ pytest tests/integration/test_video_pipeline.py
 
 `LocalJobStore` 用于本地验证；远程模式使用 `HttpJobStore`。Worker 领取任务后，由后端
 即时签发当前对象的限时只读地址，再使用不携带服务令牌的独立 HTTP 客户端下载视频。
-对象存储长期密钥和教师 JWT 都不会进入 Worker。下载文件会核对后端登记大小，并在成功、
-失败或租约停止后清理。服务令牌只能通过环境变量或部署密钥注入。
+对象存储长期密钥和教师 JWT 都不会进入 Worker。下载文件会核对后端登记大小，并将响应
+ETag 与上传完成时后端 HEAD 保存的 ETag 对照；成功、失败或租约停止后都会清理。服务令牌
+只能通过环境变量或部署密钥注入。
 
 ```bash
 WORKER_SERVICE_TOKEN="..." python -m worker.runner \

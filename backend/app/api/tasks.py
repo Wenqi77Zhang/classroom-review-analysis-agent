@@ -187,6 +187,7 @@ async def post_claim(
             InternalAssetRead(
                 **AssetRead.model_validate(asset).model_dump(),
                 download_url=await storage.presign_download(asset.object_key),
+                verified_etag=asset.etag,
             )
             for asset in assets
         ],

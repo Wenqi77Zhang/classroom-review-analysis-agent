@@ -119,6 +119,14 @@ class HttpJobStore:
             target.parent.mkdir(parents=True, exist_ok=True)
             with self.download_client.stream("GET", asset.download_url) as response:
                 response.raise_for_status()
+                expected_etag = self._normalize_etag(asset.verified_etag)
+                response_etag = self._normalize_etag(response.headers.get("etag"))
+                if expected_etag is not None and response_etag != expected_etag:
+                    raise WorkerError(
+                        WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
+                        "对象下载 ETag 与上传核验结果不一致。",
+                        retryable=True,
+                    )
                 with target.open("wb") as output:
                     for chunk in response.iter_bytes():
                         received += len(chunk)
@@ -145,6 +153,10 @@ class HttpJobStore:
                 "无法从限时对象地址下载课堂视频。",
                 retryable=True,
             ) from None
+
+    @staticmethod
+    def _normalize_etag(value: str | None) -> str | None:
+        return value.strip().strip('"') if value else None
 
     @staticmethod
     def _remove_partial_download(target: Path) -> None:

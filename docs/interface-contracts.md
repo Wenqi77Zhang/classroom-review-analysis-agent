@@ -178,7 +178,8 @@ parse_courseware → build_evidence_index → analyze`
 即时签发的 `download_url`。该地址限时、限当前对象、只允许 GET，不持久化也不进入日志。
 Worker 必须使用不携带 `Authorization` 默认头的独立客户端访问它，严禁把
 `WORKER_SERVICE_TOKEN` 转发给对象存储。Worker 下载后核对实际字节数与 `size_bytes`，
-无论成功、失败或租约停止都清理本地临时文件。
+并把响应 ETag 与后端上传完成时 HEAD 保存的 `verified_etag` 对照，防止限时 PUT 地址
+过期前发生同大小对象替换；无论成功、失败或租约停止都清理本地临时文件。
 
 身份由令牌区分：`WORKER_SERVICE_TOKEN` → `worker`，`AGENT_SERVICE_TOKEN` → `agent`。
 两者**必须配置为不同的值**。共用一个令牌意味着 Agent 也能覆盖逐字稿、Worker 也能写入
