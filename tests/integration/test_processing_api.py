@@ -226,6 +226,9 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert claimed.status_code == 200
             assert claimed.json()["task_id"] == task_id
             assert claimed.json()["assets"][0]["id"] == asset_id
+            assert claimed.json()["assets"][0]["download_url"].startswith(
+                "https://storage.invalid/download/"
+            )
 
             wrong_heartbeat = await client.post(
                 f"/api/internal/tasks/{task_id}/heartbeat",

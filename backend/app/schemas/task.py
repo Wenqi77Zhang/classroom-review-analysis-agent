@@ -212,6 +212,16 @@ class AssetRead(OrmModel):
     created_at: datetime
 
 
+class InternalAssetRead(AssetRead):
+    """Worker 领取任务时使用的限时对象读取契约。
+
+    `download_url` 由后端在领取成功后即时签发，只允许读取当前对象。它不得持久化、
+    记录到日志或返回给浏览器，Worker 也不需要持有对象存储长期密钥。
+    """
+
+    download_url: str = Field(min_length=1)
+
+
 class DownloadUrlResponse(OrmModel):
     url: str
     expires_at: datetime
@@ -289,7 +299,7 @@ class InternalTaskClaim(OrmModel):
     owner_id: ResourceId
     stage: TaskStage
     privacy_mode: PrivacyMode
-    assets: list[AssetRead]
+    assets: list[InternalAssetRead]
     analysis_contract: dict[str, Any] = Field(default_factory=dict)
     lease_expires_at: datetime
     trace_id: str

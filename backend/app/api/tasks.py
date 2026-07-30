@@ -29,6 +29,7 @@ from backend.app.schemas.task import (
     ALLOWED_STATUS_TRANSITIONS,
     WORKER_WRITABLE_STAGES,
     AssetRead,
+    InternalAssetRead,
     InternalTaskClaim,
     InternalTaskClaimRequest,
     InternalTaskHeartbeat,
@@ -41,6 +42,7 @@ from backend.app.schemas.task import (
     TaskStatus,
 )
 from backend.app.services.permissions import get_owned_or_404
+from backend.app.services.storage import ObjectStorage, get_object_storage
 
 router = APIRouter(tags=["tasks"])
 Db = Annotated[AsyncSession, Depends(get_db)]
@@ -57,6 +59,7 @@ StateWriter = Annotated[
     ServiceIdentity,
     Depends(require_service_identity("tasks:state")),
 ]
+Storage = Annotated[ObjectStorage, Depends(get_object_storage)]
 
 _STAGE_ORDER = {stage: index for index, stage in enumerate(TaskStage)}
 
@@ -157,6 +160,7 @@ async def post_claim(
     body: InternalTaskClaimRequest,
     session: Db,
     _identity: Worker,
+    storage: Storage,
 ) -> InternalTaskClaim | None:
     if any(stage not in WORKER_WRITABLE_STAGES for stage in body.stages):
         raise PermissionDeniedError(
@@ -179,7 +183,13 @@ async def post_claim(
         owner_id=task.owner_id,
         stage=task.stage,
         privacy_mode=task.privacy_mode,
-        assets=[AssetRead.model_validate(asset) for asset in assets],
+        assets=[
+            InternalAssetRead(
+                **AssetRead.model_validate(asset).model_dump(),
+                download_url=await storage.presign_download(asset.object_key),
+            )
+            for asset in assets
+        ],
         analysis_contract=task.analysis_contract,
         lease_expires_at=task.lease_expires_at,
         trace_id=task.trace_id,
