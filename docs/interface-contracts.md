@@ -140,8 +140,10 @@ parse_courseware → build_evidence_index → analyze`
 | `audit` | `GET /tasks/{id}/audit-events`、`POST /internal/tasks/{id}/trace-events` |
 
 实现边界：`analyses` 已提供结论读取、Agent 内部批量写入、教师复核写入和历史读取。
-`reports` 已提供 `GET|PUT /classrooms/{id}/report`；每次保存均从当前状态为
-`accepted` / `modified` 的本课堂结论重新计算关联，已驳回的结论不得保留在报告中。
+`reports` 已提供 `GET|PUT /classrooms/{id}/report`；PUT 请求只接受 `title`，报告 Markdown
+正文由服务端从当前状态为 `accepted` / `modified` 的本课堂结论生成，客户端不能提交或覆盖
+正文。`modified` 结论使用教师的 `reviewed_content`，其余可报告结论使用模型原文。每次保存
+或复核状态变化都会重新计算正文和关联，已驳回的结论不得保留在报告中。
 `included_conclusion_ids` 按结论创建时间、ID 稳定排序，不依赖数据库关联表的返回顺序。
 `POST /reports/{id}/export` 和 `GET /reports/{id}/export/{fmt}` 仍未实现。端点列入冻结
 契约不等于已经可以调用。

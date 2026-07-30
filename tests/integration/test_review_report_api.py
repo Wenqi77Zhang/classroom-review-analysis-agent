@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
+from collections import Counter
 from collections.abc import AsyncIterator
 
 import httpx
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app.config import Settings
@@ -204,16 +206,73 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
             )
             assert invalid_title.status_code == 422
 
-            report = await client.put(
+            client_controlled_content = await client.put(
                 f"/api/classrooms/{classroom_id}/report",
-                json={"title": "  Reviewed Report  ", "content": "teacher-authored report"},
+                json={
+                    "title": "Bypass Attempt",
+                    "content": "pending model-content-3",
+                },
                 headers=first_headers,
             )
-            assert report.status_code == 200
-            assert report.json()["title"] == "Reviewed Report"
-            assert report.json()["included_conclusion_ids"] == sorted(
-                [str(conclusion_ids[0]), str(conclusion_ids[1])]
+            assert client_controlled_content.status_code == 422
+
+            async with (
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://first-put"
+                ) as first_put_client,
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://second-put"
+                ) as second_put_client,
+            ):
+                concurrent_reports = await asyncio.gather(
+                    first_put_client.put(
+                        f"/api/classrooms/{classroom_id}/report",
+                        json={"title": "Concurrent Report A"},
+                        headers=first_headers,
+                    ),
+                    second_put_client.put(
+                        f"/api/classrooms/{classroom_id}/report",
+                        json={"title": "Concurrent Report B"},
+                        headers=first_headers,
+                    ),
+                )
+
+            assert [response.status_code for response in concurrent_reports] == [200, 200]
+            expected_reportable = sorted(
+                [
+                    (conclusion_ids[0], "model-content-0"),
+                    (conclusion_ids[1], "teacher revision"),
+                ]
             )
+            expected_content = "\n".join(
+                f"- {content}" for _, content in expected_reportable
+            )
+            for response in concurrent_reports:
+                body = response.json()
+                assert body["content"] == expected_content
+                assert body["included_conclusion_ids"] == [
+                    str(conclusion_id) for conclusion_id, _ in expected_reportable
+                ]
+                assert "model-content-1" not in body["content"]
+                assert "model-content-2" not in body["content"]
+                assert "model-content-3" not in body["content"]
+
+            async with factory() as session:
+                report_count = await session.scalar(
+                    select(func.count()).select_from(Report).where(
+                        Report.classroom_id == classroom_id
+                    )
+                )
+            assert report_count == 1
+
+            saved_report = await client.get(
+                f"/api/classrooms/{classroom_id}/report", headers=first_headers
+            )
+            assert saved_report.status_code == 200
+            assert saved_report.json()["title"] in {
+                "Concurrent Report A",
+                "Concurrent Report B",
+            }
 
             cross_account_report = await client.get(
                 f"/api/classrooms/{classroom_id}/report", headers=second_headers
@@ -234,6 +293,8 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
             assert gated_report.json()["included_conclusion_ids"] == [
                 str(conclusion_ids[1])
             ]
+            assert gated_report.json()["content"] == "- teacher revision"
+            assert "model-content-0" not in gated_report.json()["content"]
 
         async with factory() as session:
             stored_report = await session.scalar(
@@ -247,17 +308,14 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
                     .order_by(AuditEvent.created_at, AuditEvent.id)
                 )
             )
-            assert [event.action for event in events] == [
-                "conclusion.reviewed",
-                "conclusion.reviewed",
-                "conclusion.reviewed",
-                "report.created",
-                "conclusion.reviewed",
-            ]
+            assert Counter(event.action for event in events) == Counter(
+                {"conclusion.reviewed": 4, "report.created": 1, "report.updated": 1}
+            )
             serialized_details = repr([event.details for event in events])
             assert "private teacher note" not in serialized_details
             assert "teacher revision" not in serialized_details
-            assert "teacher-authored report" not in serialized_details
+            assert "model-content-0" not in serialized_details
+            assert "pending model-content-3" not in serialized_details
     finally:
         async with factory.begin() as session:
             await session.execute(

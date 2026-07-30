@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,7 +16,6 @@ from backend.app.models import (
     ReviewDecision,
     User,
 )
-from backend.app.models.review_report import report_conclusions
 from backend.app.schemas.analysis_report import (
     REPORTABLE_REVIEW_STATUSES,
     ReportUpdate,
@@ -45,6 +44,7 @@ async def apply_review(
     conclusion = await get_owned_or_404(
         session, AnalysisConclusion, conclusion_id, owner_id
     )
+    await _lock_classroom(session, owner_id, conclusion.classroom_id)
     current_status = ReviewStatus(conclusion.review_status)
     previous_content = (
         conclusion.reviewed_content
@@ -72,15 +72,12 @@ async def apply_review(
     )
     session.add(decision)
 
-    if resulting_status not in REPORTABLE_REVIEW_STATUSES:
-        await session.execute(
-            delete(report_conclusions).where(
-                report_conclusions.c.conclusion_id == conclusion.id,
-                report_conclusions.c.owner_id == owner_id,
-            )
-        )
-
     await session.flush()
+    report = await _find_report(session, owner_id, conclusion.classroom_id)
+    if report is not None:
+        await _sync_report_content(
+            session, report, owner_id, conclusion.classroom_id
+        )
     await record_audit_event(
         session,
         owner_id=owner_id,
@@ -135,16 +132,23 @@ async def get_report(
     return report
 
 
-async def upsert_report(
-    session: AsyncSession,
-    *,
-    owner_id: UUID,
-    user: User,
-    classroom_id: UUID,
-    body: ReportUpdate,
-) -> Report:
-    classroom = await get_owned_or_404(session, Classroom, classroom_id, owner_id)
-    report = await session.scalar(
+async def _lock_classroom(
+    session: AsyncSession, owner_id: UUID, classroom_id: UUID
+) -> Classroom:
+    classroom = await session.scalar(
+        select(Classroom)
+        .where(Classroom.id == classroom_id, Classroom.owner_id == owner_id)
+        .with_for_update()
+    )
+    if classroom is None:
+        raise NotFoundError()
+    return classroom
+
+
+async def _find_report(
+    session: AsyncSession, owner_id: UUID, classroom_id: UUID
+) -> Report | None:
+    return await session.scalar(
         select(Report)
         .options(selectinload(Report.conclusions))
         .where(
@@ -152,7 +156,12 @@ async def upsert_report(
             Report.classroom_id == classroom_id,
         )
     )
-    reportable = list(
+
+
+async def _reportable_conclusions(
+    session: AsyncSession, owner_id: UUID, classroom_id: UUID
+) -> list[AnalysisConclusion]:
+    return list(
         await session.scalars(
             select(AnalysisConclusion)
             .where(
@@ -163,20 +172,60 @@ async def upsert_report(
             .order_by(AnalysisConclusion.created_at, AnalysisConclusion.id)
         )
     )
+
+
+def _compose_report_content(conclusions: list[AnalysisConclusion]) -> str:
+    parts: list[str] = []
+    for conclusion in conclusions:
+        status = ReviewStatus(conclusion.review_status)
+        content = (
+            conclusion.reviewed_content
+            if status is ReviewStatus.MODIFIED
+            else conclusion.content
+        )
+        if not (content or "").strip():
+            raise ValueError("可报告结论缺少正文。")
+        parts.append(f"- {(content or '').strip()}")
+    return "\n".join(parts)
+
+
+async def _sync_report_content(
+    session: AsyncSession,
+    report: Report,
+    owner_id: UUID,
+    classroom_id: UUID,
+) -> None:
+    reportable = await _reportable_conclusions(session, owner_id, classroom_id)
+    report.conclusions = reportable
+    report.content = _compose_report_content(reportable)
+    await session.flush()
+
+
+async def upsert_report(
+    session: AsyncSession,
+    *,
+    owner_id: UUID,
+    user: User,
+    classroom_id: UUID,
+    body: ReportUpdate,
+) -> Report:
+    await _lock_classroom(session, owner_id, classroom_id)
+    report = await _find_report(session, owner_id, classroom_id)
+    reportable = await _reportable_conclusions(session, owner_id, classroom_id)
     created = report is None
     if report is None:
         report = Report(
             owner_id=owner_id,
             classroom_id=classroom_id,
-            title=body.title or f"{classroom.title}复盘报告",
-            content=body.content or "",
+            title=body.title,
+            content=_compose_report_content(reportable),
             conclusions=reportable,
         )
         session.add(report)
         await session.flush()
     else:
-        for field, value in body.model_dump(exclude_unset=True).items():
-            setattr(report, field, value)
+        report.title = body.title
+        report.content = _compose_report_content(reportable)
         report.conclusions = reportable
     await session.flush()
     if not created:
@@ -189,7 +238,7 @@ async def upsert_report(
         resource_type="report",
         resource_id=report.id,
         details={
-            "updated_fields": sorted(body.model_fields_set),
+            "updated_fields": ["title"],
             "included_conclusion_count": len(report.conclusions),
         },
     )
