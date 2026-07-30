@@ -5,6 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.errors import NotFoundError, StateConflictError
@@ -56,8 +57,17 @@ async def persist_task_trace_event(
         trace_id=body.trace_id,
         details=details,
     )
-    session.add(event)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(event)
+            await session.flush()
+    except IntegrityError:
+        # A different task can race on the globally unique event ID. Do not leak
+        # a database error or let either task's row lock turn that into a 500.
+        existing = await session.get(AuditEvent, body.event_id)
+        if existing is not None:
+            raise StateConflictError("event_id 已用于不同的 Trace 事件。")
+        raise
     return event
 
 
