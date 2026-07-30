@@ -7,6 +7,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.dependencies import (
@@ -38,6 +39,7 @@ from backend.app.schemas.task import (
     AGENT_WRITABLE_STAGES,
     ALLOWED_STATUS_TRANSITIONS,
     WORKER_WRITABLE_STAGES,
+    AnalysisContract,
     AssetRead,
     InternalAssetRead,
     InternalTaskClaim,
@@ -89,6 +91,29 @@ _STAGE_ORDER = {stage: index for index, stage in enumerate(TaskStage)}
 
 def _task_read(task: ProcessingTask) -> TaskRead:
     return TaskRead.model_validate(task)
+
+
+async def _claim_contract_or_quarantine(
+    session: AsyncSession, task: ProcessingTask
+) -> AnalysisContract | None:
+    try:
+        return AnalysisContract.model_validate(task.analysis_contract)
+    except ValidationError:
+        # Old JSON must not repeatedly poison the worker queue. Keep only a
+        # stable, content-free diagnostic in the task event stream.
+        task.status = TaskStatus.FAILED
+        task.claimed_by = None
+        task.lease_expires_at = None
+        task.finished_at = datetime.now(UTC)
+        task.last_error_code = "VALIDATION_ERROR"
+        task.last_error_message = "任务分析契约已过期，需重新创建任务。"
+        await append_task_event(
+            session,
+            task,
+            message="任务因不兼容的历史分析契约被隔离。",
+            error_code="VALIDATION_ERROR",
+        )
+        return None
 
 
 @router.post("/classrooms/{classroom_id}/tasks", response_model=TaskRead, status_code=201)
@@ -227,6 +252,9 @@ async def post_claim(
     if claimed is None:
         return None
     task, assets = claimed
+    analysis_contract = await _claim_contract_or_quarantine(session, task)
+    if analysis_contract is None:
+        return None
     assert task.lease_expires_at is not None
     assert task.trace_id is not None
     return InternalTaskClaim(
@@ -243,7 +271,7 @@ async def post_claim(
             )
             for asset in assets
         ],
-        analysis_contract=task.analysis_contract,
+        analysis_contract=analysis_contract,
         lease_expires_at=task.lease_expires_at,
         trace_id=task.trace_id,
     )
@@ -306,6 +334,9 @@ async def post_agent_claim(
     if claimed is None:
         return None
     task, _assets = claimed
+    analysis_contract = await _claim_contract_or_quarantine(session, task)
+    if analysis_contract is None:
+        return None
     assert task.lease_expires_at is not None
     assert task.trace_id is not None
     segments = await get_transcript_segments(session, task.owner_id, task.id)
@@ -338,7 +369,7 @@ async def post_agent_claim(
         classroom_id=task.classroom_id,
         owner_id=task.owner_id,
         privacy_mode=task.privacy_mode,
-        analysis_contract=task.analysis_contract,
+        analysis_contract=analysis_contract,
         evidence=evidence,
         lease_expires_at=task.lease_expires_at,
         trace_id=task.trace_id,
