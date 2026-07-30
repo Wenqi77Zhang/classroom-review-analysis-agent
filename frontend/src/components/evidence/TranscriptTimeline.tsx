@@ -10,7 +10,7 @@ export type TranscriptItem = {
 };
 
 type TranscriptTimelineProps = {
-  items: TranscriptItem[];
+  items?: TranscriptItem[]; // 👈 这里加了问号，允许初始值为空
   currentTimeMs: number;
   onSeek: (timeMs: number) => void;
 };
@@ -27,8 +27,10 @@ export function TranscriptTimeline({
   currentTimeMs,
   onSeek,
 }: TranscriptTimelineProps) {
-  // 如果没有数据，显示占位符
-  if (!items || items.length === 0) {
+  // 安全判断：如果 items 是 null、undefined、或者不是数组，都当空数组处理
+  const safeItems = Array.isArray(items) ? items : [];
+
+  if (safeItems.length === 0) {
     return (
       <section className="transcript-timeline" aria-labelledby="transcript-timeline-title">
         <header>
@@ -56,7 +58,7 @@ export function TranscriptTimeline({
       </header>
 
       <div className="transcript-items">
-        {items.map((item) => {
+        {safeItems.map((item) => {
           // 判断当前字幕是否处于高亮区间（毫秒级精准判断）
           const isActive =
             currentTimeMs >= item.startMs && currentTimeMs < item.endMs;

@@ -196,3 +196,45 @@ export async function createTask(
 export async function getTask(taskId: string): Promise<TaskRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}`);
 }
+
+// ============================================================
+// 👇 下面是刚才组长要求新增的 4 个用于读取真实数据的 API 客户端 👇
+// ============================================================
+
+/**
+ * 获取视频文件的限时播放下载地址
+ */
+export async function getAssetDownloadUrl(assetId: string): Promise<{ url: string }> {
+  return requestJson(`/api/assets/${encodeURIComponent(assetId)}/download-url`);
+}
+
+/**
+ * 获取指定任务的真实课堂逐字稿
+ */
+export async function getTranscript(taskId: string): Promise<any> {
+  return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/transcript`);
+}
+
+/**
+ * 修改（编辑）某个具体的逐字稿片段
+ */
+export async function updateTranscriptSegment(
+  segmentId: string,
+  update: {
+    speaker?: string | null;
+    original_text?: string | null;
+    translated_text?: string | null;
+  },
+): Promise<any> {
+  return requestJson(`/api/transcript-segments/${encodeURIComponent(segmentId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(update),
+  });
+}
+
+/**
+ * 获取某课堂下所有的 AI 分析结论（事实、判断、建议）
+ */
+export async function getConclusions(classroomId: string): Promise<any[]> {
+  return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/conclusions`);
+}

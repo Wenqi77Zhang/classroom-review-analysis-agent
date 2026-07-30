@@ -22,37 +22,36 @@ import {
 } from "../tasks/TaskStatusPanel";
 import { SiteChrome } from "./SiteChrome";
 
-const demoTranscript: TranscriptItem[] = [
-  {
-    id: "demo-1",
-    startMs: 12_000,
-    endMs: 18_000,
-    speaker: "Teacher",
-    originalText: "What evidence supports your answer?",
-    translatedText: "什么证据可以支持你的答案？",
-  },
-  {
-    id: "demo-2",
-    startMs: 18_000,
-    endMs: 23_000,
-    speaker: "Class",
-    originalText: "[Five seconds of classroom silence]",
-    translatedText: "[课堂沉默五秒]",
-  },
-  {
-    id: "demo-3",
-    startMs: 23_000,
-    endMs: 31_000,
-    speaker: "Student",
-    originalText: "The repeated phrase shows the character is uncertain.",
-    translatedText: "反复出现的短语说明人物并不确定。",
-  },
-];
-
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
+  // 👇 用来存储杨晗发来的真实字幕数据
+  const [demoTranscript, setDemoTranscript] = useState<TranscriptItem[]>([]);
+  
+  useEffect(() => {
+    fetch("/assets/ai.json")
+      .then((res) => res.json())
+      .then((data) => {
+        // 1. 重点修正：从 data.segments 数组中提取真正的字幕列表
+        const rawArray = data?.segments || [];
+        
+        // 2. 核心翻译：把杨晗的数据字段，转成前端组件认识的字段
+        const mappedData = rawArray.map((item: any) => ({
+          id: String(item.index || Math.random()),
+          startMs: item.start_ms || 0,
+          endMs: item.end_ms || 0,
+          speaker: item.speaker || "教师",
+          originalText: item.text || "",
+          translatedText: item.translation || "",
+        }));
+
+        // 3. 将转换好的数据设置给前端状态
+        setDemoTranscript(mappedData);
+      })
+      .catch((err) => console.warn("字幕数据加载失败，请确认 /assets/ai.json 文件是否存在", err));
+  }, []);
+
   const [classroom, setClassroom] = useState("尚未创建课堂");
   const [messages, setMessages] = useState<string[]>([]);
   const [conversationStep, setConversationStep] = useState<0 | 1 | 2>(0);
@@ -142,7 +141,9 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
         </header>
         <div className="evidence-workbench-grid">
           <div className="evidence-media-column">
+            {/* 👇 视频路径已改为 /assets/test2.mp4 */}
             <VideoPlayer
+              videoUrl="/assets/test2.mp4"
               seekToMs={seekToMs}
               onTimeUpdate={setCurrentVideoTimeMs}
             />
@@ -164,7 +165,7 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
               reviewStatus={reviewStatus}
               isDemo
               onSeekEvidence={() => {
-                const evidenceStartMs = demoTranscript[0].startMs;
+                const evidenceStartMs = demoTranscript[0]?.startMs || 0;
                 setSeekToMs(evidenceStartMs);
                 setCurrentVideoTimeMs(evidenceStartMs);
               }}
