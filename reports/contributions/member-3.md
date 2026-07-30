@@ -48,9 +48,10 @@
   重建 FastAPI 实例后，过期租约可由新 Worker 重新领取并保留事件历史。
 - 审核基线 `8069d08` 的真实 PostgreSQL 复验为 `183 passed, 1 skipped, 1 failed`：历史
   `analysis_contract` 会在 Worker 领取时形成重复 500 的毒任务。修复提交已将不可转换任务隔离为
-  稳定、脱敏失败，并用保存点把跨任务 `event_id` 唯一键竞争映射为 `STATE_CONFLICT`；对应两项
-  PostgreSQL 回归已加入，尚未在当前真实链路数据库上执行，等待新 CI 与负责人复验。GitHub 在
-  修复前可核验的 CI 摘要为 `180 passed, 5 skipped`，Ruff 通过。
+  稳定、脱敏失败，并用保存点把跨任务 `event_id` 唯一键竞争映射为 `STATE_CONFLICT`。成员 1
+  随后在隔离 PostgreSQL 17 实例复验为 `184 passed, 1 skipped`；再将 `main@c3c92d6` 的 PR #27
+  状态机回归合入并组合解决冲突后，全仓 Ruff 与 PostgreSQL 门禁为 `265 passed, 1 skipped`。
+  功能实现归属成员 3，成员 1 仅记录复验与集成冲突处理；当前仍等待远端新 CI。
   该恢复测试不冒充真实 Worker 进程崩溃或整机重启演练。
 
 | 内容 | 位置 | 可核对方式 |

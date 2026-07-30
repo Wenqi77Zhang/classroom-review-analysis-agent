@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import threading
 import time
 import wave
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -40,12 +42,14 @@ from worker.runner import (
     WORKER_CLAIM_STAGES,
     _build_parser,
     _claimed_input_path,
+    _install_signal_handlers,
     _process_claimed_media,
+    _run_remote,
     run_claimed_once,
 )
 from worker.stages.extract_audio import extract_audio
 from worker.stages.transcribe import transcribe_audio
-from worker.types import AsrResult, AsrSegment, PipelineTask
+from worker.types import AsrResult, AsrSegment, PipelineTask, TranslationBatch
 
 
 class FakeAsr:
@@ -86,6 +90,38 @@ class FakeClaimingStore(LocalJobStore):
         handoff: InternalAgentHandoff,
     ) -> None:
         self.handoffs.append((task_id, handoff))
+
+
+class RecordingTranscriptStore(LocalJobStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.transcript_writes: list[InternalTranscriptWrite] = []
+
+    def save_transcript(
+        self,
+        task_id,
+        transcript: InternalTranscriptWrite,
+    ) -> None:
+        self.transcript_writes.append(transcript.model_copy(deep=True))
+        super().save_transcript(task_id, transcript)
+
+
+class FakePipelineTranslation:
+    model_name = "fake-translation-for-tests"
+
+    def translate_batch(
+        self,
+        texts: tuple[str, ...],
+        *,
+        source_language: str,
+        target_language: str,
+    ) -> TranslationBatch:
+        assert source_language == "en"
+        assert target_language == "zh"
+        return TranslationBatch(
+            translations=tuple(f"[测试译文]{text}" for text in texts),
+            model_name=self.model_name,
+        )
 
 
 def _claim() -> InternalTaskClaim:
@@ -129,6 +165,14 @@ def test_worker_error_codes_match_media_design() -> None:
         "UPSTREAM_UNAVAILABLE",
         "CLEANUP_FAILED",
         "JOB_STORE_FAILED",
+        "JOB_STORE_AUTH_FAILED",
+        "TRANSLATION_UNAVAILABLE",
+        "TRANSLATION_TIMEOUT",
+        "TRANSLATION_SCHEMA_INVALID",
+        "UNSUPPORTED_LANGUAGE",
+        "COURSEWARE_UNSUPPORTED",
+        "COURSEWARE_PARSE_FAILED",
+        "EVIDENCE_INDEX_INVALID",
         "STOPPED",
     }
     assert {code.value for code in WorkerErrorCode} == expected
@@ -228,6 +272,97 @@ def test_remote_runner_claims_newly_uploaded_tasks_without_object_root() -> None
         TaskStage.EXTRACT_AUDIO,
         TaskStage.TRANSCRIBE,
     ]
+
+
+def _remote_args(*, once: bool) -> argparse.Namespace:
+    return argparse.Namespace(
+        video=None,
+        output=None,
+        model="tiny",
+        language=None,
+        api_base_url="http://127.0.0.1:8000",
+        worker_id="test-worker",
+        lease_seconds=300,
+        object_root=None,
+        once=once,
+        poll_interval=5.0,
+        max_backoff=30.0,
+    )
+
+
+class ClosingFakeStore:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_remote_parser_defaults_to_resident_single_worker() -> None:
+    args = _build_parser().parse_args(["--api-base-url", "http://127.0.0.1:8000"])
+
+    assert args.once is False
+    assert args.poll_interval == 5.0
+    assert args.max_backoff == 30.0
+
+
+def test_once_mode_claims_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    fake_store = ClosingFakeStore()
+    monkeypatch.setenv("WORKER_SERVICE_TOKEN", "test-only-token")
+    monkeypatch.setattr(
+        "worker.runner.run_claimed_once",
+        lambda *args, **kwargs: calls.append("claim"),
+    )
+    monkeypatch.setattr("worker.runner.LocalWhisperAdapter", lambda *args, **kwargs: object())
+    monkeypatch.setattr("worker.runner.HttpJobStore", lambda *args, **kwargs: fake_store)
+
+    assert _run_remote(_remote_args(once=True), threading.Event()) is None
+    assert calls == ["claim"]
+    assert fake_store.closed is True
+
+
+def test_signal_handlers_request_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    handlers: dict[int, object] = {}
+    stop = threading.Event()
+
+    monkeypatch.setattr(
+        "worker.runner.signal.signal",
+        lambda signum, handler: handlers.__setitem__(signum, handler),
+    )
+
+    _install_signal_handlers(stop)
+    assert not stop.is_set()
+
+    handler = handlers[2]
+    assert callable(handler)
+    handler(2, None)
+    assert stop.is_set()
+
+
+def test_process_stop_event_reaches_active_claim() -> None:
+    store = FakeClaimingStore(_claim())
+    request = InternalTaskClaimRequest(
+        worker_id="worker-test",
+        stages=[TaskStage.TRANSCRIBE],
+        lease_seconds=30,
+    )
+    process_stop = threading.Event()
+
+    def process(_: InternalTaskClaim, stop: threading.Event) -> str:
+        assert not stop.is_set()
+        process_stop.set()
+        assert stop.wait(timeout=0.2)
+        return "stopped"
+
+    result = run_claimed_once(
+        store,
+        request,
+        process,
+        process_stop_event=process_stop,
+    )
+
+    assert result == "stopped"
 
 
 def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
@@ -347,15 +482,155 @@ def test_pipeline_persists_transcript_and_real_states(tmp_path: Path) -> None:
     result = run_pipeline(task, adapter, store)
 
     assert result.transcript_segments == 1
+    assert result.translated_segments == 0
     assert store.transcripts[task.task_id].segments[0].text == "真实输入结果"
     final_event = store.events[task.task_id][-1]
     assert final_event.status is TaskStatus.RUNNING
     assert final_event.stage is TaskStage.TRANSCRIBE
     assert final_event.progress == 1.0
     assert all(
+        event.stage is not TaskStage.TRANSLATE
+        for event in store.events[task.task_id]
+    )
+    assert all(
         event.status is not TaskStatus.SUCCEEDED
         for event in store.events[task.task_id]
     )
+
+
+def test_pipeline_without_adapter_preserves_english_original_and_skips_translate(
+    tmp_path: Path,
+) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "english.wav"
+    _silent_wav(source)
+    store = RecordingTranscriptStore()
+    task = PipelineTask(input_path=source)
+
+    result = run_pipeline(
+        task,
+        FakeAsr(
+            AsrResult(
+                language="en",
+                segments=(AsrSegment(0.0, 0.8, "Explain AI."),),
+            )
+        ),
+        store,
+    )
+
+    assert result.translated_segments == 0
+    assert len(store.transcript_writes) == 1
+    assert store.transcript_writes[0].segments[0].text == "Explain AI."
+    assert store.transcript_writes[0].segments[0].translation is None
+    assert store.events[task.task_id][-1].stage is TaskStage.TRANSCRIBE
+
+
+def test_reclaimed_transcribe_does_not_report_extract_audio(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "reclaimed.wav"
+    _silent_wav(source)
+    store = LocalJobStore()
+    task = PipelineTask(input_path=source)
+
+    run_pipeline(
+        task,
+        FakeAsr(
+            AsrResult(
+                language="zh",
+                segments=(AsrSegment(0.0, 0.8, "恢复转写"),),
+            )
+        ),
+        store,
+        reported_stage_floor=TaskStage.TRANSCRIBE,
+    )
+
+    assert store.events[task.task_id]
+    assert all(
+        event.stage is TaskStage.TRANSCRIBE
+        for event in store.events[task.task_id]
+    )
+
+
+def test_pipeline_persists_original_then_aligned_translation(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "class.wav"
+    _silent_wav(source)
+    store = RecordingTranscriptStore()
+    task = PipelineTask(input_path=source)
+
+    result = run_pipeline(
+        task,
+        FakeAsr(
+            AsrResult(
+                language="en",
+                segments=(AsrSegment(0.0, 0.8, "Explain AI."),),
+            )
+        ),
+        store,
+        translation_adapter=FakePipelineTranslation(),
+    )
+
+    assert [event.stage for event in store.events[task.task_id]][-2:] == [
+        TaskStage.TRANSLATE,
+        TaskStage.TRANSLATE,
+    ]
+    assert len(store.transcript_writes) == 2
+    assert store.transcript_writes[0].segments[0].translation is None
+    assert store.transcript_writes[1].segments[0].text == "Explain AI."
+    assert (
+        store.transcript_writes[1].segments[0].translation
+        == "[测试译文]Explain AI."
+    )
+    assert result.translated_segments == 1
+
+
+def test_pipeline_stop_during_translation_keeps_only_original_write(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "class.wav"
+    _silent_wav(source)
+    store = RecordingTranscriptStore()
+    task = PipelineTask(input_path=source)
+    stop = threading.Event()
+
+    class StopAfterTranslation(FakePipelineTranslation):
+        def translate_batch(
+            self,
+            texts: tuple[str, ...],
+            *,
+            source_language: str,
+            target_language: str,
+        ) -> TranslationBatch:
+            result = super().translate_batch(
+                texts,
+                source_language=source_language,
+                target_language=target_language,
+            )
+            stop.set()
+            return result
+
+    with pytest.raises(WorkerError) as raised:
+        run_pipeline(
+            task,
+            FakeAsr(
+                AsrResult(
+                    language="en",
+                    segments=(AsrSegment(0.0, 0.8, "Explain AI."),),
+                )
+            ),
+            store,
+            stop_event=stop,
+            translation_adapter=StopAfterTranslation(),
+        )
+
+    assert raised.value.code is WorkerErrorCode.STOPPED
+    assert len(store.transcript_writes) == 1
+    assert store.transcript_writes[0].segments[0].translation is None
+    assert store.events[task.task_id][-1].stage is TaskStage.TRANSLATE
+    assert store.events[task.task_id][-1].progress == 0.0
 
 
 def test_claim_204_equivalent_does_not_start_heartbeat() -> None:
@@ -487,7 +762,68 @@ def test_pipeline_does_not_persist_after_lease_stop(tmp_path: Path) -> None:
 
     assert raised.value.code is WorkerErrorCode.STOPPED
     assert task.task_id not in store.transcripts
-    assert store.events[task.task_id][-1].status is TaskStatus.FAILED
+    assert task.task_id not in store.events
+
+
+def test_pipeline_does_not_persist_transcript_after_stop_during_asr(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "class.wav"
+    _silent_wav(source)
+    store = LocalJobStore()
+    task = PipelineTask(input_path=source)
+    stop = threading.Event()
+
+    class StopAfterAsr:
+        def transcribe(self, _: Path) -> AsrResult:
+            stop.set()
+            return AsrResult(
+                language="zh",
+                segments=(AsrSegment(0.0, 0.8, "不得写入"),),
+            )
+
+    with pytest.raises(WorkerError) as raised:
+        run_pipeline(task, StopAfterAsr(), store, stop_event=stop)
+
+    assert raised.value.code is WorkerErrorCode.STOPPED
+    assert task.task_id not in store.transcripts
+    assert len(store.events[task.task_id]) == 3
+    assert store.events[task.task_id][-1].stage is TaskStage.TRANSCRIBE
+    assert store.events[task.task_id][-1].progress == 0.0
+
+
+def test_pipeline_cleanup_failure_after_stop_does_not_write_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "class.wav"
+    _silent_wav(source)
+    store = LocalJobStore()
+    task = PipelineTask(input_path=source)
+    stop = threading.Event()
+    stop.set()
+
+    def cleanup_fails(_: Path) -> None:
+        raise WorkerError(
+            WorkerErrorCode.CLEANUP_FAILED,
+            "synthetic cleanup failure",
+            retryable=True,
+        )
+
+    monkeypatch.setattr("worker.pipeline.cleanup_path", cleanup_fails)
+
+    with pytest.raises(WorkerError) as raised:
+        run_pipeline(
+            task,
+            FakeAsr(AsrResult(language="zh", segments=(AsrSegment(0.0, 0.8, "x"),))),
+            store,
+            stop_event=stop,
+        )
+
+    assert raised.value.code is WorkerErrorCode.STOPPED
+    assert "CLEANUP_FAILED" in "\n".join(raised.value.__notes__)
+    assert task.task_id not in store.events
+    assert task.task_id not in store.transcripts
 
 
 def test_pipeline_failure_event_does_not_persist_sensitive_worker_detail(
@@ -557,7 +893,7 @@ def test_pipeline_cleanup_failure_overrides_success(
     with pytest.raises(WorkerError) as raised:
         run_pipeline(
             task,
-            FakeAsr(AsrResult(language="zh", segments=(AsrSegment(0, 0.8, "x"),))),
+            FakeAsr(AsrResult(language="zh", segments=(AsrSegment(0, 0.8, "中文"),))),
             store,
         )
 
@@ -825,7 +1161,12 @@ def test_download_failure_is_persisted_as_retryable_task_failure() -> None:
         size_bytes=1,
         url="https://storage.example/object?X-Amz-Signature=private",
     )
-    claim = _claim().model_copy(update={"assets": [asset]})
+    claim = _claim().model_copy(
+        update={
+            "assets": [asset],
+            "stage": TaskStage.UPLOADED,
+        }
+    )
     seen: list[tuple[str, dict[str, object]]] = []
 
     def backend_handler(request: httpx.Request) -> httpx.Response:
@@ -865,6 +1206,128 @@ def test_download_failure_is_persisted_as_retryable_task_failure() -> None:
             },
         )
     ]
+
+
+def test_reclaimed_transcribe_download_failure_stays_at_transcribe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    claim = _claim().model_copy(update={"stage": TaskStage.TRANSCRIBE})
+    store = FakeClaimingStore(claim)
+
+    @contextmanager
+    def claimed_path(*_: object):
+        raise WorkerError(
+            WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
+            "reclaimed media download failed",
+            retryable=True,
+        )
+        yield Path("unreachable")
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+
+    with pytest.raises(WorkerError) as raised:
+        _process_claimed_media(
+            claim,
+            threading.Event(),
+            store,  # type: ignore[arg-type]
+            FakeAsr(AsrResult(language="zh", segments=())),
+            None,
+            "worker-reclaimed",
+        )
+
+    assert raised.value.code is WorkerErrorCode.OBJECT_DOWNLOAD_FAILED
+    assert store.events[claim.task_id][-1].stage is TaskStage.TRANSCRIBE
+    assert store.events[claim.task_id][-1].status is TaskStatus.FAILED
+
+
+def test_reclaimed_transcribe_completes_without_backward_state_and_hands_off(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "claimed.wav"
+    _silent_wav(source)
+    claim = _claim().model_copy(update={"stage": TaskStage.TRANSCRIBE})
+    store = FakeClaimingStore(claim)
+
+    @contextmanager
+    def claimed_path(*_: object):
+        yield source
+
+    def fake_extract_audio(_: Path, output_path: Path) -> Path:
+        _silent_wav(output_path)
+        return output_path
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+    monkeypatch.setattr("worker.pipeline.extract_audio", fake_extract_audio)
+
+    result = _process_claimed_media(
+        claim,
+        threading.Event(),
+        store,  # type: ignore[arg-type]
+        FakeAsr(
+            AsrResult(
+                language="zh",
+                segments=(AsrSegment(0.0, 0.8, "续租恢复"),),
+            )
+        ),
+        None,
+        "worker-reclaimed",
+    )
+
+    assert result.transcript_segments == 1
+    assert all(
+        event.stage is TaskStage.TRANSCRIBE
+        for event in store.events[claim.task_id]
+    )
+    assert store.handoffs == [
+        (claim.task_id, InternalAgentHandoff(worker_id="worker-reclaimed"))
+    ]
+
+
+def test_reclaimed_transcribe_cleanup_failure_stays_at_transcribe(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "claimed.wav"
+    _silent_wav(source)
+    claim = _claim().model_copy(update={"stage": TaskStage.TRANSCRIBE})
+    store = FakeClaimingStore(claim)
+
+    @contextmanager
+    def claimed_path(*_: object):
+        yield source
+        raise WorkerError(
+            WorkerErrorCode.CLEANUP_FAILED,
+            "claimed media cleanup failed",
+            retryable=True,
+        )
+
+    def fake_extract_audio(_: Path, output_path: Path) -> Path:
+        _silent_wav(output_path)
+        return output_path
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+    monkeypatch.setattr("worker.pipeline.extract_audio", fake_extract_audio)
+
+    with pytest.raises(WorkerError) as raised:
+        _process_claimed_media(
+            claim,
+            threading.Event(),
+            store,  # type: ignore[arg-type]
+            FakeAsr(
+                AsrResult(
+                    language="zh",
+                    segments=(AsrSegment(0.0, 0.8, "续租恢复"),),
+                )
+            ),
+            None,
+            "worker-reclaimed",
+        )
+
+    assert raised.value.code is WorkerErrorCode.CLEANUP_FAILED
+    assert store.events[claim.task_id][-1].stage is TaskStage.TRANSCRIBE
+    assert store.events[claim.task_id][-1].status is TaskStatus.FAILED
+    assert store.handoffs == []
 
 
 def test_http_job_store_heartbeat_state_and_batch_transcript_paths() -> None:
@@ -929,6 +1392,7 @@ def test_http_job_store_heartbeat_state_and_batch_transcript_paths() -> None:
 @pytest.mark.parametrize(
     "failure",
     [
+        httpx.Response(429, json={"error": {"code": "RATE_LIMITED"}}),
         httpx.Response(503, json={"error": {"code": "UPSTREAM_UNAVAILABLE"}}),
         httpx.ReadTimeout("timed out"),
         httpx.ConnectError("offline"),
@@ -964,3 +1428,49 @@ def test_http_job_store_maps_http_timeout_and_connection_failures(
 
     assert raised.value.code is WorkerErrorCode.JOB_STORE_FAILED
     assert raised.value.retryable is True
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_http_job_store_auth_failure_is_not_retried(status_code: int) -> None:
+    store = HttpJobStore(
+        "https://backend.example",
+        "invalid-token",
+        transport=httpx.MockTransport(lambda _: httpx.Response(status_code)),
+    )
+    try:
+        with pytest.raises(WorkerError) as raised:
+            store.claim(
+                InternalTaskClaimRequest(
+                    worker_id="worker-test",
+                    stages=[TaskStage.TRANSCRIBE],
+                    lease_seconds=30,
+                )
+            )
+    finally:
+        store.close()
+
+    assert raised.value.code is WorkerErrorCode.JOB_STORE_AUTH_FAILED
+    assert raised.value.platform_code is ErrorCode.UNAUTHENTICATED
+    assert raised.value.retryable is False
+
+
+def test_http_job_store_non_transient_client_failure_is_not_retried() -> None:
+    store = HttpJobStore(
+        "https://backend.example",
+        "token",
+        transport=httpx.MockTransport(lambda _: httpx.Response(422)),
+    )
+    try:
+        with pytest.raises(WorkerError) as raised:
+            store.claim(
+                InternalTaskClaimRequest(
+                    worker_id="worker-test",
+                    stages=[TaskStage.TRANSCRIBE],
+                    lease_seconds=30,
+                )
+            )
+    finally:
+        store.close()
+
+    assert raised.value.code is WorkerErrorCode.JOB_STORE_FAILED
+    assert raised.value.retryable is False

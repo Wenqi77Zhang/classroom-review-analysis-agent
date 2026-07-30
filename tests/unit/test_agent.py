@@ -96,21 +96,32 @@ def _evidence(
     task_id: UUID,
     owner_id: UUID,
     evidence_id: UUID | None = None,
+    source_type: EvidenceSourceType = EvidenceSourceType.TRANSCRIPT,
     start_ms: int = 1200,
     end_ms: int = 4200,
     text: str = "教师提出问题后停顿三秒，然后邀请学生回答。",
     translation: str | None = None,
 ) -> EvidenceItem:
+    reference = (
+        EvidenceReference(
+            source_type=source_type,
+            asset_id=uuid4(),
+            page_no=2,
+            quote=text,
+        )
+        if source_type is EvidenceSourceType.COURSEWARE
+        else EvidenceReference(
+            source_type=source_type,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            quote=text,
+        )
+    )
     return EvidenceItem(
         id=evidence_id or uuid4(),
         task_id=task_id,
         owner_id=owner_id,
-        reference=EvidenceReference(
-            source_type=EvidenceSourceType.TRANSCRIPT,
-            start_ms=start_ms,
-            end_ms=end_ms,
-            quote="教师提出问题后停顿三秒。",
-        ),
+        reference=reference,
         text=text,
         translation=translation,
     )
@@ -658,6 +669,38 @@ async def test_bilingual_contract_rejects_missing_translation_before_model_call(
 
     assert captured.value.code is AgentErrorCode.BILINGUAL_EVIDENCE_INCOMPLETE
     assert provider.requests == []
+
+
+@pytest.mark.asyncio
+async def test_bilingual_contract_does_not_require_translation_for_courseware() -> None:
+    task_id = uuid4()
+    owner_id = uuid4()
+    evidence = _evidence(
+        task_id=task_id,
+        owner_id=owner_id,
+        source_type=EvidenceSourceType.COURSEWARE,
+        text="中文课件内容",
+        translation=None,
+    )
+    provider = FakeProvider(_model_data(evidence.id))
+    analysis_input = AnalysisInput(
+        task_id=task_id,
+        owner_id=owner_id,
+        contract=AnalysisContract(
+            goal="双语复盘",
+            focus_areas=["讲解"],
+            bilingual_required=True,
+            confirmed=True,
+        ),
+        evidence=[evidence],
+    )
+
+    result = await AgentOrchestrator(
+        providers=ProviderRouter(local=provider)
+    ).analyze(analysis_input)
+
+    assert result.conclusions.conclusions
+    assert len(provider.requests) == 1
 
 
 @pytest.mark.asyncio
