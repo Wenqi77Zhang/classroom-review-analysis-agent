@@ -22,6 +22,7 @@ dependencies = [
   "pyjwt>=2.13,<3.0",
   "argon2-cffi>=25.1,<26.0",
   "boto3>=1.43,<2.0",
+  "reportlab>=5.0,<6.0",
   # TODO(成员 5)：Agent 模型与可观测依赖在此追加。
 ]
 
@@ -30,8 +31,6 @@ dev = [
   "pytest>=9.1,<10.0",
   "pytest-asyncio>=1.4,<2.0",
   "httpx>=0.28,<1.0",
-  # 仅用于运行时生成带文字的合成 PDF 测试输入，不进入 Worker 生产依赖。
-  "reportlab>=5.0,<6.0",
   # 解析器属于 Worker；测试也需导入，dev 重复声明以免 CI 安装 Whisper。
   "pypdf>=6.14,<7.0",
   "python-pptx>=1.0,<2.0",

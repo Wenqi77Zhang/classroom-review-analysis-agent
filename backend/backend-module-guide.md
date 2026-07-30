@@ -22,14 +22,14 @@
 | `app/config.py` | **已实现**，启动即校验、密钥 `SecretStr` 不可打印 |
 | `app/database.py` | **已实现**，async 引擎、会话工厂、请求级事务 |
 | `app/errors.py` | **已实现**（新增文件，见下） |
-| `app/main.py` | **部分实现**：全局能力、健康检查，并已注册认证、课程、课堂、上传、任务、逐字稿和分析路由 |
+| `app/main.py` | **部分实现**：全局能力、健康检查，并已注册认证、课程、课堂、上传、任务、逐字稿、分析、审计和报告路由 |
 | `app/models/` | **已实现**：15 张业务/关联表；关键跨资源关系用 `(资源 ID, owner_id)` 复合外键阻止跨账号串联 |
 | 认证与课程/课堂 API | **已实现 M1 最短边界**：登录、可选演示账号、`/auth/me`、课程与课堂读写 |
 | 对象存储与上传 API | **已实现**：S3 Provider、预签名上传、HEAD 完成核验、限时下载地址和未关联对象删除 |
 | 任务 API | **已实现最短边界**：创建/读取/列表、事件、失败重试、取消，以及 Worker/Agent 领取、心跳和状态回写 |
 | 逐字稿 API | **已实现最短边界**：教师读取/编辑与 Worker 批量写入 |
-| 分析结论 API | **部分实现**：教师读取与 Agent 批量写入已实现；教师接受/修改/驳回和历史尚未实现 |
-| 报告 API | **尚未实现**：`app/api/reports.py` 仍为保存、预览和导出的 `TODO` |
+| 分析结论 API | **已实现最短边界**：教师读取与复核历史、Agent 批量写入、教师接受/修改/驳回 |
+| 报告 API | **已实现服务端边界**：受控正文读取/保存，以及 Markdown、HTML、PDF 对象导出和限时下载 |
 | `migrations/` | **已实现首个迁移** `0b5123afcf23`；PostgreSQL 17 CI 已验证 `upgrade → downgrade → upgrade` 与无模型漂移 |
 | 后端自动测试 | **已实现**：含真实 PostgreSQL 持久化、跨账号写入拒绝、审计保留与 HTTP 登录/课堂流程 |
 
@@ -52,7 +52,8 @@
 | ORM | SQLAlchemy 2.0 async + asyncpg | Worker 长轮询与前端并发查询共存，异步可避免连接池被拖死 |
 | 迁移 | Alembic | "迁移可由他人复现"是完成定义之一 |
 | 数据库 | PostgreSQL 17 | 需要 JSONB（`evidence_refs`、Trace 元数据）、`ON CONFLICT`（任务领取幂等）与事务隔离（多 Worker 抢任务） |
-| 对象存储 | **Backblaze B2**（M1 默认，走其 S3 兼容 API）+ boto3 预签名；本地可用 MinIO 替代 | 供应商由成员 1 确定。`generate_presigned_url` 是纯本地签名计算、无网络 IO，在 async 路由中调用不阻塞事件循环。变量名保持通用（`OBJECT_STORAGE_*`），换供应商不必改前端、数据库与 Worker |
+| 对象存储 | **Backblaze B2**（M1 默认，走其 S3 兼容 API）+ boto3 预签名；本地可用 MinIO 替代 | 供应商由成员 1 确定。`generate_presigned_url` 是纯本地签名计算；上传核验、服务端报告写入和删除通过异步线程边界执行。变量名保持通用（`OBJECT_STORAGE_*`），换供应商不必改前端、数据库与 Worker |
+| 报告渲染 | ReportLab | 服务端生成支持中文的 PDF；Markdown/HTML 使用标准库并对 HTML 转义，不执行报告正文中的标签或脚本 |
 | 认证 | PyJWT + argon2-cffi | 无状态 JWT 便于 Worker/Agent 用同机制回写；Argon2 为当前口令哈希首选 |
 | 测试 | pytest + pytest-asyncio + httpx | 不用 SQLite 替身：账号隔离、JSONB 与事务语义要真 Postgres 才算数 |
 
@@ -67,7 +68,7 @@
 fastapi==0.140.0        uvicorn==0.51.0        pydantic==2.13.4
 pydantic-settings==2.14.2  SQLAlchemy==2.0.51  asyncpg==0.31.0
 alembic==1.18.5         PyJWT==2.13.0          argon2-cffi==25.1.0
-boto3==1.43.56
+boto3==1.43.56         reportlab==4.5.1
 pytest==9.1.1           pytest-asyncio==1.4.0  httpx==0.28.1   ruff==0.16.0
 ```
 
@@ -103,7 +104,7 @@ compose 里的 MinIO 只是**离线开发替代品**，便于无 B2 凭据时也
 `MINIO_API_CORS_ALLOW_ORIGIN` 收紧到 `FRONTEND_ORIGIN`。
 
 两者的差异由 `app/services/storage.py` 的统一 S3 Provider 边界吸收；上传路由
-通过 `ObjectStorage` 接口使用预签名、HEAD、下载和删除能力，不直接绑定 B2 SDK。
+通过 `ObjectStorage` 接口使用预签名、服务端写入、HEAD、下载和删除能力，不直接绑定 B2 SDK。
 
 启动后端（用工厂而非模块级实例，配置缺失会在启动命令处明确报错）：
 
@@ -153,8 +154,8 @@ compose 里的 MinIO 只是**离线开发替代品**，便于无 B2 凭据时也
 
 ## 已知限制
 
-- 认证、课程/课堂、上传、任务、逐字稿、分析、教师复核和报告读取/保存的最短 API
-  已实现；服务端 DOCX/PDF 导出接口仍是 `TODO`。
+- 认证、课程/课堂、上传、任务、逐字稿、分析、教师复核、报告读取/保存及
+  Markdown/HTML/PDF 服务端导出的最短 API 已实现；DOCX 不在冻结格式内，仍未实现。
 - API 集成测试会以内部接口模拟 Worker/Agent 回写，不等于真实 Worker、真实模型或
   浏览器到报告的端到端运行。
 - PR #20 已通过后端签发的限时只读 URL 让 Worker 从 B2 取得浏览器上传对象，

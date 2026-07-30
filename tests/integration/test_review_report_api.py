@@ -30,6 +30,32 @@ from backend.app.models.review_report import report_conclusions
 from backend.app.schemas.analysis_report import ConclusionType, ReviewStatus
 from backend.app.schemas.task import TaskStage, TaskStatus
 from backend.app.services.authentication import hash_password
+from backend.app.services.storage import ObjectMetadata
+
+
+class FakeObjectStorage:
+    def __init__(self) -> None:
+        self.objects: dict[str, ObjectMetadata] = {}
+        self.contents: dict[str, bytes] = {}
+
+    async def presign_upload(self, object_key: str, content_type: str) -> str:
+        return f"https://storage.invalid/upload/{object_key}"
+
+    async def presign_download(self, object_key: str) -> str:
+        return f"https://storage.invalid/download/{object_key}"
+
+    async def put(self, object_key: str, content: bytes, content_type: str) -> None:
+        self.contents[object_key] = content
+        self.objects[object_key] = ObjectMetadata(
+            size_bytes=len(content), content_type=content_type
+        )
+
+    async def head(self, object_key: str) -> ObjectMetadata | None:
+        return self.objects.get(object_key)
+
+    async def delete(self, object_key: str) -> None:
+        self.objects.pop(object_key, None)
+        self.contents.pop(object_key, None)
 
 
 def api_settings(database_url: str) -> Settings:
@@ -74,6 +100,8 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
 
     app = create_app(settings)
     app.dependency_overrides[get_db] = test_db
+    storage = FakeObjectStorage()
+    app.state.object_storage = storage
 
     try:
         async with factory.begin() as session:
@@ -269,6 +297,7 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
                 f"/api/classrooms/{classroom_id}/report", headers=first_headers
             )
             assert saved_report.status_code == 200
+            report_id = saved_report.json()["id"]
             assert saved_report.json()["title"] in {
                 "Concurrent Report A",
                 "Concurrent Report B",
@@ -296,11 +325,72 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
             assert gated_report.json()["content"] == "- teacher revision"
             assert "model-content-0" not in gated_report.json()["content"]
 
+            missing_export = await client.get(
+                f"/api/reports/{report_id}/export/markdown", headers=first_headers
+            )
+            assert missing_export.status_code == 404
+
+            exported_keys: dict[str, str] = {}
+            for export_format in ("markdown", "html", "pdf"):
+                exported = await client.post(
+                    f"/api/reports/{report_id}/export",
+                    json={"format": export_format},
+                    headers=first_headers,
+                )
+                assert exported.status_code == 201
+                assert exported.json()["format"] == export_format
+                object_key = exported.json()["download_url"].removeprefix(
+                    "https://storage.invalid/download/"
+                )
+                exported_keys[export_format] = object_key
+                assert str(first_id) in object_key
+                assert str(report_id) in object_key
+
+                existing_export = await client.get(
+                    f"/api/reports/{report_id}/export/{export_format}",
+                    headers=first_headers,
+                )
+                assert existing_export.status_code == 200
+                assert existing_export.json()["download_url"] == exported.json()[
+                    "download_url"
+                ]
+
+            markdown = storage.contents[exported_keys["markdown"]].decode()
+            html = storage.contents[exported_keys["html"]].decode()
+            assert markdown == f"# {saved_report.json()['title']}\n\n- teacher revision\n"
+            assert "teacher revision" in html
+            assert "model-content-0" not in html
+            assert storage.contents[exported_keys["pdf"]].startswith(b"%PDF-")
+
+            cross_account_export = await client.post(
+                f"/api/reports/{report_id}/export",
+                json={"format": "markdown"},
+                headers=second_headers,
+            )
+            assert cross_account_export.status_code == 404
+
+            reject_last_reportable = await client.post(
+                f"/api/conclusions/{conclusion_ids[1]}/review",
+                json={"action": "reject"},
+                headers=first_headers,
+            )
+            assert reject_last_reportable.status_code == 201
+            stale_export = await client.get(
+                f"/api/reports/{report_id}/export/markdown", headers=first_headers
+            )
+            assert stale_export.status_code == 404
+            empty_report = await client.get(
+                f"/api/classrooms/{classroom_id}/report", headers=first_headers
+            )
+            assert empty_report.json()["content"] == ""
+            assert empty_report.json()["included_conclusion_ids"] == []
+
         async with factory() as session:
             stored_report = await session.scalar(
                 select(Report).where(Report.classroom_id == classroom_id)
             )
             assert stored_report is not None
+            assert stored_report.export_object_key is None
             events = list(
                 await session.scalars(
                     select(AuditEvent)
@@ -309,13 +399,19 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
                 )
             )
             assert Counter(event.action for event in events) == Counter(
-                {"conclusion.reviewed": 4, "report.created": 1, "report.updated": 1}
+                {
+                    "conclusion.reviewed": 5,
+                    "report.created": 1,
+                    "report.updated": 1,
+                    "report.exported": 3,
+                }
             )
             serialized_details = repr([event.details for event in events])
             assert "private teacher note" not in serialized_details
             assert "teacher revision" not in serialized_details
             assert "model-content-0" not in serialized_details
             assert "pending model-content-3" not in serialized_details
+            assert "storage.invalid" not in serialized_details
     finally:
         async with factory.begin() as session:
             await session.execute(

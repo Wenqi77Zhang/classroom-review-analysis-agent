@@ -132,6 +132,25 @@ async def get_report(
     return report
 
 
+async def get_report_for_export(
+    session: AsyncSession,
+    *,
+    owner_id: UUID,
+    report_id: UUID,
+) -> Report:
+    initial = await session.scalar(
+        select(Report).where(Report.id == report_id, Report.owner_id == owner_id)
+    )
+    if initial is None:
+        raise NotFoundError()
+    await _lock_classroom(session, owner_id, initial.classroom_id)
+    report = await _find_report(session, owner_id, initial.classroom_id)
+    if report is None:
+        raise NotFoundError()
+    await _sync_report_content(session, report, owner_id, report.classroom_id)
+    return report
+
+
 async def _lock_classroom(
     session: AsyncSession, owner_id: UUID, classroom_id: UUID
 ) -> Classroom:
@@ -196,9 +215,20 @@ async def _sync_report_content(
     classroom_id: UUID,
 ) -> None:
     reportable = await _reportable_conclusions(session, owner_id, classroom_id)
-    report.conclusions = reportable
-    report.content = _compose_report_content(reportable)
+    _replace_report_content(report, reportable)
     await session.flush()
+
+
+def _replace_report_content(
+    report: Report, reportable: list[AnalysisConclusion]
+) -> None:
+    content = _compose_report_content(reportable)
+    current_ids = {conclusion.id for conclusion in report.conclusions}
+    reportable_ids = {conclusion.id for conclusion in reportable}
+    if report.content != content or current_ids != reportable_ids:
+        report.export_object_key = None
+    report.conclusions = reportable
+    report.content = content
 
 
 async def upsert_report(
@@ -224,9 +254,10 @@ async def upsert_report(
         session.add(report)
         await session.flush()
     else:
+        if report.title != body.title:
+            report.export_object_key = None
         report.title = body.title
-        report.content = _compose_report_content(reportable)
-        report.conclusions = reportable
+        _replace_report_content(report, reportable)
     await session.flush()
     if not created:
         await session.refresh(report, attribute_names=["updated_at"])
