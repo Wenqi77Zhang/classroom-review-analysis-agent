@@ -6,6 +6,7 @@ import shutil
 import threading
 import time
 import wave
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -498,6 +499,33 @@ def test_pipeline_without_adapter_preserves_english_original_and_skips_translate
     assert store.transcript_writes[0].segments[0].text == "Explain AI."
     assert store.transcript_writes[0].segments[0].translation is None
     assert store.events[task.task_id][-1].stage is TaskStage.TRANSCRIBE
+
+
+def test_reclaimed_transcribe_does_not_report_extract_audio(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "reclaimed.wav"
+    _silent_wav(source)
+    store = LocalJobStore()
+    task = PipelineTask(input_path=source)
+
+    run_pipeline(
+        task,
+        FakeAsr(
+            AsrResult(
+                language="zh",
+                segments=(AsrSegment(0.0, 0.8, "恢复转写"),),
+            )
+        ),
+        store,
+        reported_stage_floor=TaskStage.TRANSCRIBE,
+    )
+
+    assert store.events[task.task_id]
+    assert all(
+        event.stage is TaskStage.TRANSCRIBE
+        for event in store.events[task.task_id]
+    )
 
 
 def test_pipeline_persists_original_then_aligned_translation(tmp_path: Path) -> None:
@@ -1108,7 +1136,12 @@ def test_download_failure_is_persisted_as_retryable_task_failure() -> None:
         size_bytes=1,
         url="https://storage.example/object?X-Amz-Signature=private",
     )
-    claim = _claim().model_copy(update={"assets": [asset]})
+    claim = _claim().model_copy(
+        update={
+            "assets": [asset],
+            "stage": TaskStage.UPLOADED,
+        }
+    )
     seen: list[tuple[str, dict[str, object]]] = []
 
     def backend_handler(request: httpx.Request) -> httpx.Response:
@@ -1148,6 +1181,118 @@ def test_download_failure_is_persisted_as_retryable_task_failure() -> None:
             },
         )
     ]
+
+
+def test_reclaimed_transcribe_download_failure_stays_at_transcribe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    claim = _claim().model_copy(update={"stage": TaskStage.TRANSCRIBE})
+    store = FakeClaimingStore(claim)
+
+    @contextmanager
+    def claimed_path(*_: object):
+        raise WorkerError(
+            WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
+            "reclaimed media download failed",
+            retryable=True,
+        )
+        yield Path("unreachable")
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+
+    with pytest.raises(WorkerError) as raised:
+        _process_claimed_media(
+            claim,
+            threading.Event(),
+            store,  # type: ignore[arg-type]
+            FakeAsr(AsrResult(language="zh", segments=())),
+            None,
+            "worker-reclaimed",
+        )
+
+    assert raised.value.code is WorkerErrorCode.OBJECT_DOWNLOAD_FAILED
+    assert store.events[claim.task_id][-1].stage is TaskStage.TRANSCRIBE
+    assert store.events[claim.task_id][-1].status is TaskStatus.FAILED
+
+
+def test_reclaimed_transcribe_completes_without_backward_state_and_hands_off(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "claimed.wav"
+    _silent_wav(source)
+    claim = _claim().model_copy(update={"stage": TaskStage.TRANSCRIBE})
+    store = FakeClaimingStore(claim)
+
+    @contextmanager
+    def claimed_path(*_: object):
+        yield source
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+
+    result = _process_claimed_media(
+        claim,
+        threading.Event(),
+        store,  # type: ignore[arg-type]
+        FakeAsr(
+            AsrResult(
+                language="zh",
+                segments=(AsrSegment(0.0, 0.8, "续租恢复"),),
+            )
+        ),
+        None,
+        "worker-reclaimed",
+    )
+
+    assert result.transcript_segments == 1
+    assert all(
+        event.stage is TaskStage.TRANSCRIBE
+        for event in store.events[claim.task_id]
+    )
+    assert store.handoffs == [
+        (claim.task_id, InternalAgentHandoff(worker_id="worker-reclaimed"))
+    ]
+
+
+def test_reclaimed_transcribe_cleanup_failure_stays_at_transcribe(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "claimed.wav"
+    _silent_wav(source)
+    claim = _claim().model_copy(update={"stage": TaskStage.TRANSCRIBE})
+    store = FakeClaimingStore(claim)
+
+    @contextmanager
+    def claimed_path(*_: object):
+        yield source
+        raise WorkerError(
+            WorkerErrorCode.CLEANUP_FAILED,
+            "claimed media cleanup failed",
+            retryable=True,
+        )
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+
+    with pytest.raises(WorkerError) as raised:
+        _process_claimed_media(
+            claim,
+            threading.Event(),
+            store,  # type: ignore[arg-type]
+            FakeAsr(
+                AsrResult(
+                    language="zh",
+                    segments=(AsrSegment(0.0, 0.8, "续租恢复"),),
+                )
+            ),
+            None,
+            "worker-reclaimed",
+        )
+
+    assert raised.value.code is WorkerErrorCode.CLEANUP_FAILED
+    assert store.events[claim.task_id][-1].stage is TaskStage.TRANSCRIBE
+    assert store.events[claim.task_id][-1].status is TaskStatus.FAILED
+    assert store.handoffs == []
 
 
 def test_http_job_store_heartbeat_state_and_batch_transcript_paths() -> None:

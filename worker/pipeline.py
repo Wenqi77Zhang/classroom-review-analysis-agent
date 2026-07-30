@@ -54,23 +54,49 @@ def run_pipeline(
     *,
     stop_event: Event | None = None,
     translation_adapter: TranslationAdapter | None = None,
+    reported_stage_floor: TaskStage = TaskStage.EXTRACT_AUDIO,
 ) -> PipelineResult:
+    if reported_stage_floor not in {
+        TaskStage.UPLOADED,
+        TaskStage.EXTRACT_AUDIO,
+        TaskStage.TRANSCRIBE,
+    }:
+        raise ValueError("reported_stage_floor must be a media input stage")
+
     work_dir = Path(tempfile.mkdtemp(prefix=f"classroom-worker-{task.task_id}-"))
     audio_path = work_dir / "audio.wav"
-    current_stage = TaskStage.EXTRACT_AUDIO
+    current_stage = (
+        TaskStage.TRANSCRIBE
+        if reported_stage_floor is TaskStage.TRANSCRIBE
+        else TaskStage.EXTRACT_AUDIO
+    )
     pipeline_failure: BaseException | None = None
     try:
         _raise_if_stopped(stop_event)
-        store.update_state(
-            task.task_id,
-            _state(current_stage, TaskStatus.RUNNING, 0.05, task.trace_id, message="正在抽取音频"),
-        )
+        if current_stage is TaskStage.EXTRACT_AUDIO:
+            store.update_state(
+                task.task_id,
+                _state(
+                    current_stage,
+                    TaskStatus.RUNNING,
+                    0.05,
+                    task.trace_id,
+                    message="正在抽取音频",
+                ),
+            )
         extract_audio(task.input_path, audio_path)
         _raise_if_stopped(stop_event)
-        store.update_state(
-            task.task_id,
-            _state(current_stage, TaskStatus.RUNNING, 1.0, task.trace_id, message="音频抽取完成"),
-        )
+        if current_stage is TaskStage.EXTRACT_AUDIO:
+            store.update_state(
+                task.task_id,
+                _state(
+                    current_stage,
+                    TaskStatus.RUNNING,
+                    1.0,
+                    task.trace_id,
+                    message="音频抽取完成",
+                ),
+            )
 
         current_stage = TaskStage.TRANSCRIBE
         store.update_state(

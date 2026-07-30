@@ -215,6 +215,7 @@ def _process_claimed_media(
                 store,
                 stop_event=stop,
                 translation_adapter=translation_adapter,
+                reported_stage_floor=claim.stage,
             )
             pipeline_completed = True
         store.handoff_agent(
@@ -228,7 +229,12 @@ def _process_claimed_media(
         # run_pipeline 自己记录其内部失败。下载尚未进入 pipeline，或 pipeline
         # 成功后外层下载目录清理失败时，必须由 runner 补写真实失败状态。
         if not pipeline_started or pipeline_completed:
-            stage = TaskStage.EXTRACT_AUDIO if not pipeline_started else TaskStage.TRANSLATE
+            if claim.stage is TaskStage.TRANSCRIBE:
+                stage = TaskStage.TRANSCRIBE
+            elif pipeline_completed and translation_adapter is not None:
+                stage = TaskStage.TRANSLATE
+            else:
+                stage = TaskStage.EXTRACT_AUDIO
             store.update_state(
                 claim.task_id,
                 InternalTaskStateUpdate(
