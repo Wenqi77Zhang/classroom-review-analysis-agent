@@ -4,9 +4,9 @@
 
 目的：把对象存储中的视频和课件加工成可检索证据。Worker 不生成教学判断。
 
-当前最短闭环已经实现：
+当前媒体闭环已经实现：
 
-`真实视频 → FFmpeg 16 kHz 单声道 WAV → 本地 Whisper → 带毫秒时间戳逐字稿 → JobStore`
+`真实视频 → FFmpeg 16 kHz 单声道 WAV → 本地 Whisper → 带毫秒时间戳逐字稿 → 语言检测 → 可替换翻译边界 → JobStore`
 
 ## 本地运行
 
@@ -47,18 +47,83 @@ ETag 与上传完成时后端 HEAD 保存的 ETag 对照；成功、失败或租
 只能通过环境变量或部署密钥注入。
 
 ```bash
-WORKER_SERVICE_TOKEN="..." python -m worker.runner \
+export WORKER_SERVICE_TOKEN
+python -m worker.runner \
   --api-base-url http://127.0.0.1:8000 \
   --model tiny
 ```
 
+远程模式默认常驻轮询。没有任务时按 `WORKER_POLL_INTERVAL_SECONDS=5` 等待；连接、
+限流和后端临时故障从 1 秒开始退避，最大不超过
+`WORKER_MAX_BACKOFF_SECONDS=30`。401/403 鉴权失败和其他不可重试的客户端错误会立即
+退出，不会无限请求。`SIGINT`/`SIGTERM` 会触发安全停止；租约已停止后不再写入任务状态
+或逐字稿。
+
+`--once` 只用于诊断，一次请求领取后即退出：
+
+```bash
+python -m worker.runner \
+  --api-base-url http://127.0.0.1:8000 \
+  --model tiny \
+  --once
+```
+
 `--object-root` 仅保留给 MinIO 本地挂载等离线调试；B2 正常模式无需配置本地对象目录。
+
+## 翻译阶段
+
+`translate` 内部阶段复用现有逐字稿整批写入接口，不新增后端 API。它逐句检测中文、
+英文和中英混合文本；英文与混合片段只写 `translation`，原始 `text`、时间戳、句序和
+说话人字段保持不变。中文逐字稿不调用翻译适配器。
+
+当前只完成了可替换 `TranslationAdapter` 契约、确定性语言检测和失败门禁。测试中的
+`fake-translation-for-tests` 只验证逐句对齐，不能作为真实翻译验收。组长尚未确认候选
+模型的 revision、许可证、权重大小和运行要求，因此：
+
+- 没有新增或下载真实翻译模型；
+- 没有把测试译文写成真实验收结果；
+- 远程 Worker 未配置真实 `TranslationAdapter` 时停在
+  `transcribe / running / 1.0`，通过现有 `handoff-agent` 交给 Agent，不进入
+  `translate`；
+- 直接调用内部翻译阶段处理英文/中英混合逐字稿时仍然 fail closed，未配置适配器会返回
+  `TRANSLATION_UNAVAILABLE`；
+- `translate`、`parse_courseware` 和 `build_evidence_index` 当前都是经过单元测试的
+  内部能力，尚未接入远程纵向链路。
+
+## 课件与证据草稿
+
+P0 已支持按可信 MIME 解析 PDF 和 PPTX：
+
+- PDF 提取每页文字并保留从 1 开始的页码；
+- PPTX 按幻灯片顺序提取文本框、表格单元格和已有备注；
+- 加密、损坏、空页集、页数超限或不支持的 MIME 会返回稳定错误；
+- 异常信息不包含本地绝对路径或课件正文。
+
+`build_evidence_index` 会把逐字稿时间段生成 TRANSCRIPT 证据，把非空课件页生成
+COURSEWARE 证据。它不会把音频转写伪装成 VIDEO/FRAME 视觉证据；视觉证据必须等待真实
+画面处理或人工定位。证据 ID 对同一任务、来源、定位和正文哈希保持确定性；每条证据都通过
+成员 3 已有的 `EvidenceReference` 定位校验。当前产物只在内存中，未伪造数据库
+`segment_id`，也未写入后端。
+
+页面 PNG、截图对象引用和派生资源上传仍是 P1。最新 `main` 已提供基础
+`handoff-agent`：Worker 写回逐字稿后可以把任务交给 Agent，后端从逐字稿生成领取包。
+独立课件/画面证据的持久化、版本冻结和审计仍须等待成员 3 审核
+`worker/m1-backend-contract-proposal.md` 并冻结契约。
 
 ## 当前边界
 
 - 已实现并通过真实输入验收：`HttpJobStore` 领取 `uploaded` 任务、对象存储限时下载、
   文件大小与已验证 ETag 校验、真实视频读取、音频抽取、带时间戳 ASR、租约心跳、
-  状态回写、逐字稿写入、失败记录和临时文件清理。
-- 待实现或待串联：长音频切片、逐句翻译、课件解析、证据索引，以及向 Agent
-  阶段的任务交接。
+  状态回写、逐字稿写入、失败记录、临时文件清理，以及单 Worker 常驻轮询与有界退避。
+- M1 只允许部署一个 Worker。成员 3 冻结并实现 `lease_id` fencing 前，不声称多 Worker
+  并发安全，也不横向扩容。
+- `transcribe` 租约过期后可由新 Worker 在同阶段恢复。本地重新下载视频和准备音频不会
+  回写更早的数据库阶段；下载、媒体处理或清理失败也保持在 `transcribe` 并使用现有稳定
+  错误码。
+- 待实现或待串联：真实本地翻译适配器、长音频切片，以及课件/画面/独立证据的后端
+  持久化和 Agent 领取；基于逐字稿的基础 Agent 交接已经接通。
+- 第二段非预置视频的完整远程链路、真实翻译、课件/独立证据持久化和阶段化教师重试仍
+  未完成，不能以内部单元测试替代这些验收。
+- 独立指标 HTTP 端口、完整生产容器和高级退避指标属于 P1，本次常驻实现只有不含租户
+  数据的进程内计数。
 - 未实现说话人分离，因此 `speaker` 为 `null`，不伪造教师或学生身份。

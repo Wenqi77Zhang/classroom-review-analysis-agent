@@ -9,11 +9,13 @@ from threading import Event
 from backend.app.schemas.common import ErrorCode
 from backend.app.schemas.task import InternalTaskStateUpdate, TaskStage, TaskStatus
 from worker.adapters.asr import AsrAdapter
+from worker.adapters.translation import TranslationAdapter
 from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_message
 from worker.job_store import JobStore
 from worker.stages.extract_audio import extract_audio
 from worker.stages.transcribe import transcribe_audio
+from worker.stages.translate import translate_transcript
 from worker.types import PipelineResult, PipelineTask
 
 
@@ -51,23 +53,50 @@ def run_pipeline(
     store: JobStore,
     *,
     stop_event: Event | None = None,
+    translation_adapter: TranslationAdapter | None = None,
+    reported_stage_floor: TaskStage = TaskStage.EXTRACT_AUDIO,
 ) -> PipelineResult:
+    if reported_stage_floor not in {
+        TaskStage.UPLOADED,
+        TaskStage.EXTRACT_AUDIO,
+        TaskStage.TRANSCRIBE,
+    }:
+        raise ValueError("reported_stage_floor must be a media input stage")
+
     work_dir = Path(tempfile.mkdtemp(prefix=f"classroom-worker-{task.task_id}-"))
     audio_path = work_dir / "audio.wav"
-    current_stage = TaskStage.EXTRACT_AUDIO
+    current_stage = (
+        TaskStage.TRANSCRIBE
+        if reported_stage_floor is TaskStage.TRANSCRIBE
+        else TaskStage.EXTRACT_AUDIO
+    )
     pipeline_failure: BaseException | None = None
     try:
         _raise_if_stopped(stop_event)
-        store.update_state(
-            task.task_id,
-            _state(current_stage, TaskStatus.RUNNING, 0.05, task.trace_id, message="正在抽取音频"),
-        )
+        if current_stage is TaskStage.EXTRACT_AUDIO:
+            store.update_state(
+                task.task_id,
+                _state(
+                    current_stage,
+                    TaskStatus.RUNNING,
+                    0.05,
+                    task.trace_id,
+                    message="正在抽取音频",
+                ),
+            )
         extract_audio(task.input_path, audio_path)
         _raise_if_stopped(stop_event)
-        store.update_state(
-            task.task_id,
-            _state(current_stage, TaskStatus.RUNNING, 1.0, task.trace_id, message="音频抽取完成"),
-        )
+        if current_stage is TaskStage.EXTRACT_AUDIO:
+            store.update_state(
+                task.task_id,
+                _state(
+                    current_stage,
+                    TaskStatus.RUNNING,
+                    1.0,
+                    task.trace_id,
+                    message="音频抽取完成",
+                ),
+            )
 
         current_stage = TaskStage.TRANSCRIBE
         store.update_state(
@@ -87,13 +116,50 @@ def run_pipeline(
                 message="逐字稿已生成，等待下一阶段",
             ),
         )
+
+        if translation_adapter is None:
+            return PipelineResult(
+                task_id=task.task_id,
+                transcript_segments=len(transcript.segments),
+                translated_segments=0,
+                duration_ms=transcript.duration_ms,
+            )
+
+        current_stage = TaskStage.TRANSLATE
+        store.update_state(
+            task.task_id,
+            _state(current_stage, TaskStatus.RUNNING, 0.0, task.trace_id, message="正在逐句翻译"),
+        )
+        translated = translate_transcript(
+            transcript,
+            translation_adapter,
+            stop_event=stop_event,
+        )
+        _raise_if_stopped(stop_event)
+        store.save_transcript(task.task_id, translated)
+        store.update_state(
+            task.task_id,
+            _state(
+                current_stage,
+                TaskStatus.RUNNING,
+                1.0,
+                task.trace_id,
+                message="逐句翻译完成，等待下一阶段",
+            ),
+        )
         return PipelineResult(
             task_id=task.task_id,
             transcript_segments=len(transcript.segments),
+            translated_segments=sum(
+                bool((segment.translation or "").strip())
+                for segment in translated.segments
+            ),
             duration_ms=transcript.duration_ms,
         )
     except WorkerError as exc:
         pipeline_failure = exc
+        if exc.code is WorkerErrorCode.STOPPED:
+            raise
         store.update_state(
             task.task_id,
             _state(
@@ -126,20 +192,25 @@ def run_pipeline(
         except WorkerError as cleanup_error:
             if pipeline_failure is not None:
                 pipeline_failure.add_note(f"{cleanup_error.code}: {cleanup_error}")
-                store.update_state(
-                    task.task_id,
-                    _state(
-                        current_stage,
-                        TaskStatus.FAILED,
-                        0.0,
-                        task.trace_id,
-                        message=(
-                            f"{type(pipeline_failure).__name__}; "
-                            f"{cleanup_error.code}: 临时媒体清理失败"
-                        ),
-                        error_code=cleanup_error.platform_code,
-                    ),
+                stopped = (
+                    isinstance(pipeline_failure, WorkerError)
+                    and pipeline_failure.code is WorkerErrorCode.STOPPED
                 )
+                if not stopped:
+                    store.update_state(
+                        task.task_id,
+                        _state(
+                            current_stage,
+                            TaskStatus.FAILED,
+                            0.0,
+                            task.trace_id,
+                            message=(
+                                f"{type(pipeline_failure).__name__}; "
+                                f"{cleanup_error.code}: 临时媒体清理失败"
+                            ),
+                            error_code=cleanup_error.platform_code,
+                        ),
+                    )
             else:
                 store.update_state(
                     task.task_id,

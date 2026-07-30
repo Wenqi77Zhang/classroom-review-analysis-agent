@@ -20,6 +20,8 @@
 6. 文档同步后复跑 Agent、Trace、报告过滤和统一启动定向测试：`36 passed`。
 7. PR #31 GitHub Actions：scaffold、backend-check、frontend-check 全绿；PostgreSQL
    后端全仓 `190 passed, 5 skipped`，Ruff 通过。
+8. 同步已修复并合并的 PR #27 后，两类专业 Skill、证据校验器及 Worker 新阶段专项
+   `63 passed`；完整发布门禁更新为 Python `265 passed, 11 skipped`，前端测试、类型检查和构建通过。
 
 ## 条件跳过与阻塞
 
@@ -27,9 +29,8 @@
   教师复核/历史和报告持久化已由 GitHub PostgreSQL CI 复验，但完整本地/部署运行仍未执行。
 - 团队已提供临时网页联调入口，但当前会话没有可控 Chrome 或内置浏览器实例，无法执行
   成功流程、失败/重试、双账号、重启恢复、桌面/手机和常见浏览器 E2E；访问码不入库。
-- `agent/skills/computer_ai.py`、`agent/skills/humanities.py` 和
-  `agent/validators/evidence_gate.py` 仍由成员 4 负责且保持 `TODO`。成员 5 的条件加载、
-  契约校验和缺失时 fail-closed 集成点已就绪，不越权代写成员 4 实现。
+- PR #27 已完成并合并两类专业 Skill 与专业证据校验器；真实 Translation Provider、
+  课件/证据后端写回和远程纵向阶段仍未完成，不能用 fake adapter 或内部草稿冒充真实链路。
 - 前端证据工作台仍使用 Mock 结论/复核状态和 `/reports/demo`；真实复核与报告页面接线属于
   成员 1/2，成员 5 仅记录阻塞，不改动其接口或页面。
 - PR #30 的 Cloudflare Quick Tunnel 与访问门禁已恢复保留；当前没有正在运行的完整服务和
@@ -38,6 +39,7 @@
 ## 复测准入条件
 
 1. 提供可用 PostgreSQL、对象存储与获授权的两段不同真实课堂输入。
-2. 成员 4 完成两类专业 Skill、证据校验器、翻译/证据索引并通过本人模块测试。
+2. 成员 4/3 接通真实 Translation Provider、课件/证据后端写回和第二段远程输入；
+   专业 Skill 与证据校验器已完成自动化，不再列为准入阻塞。
 3. 成员 1/2 将真实结论、复核历史和持久化报告接入页面。
 4. 提供可控浏览器实例后，按 `docs/validation-plan.md` 执行六项人工流程并记录脱敏 Trace。
