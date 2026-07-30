@@ -21,13 +21,14 @@ from backend.app.models import (
     AuditEvent,
     Classroom,
     Course,
+    EvidenceReference,
     ProcessingTask,
     Report,
     ReviewDecision,
     User,
 )
 from backend.app.models.review_report import report_conclusions
-from backend.app.schemas.analysis_report import ConclusionType, ReviewStatus
+from backend.app.schemas.analysis_report import ConclusionType, EvidenceSourceType, ReviewStatus
 from backend.app.schemas.task import TaskStage, TaskStatus
 from backend.app.services.authentication import hash_password
 
@@ -127,6 +128,14 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
                         content=f"model-content-{index}",
                         review_status=ReviewStatus.PENDING,
                         trace_id=f"review-trace-{index}",
+                        evidence_refs=[
+                            EvidenceReference(
+                                owner_id=first_id,
+                                source_type=EvidenceSourceType.FRAME,
+                                image_ref=f"frames/review-{index}.jpg",
+                                quote=f"synthetic evidence {index}",
+                            )
+                        ],
                     )
                     for index, conclusion_id in enumerate(conclusion_ids)
                 ]

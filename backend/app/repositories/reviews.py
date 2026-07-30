@@ -224,10 +224,10 @@ async def put_report(
             owner_id=owner.id,
             classroom_id=classroom_id,
             title=(update.title or f"{classroom.title}课堂复盘报告").strip(),
+            conclusions=[],
         )
         session.add(report)
         await session.flush()
-        report.conclusions = []
     elif update.title is not None:
         report.title = update.title.strip()
 
