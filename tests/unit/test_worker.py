@@ -153,6 +153,9 @@ def test_worker_error_codes_match_media_design() -> None:
         "TRANSLATION_TIMEOUT",
         "TRANSLATION_SCHEMA_INVALID",
         "UNSUPPORTED_LANGUAGE",
+        "COURSEWARE_UNSUPPORTED",
+        "COURSEWARE_PARSE_FAILED",
+        "EVIDENCE_INDEX_INVALID",
         "STOPPED",
     }
     assert {code.value for code in WorkerErrorCode} == expected

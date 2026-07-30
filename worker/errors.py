@@ -25,6 +25,9 @@ class WorkerErrorCode(StrEnum):
     TRANSLATION_TIMEOUT = "TRANSLATION_TIMEOUT"
     TRANSLATION_SCHEMA_INVALID = "TRANSLATION_SCHEMA_INVALID"
     UNSUPPORTED_LANGUAGE = "UNSUPPORTED_LANGUAGE"
+    COURSEWARE_UNSUPPORTED = "COURSEWARE_UNSUPPORTED"
+    COURSEWARE_PARSE_FAILED = "COURSEWARE_PARSE_FAILED"
+    EVIDENCE_INDEX_INVALID = "EVIDENCE_INDEX_INVALID"
     STOPPED = "STOPPED"
 
 
@@ -46,6 +49,9 @@ _PUBLIC_MESSAGES: dict[WorkerErrorCode, str] = {
     WorkerErrorCode.TRANSLATION_TIMEOUT: "逐句翻译处理超时。",
     WorkerErrorCode.TRANSLATION_SCHEMA_INVALID: "逐句译文未通过对齐校验。",
     WorkerErrorCode.UNSUPPORTED_LANGUAGE: "逐字稿包含当前翻译阶段不支持的语言片段。",
+    WorkerErrorCode.COURSEWARE_UNSUPPORTED: "课件格式不受支持。",
+    WorkerErrorCode.COURSEWARE_PARSE_FAILED: "课件解析失败。",
+    WorkerErrorCode.EVIDENCE_INDEX_INVALID: "证据索引未通过来源与定位校验。",
     WorkerErrorCode.STOPPED: "任务租约已停止，Worker 已放弃继续处理。",
 }
 
@@ -79,6 +85,8 @@ class WorkerError(RuntimeError):
             WorkerErrorCode.TRANSCRIPT_SCHEMA_INVALID,
             WorkerErrorCode.TRANSLATION_SCHEMA_INVALID,
             WorkerErrorCode.UNSUPPORTED_LANGUAGE,
+            WorkerErrorCode.COURSEWARE_UNSUPPORTED,
+            WorkerErrorCode.EVIDENCE_INDEX_INVALID,
         }:
             return ErrorCode.VALIDATION_ERROR
         if self.code in {
@@ -90,6 +98,7 @@ class WorkerError(RuntimeError):
             WorkerErrorCode.JOB_STORE_FAILED,
             WorkerErrorCode.TRANSLATION_UNAVAILABLE,
             WorkerErrorCode.TRANSLATION_TIMEOUT,
+            WorkerErrorCode.COURSEWARE_PARSE_FAILED,
         }:
             return ErrorCode.UPSTREAM_UNAVAILABLE
         return ErrorCode.INTERNAL_ERROR
