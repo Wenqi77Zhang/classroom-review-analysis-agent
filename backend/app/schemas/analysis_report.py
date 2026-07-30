@@ -19,7 +19,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import Field, StringConstraints, field_validator, model_validator
+from pydantic import Field, StringConstraints, model_validator
 
 from backend.app.schemas.common import ApiModel, OrmModel, ResourceId, UserRef
 
@@ -213,7 +213,9 @@ class ReportRead(OrmModel):
     id: ResourceId
     classroom_id: ResourceId
     title: str
-    content: str = Field(description="Markdown 正文，教师可在前端编辑。")
+    content: str = Field(
+        description="服务端从 accepted/modified 结论生成的 Markdown 正文。"
+    )
     included_conclusion_ids: list[ResourceId] = Field(
         description="实际组合进报告的结论；后端保证其 review_status 都在 "
         "REPORTABLE_REVIEW_STATUSES 内。"
@@ -222,21 +224,7 @@ class ReportRead(OrmModel):
 
 
 class ReportUpdate(ApiModel):
-    title: ReportTitle | None = None
-    content: str | None = None
-
-    @field_validator("title", "content", mode="before")
-    @classmethod
-    def _provided_fields_cannot_be_null(cls, value: object) -> object:
-        if value is None:
-            raise ValueError("报告字段不能设为 null。")
-        return value
-
-    @model_validator(mode="after")
-    def _require_any_field(self) -> ReportUpdate:
-        if not self.model_fields_set:
-            raise ValueError("title、content 至少要提供一个。")
-        return self
+    title: ReportTitle
 
 
 class ReportExportRequest(ApiModel):

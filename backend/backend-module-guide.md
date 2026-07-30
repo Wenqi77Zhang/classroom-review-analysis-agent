@@ -140,8 +140,9 @@ compose 里的 MinIO 只是**离线开发替代品**，便于无 B2 凭据时也
 
 - 教师可通过 `POST /api/conclusions/{id}/review` 接受、修改或驳回结论；
   `GET /api/conclusions/{id}/history` 返回按时间排序的复核历史。
-- `GET|PUT /api/classrooms/{id}/report` 持久化报告。每次保存都会从课堂中当前
-  `accepted` / `modified` 的结论重新计算关联；驳回已纳入的结论会立即移出报告。
+- `GET|PUT /api/classrooms/{id}/report` 持久化报告。PUT 只接收标题；Markdown 正文由后端
+  从课堂中当前 `accepted` / `modified` 的结论生成，`modified` 使用教师改写内容。每次保存
+  或复核状态变化都会重建正文与关联，驳回已纳入的结论会立即从两者中移除。
 - 复核和报告创建/更新会写入不含教师备注、改写文本或报告正文的 `AuditEvent`。
   其他写接口的审计仍未补齐。
 
