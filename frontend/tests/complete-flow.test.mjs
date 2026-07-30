@@ -33,6 +33,19 @@ test("真实课堂、上传和任务链路使用后端资源 ID", () => {
   assert.match(status, /task\.progress/);
 });
 
+test("任务提交使用后端与 Agent 共用的已确认分析契约", () => {
+  assert.match(task, /scope: "full_lesson"/);
+  assert.match(task, /focus_areas:/);
+  assert.match(task, /evidence_requirements:/);
+  assert.match(task, /bilingualRequired = \/双语\|翻译\|英文原文\//);
+  assert.match(task, /bilingual_required: bilingualRequired/);
+  assert.match(task, /privacy_mode: "local"/);
+  assert.match(task, /course_domain: "general"/);
+  assert.match(task, /confirmed: true/);
+  assert.doesNotMatch(task, /teacher_goal:/);
+  assert.doesNotMatch(task, /scope: "full_class"/);
+});
+
 test("本地复核结果通过会话状态交接给报告且不冒充后端持久化", () => {
   assert.match(task, /saveDemoReportDraft\(reviewStatus, reviewNote\)/);
   assert.match(draft, /sessionStorage\.setItem/);

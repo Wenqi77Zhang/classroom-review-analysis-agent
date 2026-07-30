@@ -9,6 +9,7 @@ from uuid import UUID
 
 import httpx
 
+from backend.app.schemas.agent_runtime import InternalAgentHandoff
 from backend.app.schemas.task import (
     InternalAssetRead,
     InternalTaskClaim,
@@ -30,6 +31,8 @@ class ClaimingJobStore(JobStore, Protocol):
     def claim(self, request: InternalTaskClaimRequest) -> InternalTaskClaim | None: ...
 
     def heartbeat(self, task_id: UUID, heartbeat: InternalTaskHeartbeat) -> None: ...
+
+    def handoff_agent(self, task_id: UUID, handoff: InternalAgentHandoff) -> None: ...
 
 
 @dataclass(slots=True)
@@ -70,6 +73,13 @@ class HttpJobStore:
             transport=download_transport,
         )
 
+    def handoff_agent(self, task_id: UUID, handoff: InternalAgentHandoff) -> None:
+        self._request(
+            "POST",
+            f"/api/internal/tasks/{task_id}/handoff-agent",
+            json=handoff.model_dump(mode="json"),
+        )
+
     def _request(self, method: str, path: str, *, json: dict[str, object]) -> httpx.Response:
         try:
             response = self.client.request(method, path, json=json)
@@ -107,7 +117,10 @@ class HttpJobStore:
         )
         if response.status_code == 204 or not response.content:
             return None
-        return InternalTaskClaim.model_validate(response.json())
+        payload = response.json()
+        if payload is None:
+            return None
+        return InternalTaskClaim.model_validate(payload)
 
     def heartbeat(self, task_id: UUID, heartbeat: InternalTaskHeartbeat) -> None:
         self._request(

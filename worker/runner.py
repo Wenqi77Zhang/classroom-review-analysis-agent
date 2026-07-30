@@ -14,6 +14,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Self
 
+from backend.app.schemas.agent_runtime import InternalAgentHandoff
 from backend.app.schemas.task import (
     AssetKind,
     InternalAssetRead,
@@ -196,6 +197,7 @@ def _process_claimed_media(
     store: HttpJobStore,
     adapter: AsrAdapter,
     object_root: Path | None,
+    worker_id: str,
     translation_adapter: TranslationAdapter | None = None,
 ) -> PipelineResult:
     pipeline_started = False
@@ -215,14 +217,18 @@ def _process_claimed_media(
                 translation_adapter=translation_adapter,
             )
             pipeline_completed = True
-            return result
+        store.handoff_agent(
+            claim.task_id,
+            InternalAgentHandoff(worker_id=worker_id),
+        )
+        return result
     except WorkerError as exc:
         if exc.code is WorkerErrorCode.STOPPED:
             raise
         # run_pipeline 自己记录其内部失败。下载尚未进入 pipeline，或 pipeline
         # 成功后外层下载目录清理失败时，必须由 runner 补写真实失败状态。
         if not pipeline_started or pipeline_completed:
-            stage = TaskStage.EXTRACT_AUDIO if not pipeline_started else TaskStage.TRANSCRIBE
+            stage = TaskStage.EXTRACT_AUDIO if not pipeline_started else TaskStage.TRANSLATE
             store.update_state(
                 claim.task_id,
                 InternalTaskStateUpdate(
@@ -279,6 +285,7 @@ def _run_remote(
                 store,
                 adapter,
                 args.object_root,
+                args.worker_id,
             ),
         )
 

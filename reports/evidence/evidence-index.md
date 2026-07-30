@@ -14,6 +14,7 @@
 | 两段真实视频本地 ASR | `../../tests/fixtures/fixture-catalog.md`、`../../tests/integration/test_video_pipeline.py` | 原视频和完整逐字稿不入库；不证明 B2 集成 |
 | 单输入 B2 到 PostgreSQL 时间戳逐字稿 | PR #20、`../../worker/`、`../../tests/unit/test_worker.py` | 一段获授权真实视频；不证明第二输入、前端展示或 Agent 已运行 |
 | Agent 证据与报告门禁规则 | `../../tests/unit/test_agent.py`、`../../tests/integration/test_review_to_report.py` | 不证明真实模型与持久化 |
+| Worker→Agent 自动接管与结论写回 | `../../agent/job_store.py`、`../../agent/runner.py`、`../../tests/unit/test_agent.py`、`../../tests/integration/test_processing_api.py` | 当前集成分支自动化证据；尚未合并，不证明真实模型或完整 E2E |
 
 PR #20 的 Worker/B2 记录只支持表中单输入纵向切片，不得扩写为翻译、证据索引、
 Agent、复核、报告或完整 M1 已完成。

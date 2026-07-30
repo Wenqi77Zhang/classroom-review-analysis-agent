@@ -16,14 +16,24 @@ from backend.app.dependencies import (
 )
 from backend.app.errors import PermissionDeniedError, StateConflictError, current_trace_id
 from backend.app.models import ProcessingTask, User
+from backend.app.repositories.results import get_transcript_segments
 from backend.app.repositories.tasks import (
     append_task_event,
     claim_task,
     create_processing_task,
     get_internal_task,
+    handoff_task_to_agent,
     list_task_events,
     list_tasks,
 )
+from backend.app.schemas.agent_runtime import (
+    InternalAgentClaimRequest,
+    InternalAgentEvidence,
+    InternalAgentHandoff,
+    InternalAgentHeartbeat,
+    InternalAgentTaskClaim,
+)
+from backend.app.schemas.analysis_report import EvidenceReference, EvidenceSourceType
 from backend.app.schemas.task import (
     AGENT_WRITABLE_STAGES,
     ALLOWED_STATUS_TRANSITIONS,
@@ -54,6 +64,18 @@ Worker = Annotated[
 WorkerHeartbeat = Annotated[
     ServiceIdentity,
     Depends(require_service_identity("tasks:heartbeat")),
+]
+WorkerHandoff = Annotated[
+    ServiceIdentity,
+    Depends(require_service_identity("tasks:handoff-agent")),
+]
+AgentClaim = Annotated[
+    ServiceIdentity,
+    Depends(require_service_identity("agent:claim")),
+]
+AgentHeartbeat = Annotated[
+    ServiceIdentity,
+    Depends(require_service_identity("agent:heartbeat")),
 ]
 StateWriter = Annotated[
     ServiceIdentity,
@@ -219,6 +241,103 @@ async def post_heartbeat(
     return _task_read(task)
 
 
+@router.post("/internal/tasks/{task_id}/handoff-agent", response_model=TaskRead)
+async def post_handoff_agent(
+    task_id: UUID,
+    body: InternalAgentHandoff,
+    session: Db,
+    _identity: WorkerHandoff,
+) -> TaskRead:
+    return _task_read(
+        await handoff_task_to_agent(
+            session,
+            task_id=task_id,
+            worker_id=body.worker_id,
+        )
+    )
+
+
+@router.post(
+    "/internal/agent/tasks/claim",
+    response_model=InternalAgentTaskClaim | None,
+)
+async def post_agent_claim(
+    body: InternalAgentClaimRequest,
+    session: Db,
+    _identity: AgentClaim,
+) -> InternalAgentTaskClaim | None:
+    claimed = await claim_task(
+        session,
+        worker_id=body.agent_id,
+        stages=[TaskStage.ANALYZE],
+        lease_seconds=body.lease_seconds,
+        claimant_label="Agent",
+    )
+    if claimed is None:
+        return None
+    task, _assets = claimed
+    assert task.lease_expires_at is not None
+    assert task.trace_id is not None
+    segments = await get_transcript_segments(session, task.owner_id, task.id)
+    if not segments:
+        raise StateConflictError("Agent 领取的任务没有可分析逐字稿。")
+    evidence = [
+        InternalAgentEvidence(
+            id=segment.id,
+            task_id=task.id,
+            owner_id=task.owner_id,
+            reference=EvidenceReference(
+                source_type=EvidenceSourceType.TRANSCRIPT,
+                segment_id=segment.id,
+                start_ms=segment.start_ms,
+                end_ms=segment.end_ms,
+                quote=segment.text[:2000],
+            ),
+            text=segment.text,
+            translation=segment.translation,
+            metadata={
+                "index": segment.index,
+                "speaker": segment.speaker,
+                "source_language": segment.source_language,
+            },
+        )
+        for segment in segments
+    ]
+    return InternalAgentTaskClaim(
+        task_id=task.id,
+        classroom_id=task.classroom_id,
+        owner_id=task.owner_id,
+        privacy_mode=task.privacy_mode,
+        analysis_contract=task.analysis_contract,
+        evidence=evidence,
+        lease_expires_at=task.lease_expires_at,
+        trace_id=task.trace_id,
+    )
+
+
+@router.post("/internal/agent/tasks/{task_id}/heartbeat", response_model=TaskRead)
+async def post_agent_heartbeat(
+    task_id: UUID,
+    body: InternalAgentHeartbeat,
+    session: Db,
+    _identity: AgentHeartbeat,
+) -> TaskRead:
+    task = await get_internal_task(session, task_id)
+    now = datetime.now(UTC)
+    if (
+        TaskStatus(task.status) is not TaskStatus.RUNNING
+        or TaskStage(task.stage) is not TaskStage.ANALYZE
+        or task.claimed_by != body.agent_id
+        or task.lease_expires_at is None
+        or task.lease_expires_at < now
+    ):
+        raise StateConflictError("Agent 租约不存在、已过期或不属于该运行器。")
+    task.lease_expires_at = now + timedelta(seconds=body.lease_seconds)
+    await session.flush()
+    await session.refresh(task)
+    return _task_read(task)
+
+
 @router.patch("/internal/tasks/{task_id}/state", response_model=TaskRead)
 async def patch_state(
     task_id: UUID,
@@ -252,9 +371,6 @@ async def patch_state(
     task.trace_id = body.trace_id or task.trace_id or current_trace_id.get()
     task.last_error_code = body.error_code if body.status is TaskStatus.FAILED else None
     task.last_error_message = body.message if body.status is TaskStatus.FAILED else None
-    if identity is ServiceIdentity.AGENT and body.stage is TaskStage.ANALYZE:
-        task.claimed_by = None
-        task.lease_expires_at = None
     if body.status in {TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED}:
         task.finished_at = datetime.now(UTC)
         task.claimed_by = None

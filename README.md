@@ -63,6 +63,7 @@ chmod +x setup.sh start.sh verify.sh
 
 - 正式需求、产品、架构、安全与验收文档：`docs/documentation-index.md`
 - 当前已合并进度、进行中任务与集成阻塞：`docs/current-progress.md`
+- 全体成员本地软件、环境变量、分服务启动与排错：`docs/local-development-setup.md`
 - 完整四天五人规划与目标骨架：`docs/project-plan-v5.md`
 - 文件和模块责任：`OWNERSHIP.md`
 - 前端模块：`frontend/frontend-module-guide.md`（含成员 2 交接）

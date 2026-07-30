@@ -5,8 +5,8 @@
 Schema、迁移、权限、路由与事务实现负责人：成员 3
 
 本文只描述 Worker 联调所需的后端保证，不是已冻结接口，也不授权成员 4 修改
-`backend/`。成员 3 审核并冻结前，Worker 只保留内存证据草稿，不执行证据持久化或
-Worker → Agent 交接。
+`backend/`。最新 `main` 已提供基于逐字稿的基础 Worker → Agent 交接；成员 3 审核并
+冻结独立证据契约前，Worker 只保留内存证据草稿，不执行独立证据持久化或版本冻结。
 
 ## 1. 当前实现与缺口
 
@@ -16,12 +16,14 @@ Worker → Agent 交接。
 - `POST /api/internal/tasks/{task_id}/heartbeat`
 - `PATCH /api/internal/tasks/{task_id}/state`
 - `POST /api/internal/tasks/{task_id}/transcript`
+- `POST /api/internal/tasks/{task_id}/handoff-agent`
 - 教师侧 `POST /api/tasks/{task_id}/retry`
 
 当前领取响应只有租约到期时间，没有可 fencing 的 `lease_id`。状态与逐字稿写入也没有
 携带租约代次，因此同一 `worker_id` 的旧进程可能在任务被重新领取后继续写入。当前重试
 只把 `status` 改回 `queued`，不把阶段显式回退；如果 Worker 在后段失败后偷偷重跑
-FFmpeg/ASR，事件记录会与真实执行不一致。当前也没有独立证据草稿的持久化与交接接口。
+FFmpeg/ASR，事件记录会与真实执行不一致。现有 `handoff-agent` 会用后端逐字稿生成
+Agent 领取包，但没有接收 Worker 的独立课件/画面证据草稿，也没有证据版本冻结与审计。
 
 ## 2. 必须冻结的不变量
 
@@ -105,12 +107,15 @@ PUT /api/internal/tasks/{task_id}/evidence-draft
 `segment_id`。`base_version` 必须做乐观并发检查。落库后返回的证据 ID/版本才是 Agent
 可引用身份；Worker 的确定性 UUID 只用于同一批次幂等，不替代数据库主键与版本审计。
 
-### 3.3 Worker → Agent 交接
+### 3.3 Worker → Agent 证据版本交接增强
+
+现有基础路由为 `POST /api/internal/tasks/{task_id}/handoff-agent`，请求只携带
+`worker_id`。以下结构是对它的增强提案，不是另建一条由成员 4 实现的后端接口。
 
 建议路由：
 
 ```text
-POST /api/internal/tasks/{task_id}/worker-handoff
+POST /api/internal/tasks/{task_id}/handoff-agent
 ```
 
 示例请求：
@@ -156,5 +161,5 @@ POST /api/internal/tasks/{task_id}/worker-handoff
 - 已引用证据的删除/替换被拒绝，历史结论仍可回放到原证据版本。
 - 两账号测试覆盖读取 404 与跨任务引用拒绝。
 
-成员 3 冻结后，成员 4 再补 `HttpJobStore` 客户端契约测试、真实证据写入、交接、第二段
-远程视频与失败重试复验。
+成员 3 冻结后，成员 4 再补独立证据写入与版本交接的 `HttpJobStore` 客户端契约测试，
+并完成第二段远程视频与失败重试复验。现有逐字稿基础交接继续保留，不由成员 4 重写。
