@@ -340,6 +340,31 @@ def test_signal_handlers_request_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     assert stop.is_set()
 
 
+def test_process_stop_event_reaches_active_claim() -> None:
+    store = FakeClaimingStore(_claim())
+    request = InternalTaskClaimRequest(
+        worker_id="worker-test",
+        stages=[TaskStage.TRANSCRIBE],
+        lease_seconds=30,
+    )
+    process_stop = threading.Event()
+
+    def process(_: InternalTaskClaim, stop: threading.Event) -> str:
+        assert not stop.is_set()
+        process_stop.set()
+        assert stop.wait(timeout=0.2)
+        return "stopped"
+
+    result = run_claimed_once(
+        store,
+        request,
+        process,
+        process_stop_event=process_stop,
+    )
+
+    assert result == "stopped"
+
+
 def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
     audio = tmp_path / "audio.wav"
     _silent_wav(audio, seconds=2)

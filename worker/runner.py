@@ -8,6 +8,7 @@ import os
 import signal
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -39,6 +40,29 @@ WORKER_CLAIM_STAGES = [
     TaskStage.EXTRACT_AUDIO,
     TaskStage.TRANSCRIBE,
 ]
+
+
+class _LeaseStopEvent(threading.Event):
+    """Combine a lease-local stop with the process stop without sharing ownership."""
+
+    def __init__(self, process_stop_event: threading.Event | None = None) -> None:
+        super().__init__()
+        self._process_stop_event = process_stop_event
+
+    def is_set(self) -> bool:
+        return super().is_set() or (
+            self._process_stop_event is not None
+            and self._process_stop_event.is_set()
+        )
+
+    def wait(self, timeout: float | None = None) -> bool:
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while not self.is_set():
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                return self.is_set()
+            super().wait(0.05 if remaining is None else min(0.05, remaining))
+        return True
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -76,6 +100,7 @@ class HeartbeatLease:
         worker_id: str,
         lease_seconds: int,
         interval_seconds: float | None = None,
+        process_stop_event: threading.Event | None = None,
     ) -> None:
         self.store = store
         self.claim = claim
@@ -84,7 +109,7 @@ class HeartbeatLease:
             lease_seconds=lease_seconds,
         )
         self.interval_seconds = interval_seconds or max(1.0, lease_seconds / 3)
-        self.stop_event = threading.Event()
+        self.stop_event = _LeaseStopEvent(process_stop_event)
         self._finished = threading.Event()
         self._failure: WorkerError | None = None
         self._thread = threading.Thread(
@@ -128,6 +153,7 @@ def run_claimed_once[T](
     process: Callable[[InternalTaskClaim, threading.Event], T],
     *,
     heartbeat_interval_seconds: float | None = None,
+    process_stop_event: threading.Event | None = None,
 ) -> T | None:
     claim = store.claim(request)
     if claim is None:
@@ -138,6 +164,7 @@ def run_claimed_once[T](
         worker_id=request.worker_id,
         lease_seconds=request.lease_seconds,
         interval_seconds=heartbeat_interval_seconds,
+        process_stop_event=process_stop_event,
     ) as lease:
         result = process(claim, lease.stop_event)
         lease.raise_if_failed()
@@ -218,6 +245,12 @@ def _process_claimed_media(
                 reported_stage_floor=claim.stage,
             )
             pipeline_completed = True
+        if stop.is_set():
+            raise WorkerError(
+                WorkerErrorCode.STOPPED,
+                "进程或任务租约已停止，放弃交接 Agent。",
+                retryable=True,
+            )
         store.handoff_agent(
             claim.task_id,
             InternalAgentHandoff(worker_id=worker_id),
@@ -293,6 +326,7 @@ def _run_remote(
                 args.object_root,
                 args.worker_id,
             ),
+            process_stop_event=stop_event,
         )
 
     try:

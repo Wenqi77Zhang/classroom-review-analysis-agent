@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from uuid import uuid4
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from pptx import Presentation
@@ -73,7 +74,9 @@ def test_parse_pdf_extracts_text_and_one_based_pages(tmp_path: Path) -> None:
     assert "Machine learning" in document.pages[1].text
 
 
-def test_parse_pptx_extracts_shapes_tables_and_existing_notes(tmp_path: Path) -> None:
+def test_parse_pptx_extracts_visible_shapes_and_tables_but_excludes_notes(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "source-without-trusted-suffix"
     _write_pptx(path)
 
@@ -87,8 +90,8 @@ def test_parse_pptx_extracts_shapes_tables_and_existing_notes(tmp_path: Path) ->
     assert document.pages[0].text.splitlines() == [
         "Algorithm",
         "Complexity",
-        "Instructor note",
     ]
+    assert "Instructor note" not in document.pages[0].text
     assert document.pages[1].text == "Humanities"
 
 
@@ -162,6 +165,23 @@ def test_parse_courseware_rejects_encrypted_pdf(tmp_path: Path) -> None:
 def test_parse_courseware_rejects_broken_pptx(tmp_path: Path) -> None:
     path = tmp_path / "broken"
     path.write_bytes(b"not a pptx")
+
+    with pytest.raises(WorkerError) as raised:
+        parse_courseware(
+            path,
+            asset_id=uuid4(),
+            content_type=PPTX_CONTENT_TYPE,
+        )
+
+    assert raised.value.code is WorkerErrorCode.COURSEWARE_PARSE_FAILED
+
+
+def test_parse_courseware_rejects_excessive_pptx_compression_ratio(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "compressed-bomb"
+    with ZipFile(path, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("oversized.bin", b"0" * (2 * 1024 * 1024))
 
     with pytest.raises(WorkerError) as raised:
         parse_courseware(

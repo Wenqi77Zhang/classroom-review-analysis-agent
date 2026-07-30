@@ -86,34 +86,31 @@ def build_evidence_index(
                 "pipeline_version": PIPELINE_VERSION,
                 "source_index": segment.index,
             }
-            for source_type in (
-                EvidenceSourceType.VIDEO,
-                EvidenceSourceType.TRANSCRIPT,
-            ):
-                reference = EvidenceReference(
-                    source_type=source_type,
-                    asset_id=video_asset_id,
-                    start_ms=segment.start_ms,
-                    end_ms=segment.end_ms,
-                    quote=segment.text[:2000],
-                )
-                evidence.append(
-                    EvidenceItem(
-                        id=_evidence_id(
-                            task_id=task_id,
-                            source_type=source_type,
-                            asset_id=video_asset_id,
-                            locator=locator,
-                            text=segment.text,
-                        ),
+            source_type = EvidenceSourceType.TRANSCRIPT
+            reference = EvidenceReference(
+                source_type=source_type,
+                asset_id=video_asset_id,
+                start_ms=segment.start_ms,
+                end_ms=segment.end_ms,
+                quote=segment.text[:2000],
+            )
+            evidence.append(
+                EvidenceItem(
+                    id=_evidence_id(
                         task_id=task_id,
-                        owner_id=owner_id,
-                        reference=reference,
+                        source_type=source_type,
+                        asset_id=video_asset_id,
+                        locator=locator,
                         text=segment.text,
-                        translation=segment.translation,
-                        metadata=metadata,
-                    )
+                    ),
+                    task_id=task_id,
+                    owner_id=owner_id,
+                    reference=reference,
+                    text=segment.text,
+                    translation=segment.translation,
+                    metadata=metadata,
                 )
+            )
 
         for document in courseware:
             for page in document.pages:

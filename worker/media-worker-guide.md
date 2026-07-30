@@ -99,8 +99,9 @@ P0 已支持按可信 MIME 解析 PDF 和 PPTX：
 - 加密、损坏、空页集、页数超限或不支持的 MIME 会返回稳定错误；
 - 异常信息不包含本地绝对路径或课件正文。
 
-`build_evidence_index` 会把逐字稿时间段生成 VIDEO/TRANSCRIPT 证据，把非空课件页生成
-COURSEWARE 证据。证据 ID 对同一任务、来源、定位和正文哈希保持确定性；每条证据都通过
+`build_evidence_index` 会把逐字稿时间段生成 TRANSCRIPT 证据，把非空课件页生成
+COURSEWARE 证据。它不会把音频转写伪装成 VIDEO/FRAME 视觉证据；视觉证据必须等待真实
+画面处理或人工定位。证据 ID 对同一任务、来源、定位和正文哈希保持确定性；每条证据都通过
 成员 3 已有的 `EvidenceReference` 定位校验。当前产物只在内存中，未伪造数据库
 `segment_id`，也未写入后端。
 

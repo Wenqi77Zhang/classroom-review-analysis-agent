@@ -68,27 +68,21 @@ def test_build_evidence_preserves_transcript_ranges_original_and_translation() -
 
     evidence = _build(transcript)
 
-    assert len(evidence) == 4
+    assert len(evidence) == 2
     assert [item.reference.source_type for item in evidence] == [
-        EvidenceSourceType.VIDEO,
         EvidenceSourceType.TRANSCRIPT,
-        EvidenceSourceType.VIDEO,
         EvidenceSourceType.TRANSCRIPT,
     ]
     assert [
         (item.reference.start_ms, item.reference.end_ms)
         for item in evidence
-    ] == [(0, 800), (0, 800), (800, 1800), (800, 1800)]
+    ] == [(0, 800), (800, 1800)]
     assert [item.text for item in evidence] == [
         "Explain AI.",
-        "Explain AI.",
-        "Second sentence.",
         "Second sentence.",
     ]
     assert [item.translation for item in evidence] == [
         "解释人工智能。",
-        "解释人工智能。",
-        "第二句。",
         "第二句。",
     ]
     assert all(item.reference.segment_id is None for item in evidence)

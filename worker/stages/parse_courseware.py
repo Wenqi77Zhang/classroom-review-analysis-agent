@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from uuid import UUID
+from zipfile import ZipFile
 
 from pptx import Presentation
 from pypdf import PdfReader
@@ -15,6 +16,8 @@ PDF_CONTENT_TYPE = "application/pdf"
 PPTX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 )
+MAX_PPTX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+MAX_PPTX_COMPRESSION_RATIO = 200
 
 
 def _normalize_text(parts: list[str]) -> str:
@@ -44,6 +47,25 @@ def _parse_pdf(path: Path, *, asset_id: UUID, max_pages: int) -> CoursewareDocum
 
 
 def _parse_pptx(path: Path, *, asset_id: UUID, max_pages: int) -> CoursewareDocument:
+    with ZipFile(path) as archive:
+        members = archive.infolist()
+        total_compressed = sum(member.compress_size for member in members)
+        total_uncompressed = sum(member.file_size for member in members)
+        if total_uncompressed > MAX_PPTX_UNCOMPRESSED_BYTES:
+            raise ValueError("PPTX expands beyond the safe limit")
+        if any(member.file_size and member.compress_size == 0 for member in members):
+            raise ValueError("PPTX has an invalid compression ratio")
+        if (
+            total_compressed == 0
+            or total_uncompressed / total_compressed > MAX_PPTX_COMPRESSION_RATIO
+            or any(
+                member.file_size / member.compress_size > MAX_PPTX_COMPRESSION_RATIO
+                for member in members
+                if member.compress_size
+            )
+        ):
+            raise ValueError("PPTX compression ratio exceeds the safe limit")
+
     presentation = Presentation(path)
     if not presentation.slides or len(presentation.slides) > max_pages:
         raise ValueError("invalid PPTX slide count")
@@ -57,8 +79,6 @@ def _parse_pptx(path: Path, *, asset_id: UUID, max_pages: int) -> CoursewareDocu
                     parts.extend(cell.text for cell in row.cells)
             elif shape.has_text_frame:
                 parts.extend(paragraph.text for paragraph in shape.text_frame.paragraphs)
-        if slide.has_notes_slide:
-            parts.append(slide.notes_slide.notes_text_frame.text)
         pages.append(CoursewarePage(page_no=page_no, text=_normalize_text(parts)))
     return CoursewareDocument(asset_id=asset_id, pages=tuple(pages))
 
