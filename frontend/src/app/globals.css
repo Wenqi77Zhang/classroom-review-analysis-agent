@@ -60,6 +60,108 @@ body::before {
   background: linear-gradient(180deg, rgba(245, 247, 248, 0.18), rgba(230, 235, 239, 0.34));
 }
 
+.team-access-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background:
+    linear-gradient(180deg, rgba(239, 243, 242, 0.5), rgba(226, 233, 233, 0.72)),
+    url("/assets/mist-bamboo-glass-v2.png") center / cover fixed;
+}
+
+.team-access-card {
+  width: min(100%, 560px);
+  padding: clamp(30px, 6vw, 54px);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(34px) saturate(120%);
+}
+
+.team-access-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #edf4f1, #b9ccca);
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 16px;
+  color: var(--indigo-deep);
+  font-weight: 760;
+}
+
+.team-access-eyebrow {
+  margin: 24px 0 8px;
+  color: var(--indigo);
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: 0.12em;
+}
+
+.team-access-card h1 {
+  margin: 0;
+  font-size: clamp(34px, 7vw, 48px);
+  font-weight: 460;
+}
+
+.team-access-card > p:not(.team-access-eyebrow):not(.team-access-error) {
+  color: var(--ink-soft);
+  line-height: 1.75;
+}
+
+.team-access-card form {
+  display: grid;
+  gap: 10px;
+  margin: 30px 0 18px;
+}
+
+.team-access-card label {
+  font-weight: 680;
+}
+
+.team-access-card input {
+  min-height: 52px;
+  padding: 0 16px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(55, 79, 84, 0.24);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.team-access-card input:focus {
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px rgba(82, 109, 114, 0.14);
+}
+
+.team-access-card button {
+  min-height: 52px;
+  margin-top: 6px;
+  background: var(--indigo-deep);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: white;
+  cursor: pointer;
+  font-weight: 720;
+}
+
+.team-access-card button:disabled {
+  cursor: wait;
+  opacity: 0.66;
+}
+
+.team-access-error {
+  color: var(--danger);
+  font-weight: 620;
+}
+
+.team-access-card small {
+  display: block;
+  color: var(--ink-faint);
+  line-height: 1.65;
+}
+
 button,
 input,
 select,
