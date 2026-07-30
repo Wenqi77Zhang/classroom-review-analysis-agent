@@ -86,6 +86,24 @@ python -m worker.runner \
   `TRANSLATION_UNAVAILABLE` 明确失败，不会静默跳过；
 - 中文任务可以继续完成 `translate` 阶段。
 
+## 课件与证据草稿
+
+P0 已支持按可信 MIME 解析 PDF 和 PPTX：
+
+- PDF 提取每页文字并保留从 1 开始的页码；
+- PPTX 按幻灯片顺序提取文本框、表格单元格和已有备注；
+- 加密、损坏、空页集、页数超限或不支持的 MIME 会返回稳定错误；
+- 异常信息不包含本地绝对路径或课件正文。
+
+`build_evidence_index` 会把逐字稿时间段生成 VIDEO/TRANSCRIPT 证据，把非空课件页生成
+COURSEWARE 证据。证据 ID 对同一任务、来源、定位和正文哈希保持确定性；每条证据都通过
+成员 3 已有的 `EvidenceReference` 定位校验。当前产物只在内存中，未伪造数据库
+`segment_id`，也未写入后端。
+
+页面 PNG、截图对象引用和派生资源上传仍是 P1。证据持久化、版本冻结和
+Worker → Agent 交接必须等待成员 3 审核
+`worker/m1-backend-contract-proposal.md` 并冻结接口。
+
 ## 当前边界
 
 - 已实现并通过真实输入验收：`HttpJobStore` 领取 `uploaded` 任务、对象存储限时下载、
@@ -93,7 +111,7 @@ python -m worker.runner \
   状态回写、逐字稿写入、失败记录、临时文件清理，以及单 Worker 常驻轮询与有界退避。
 - M1 只允许部署一个 Worker。成员 3 冻结并实现 `lease_id` fencing 前，不声称多 Worker
   并发安全，也不横向扩容。
-- 待实现或待串联：真实本地翻译适配器、长音频切片、课件解析、证据索引，以及向
+- 待实现或待串联：真实本地翻译适配器、长音频切片、课件/证据后端持久化，以及向
   Agent 阶段的任务交接。
 - 独立指标 HTTP 端口、完整生产容器和高级退避指标属于 P1，本次常驻实现只有不含租户
   数据的进程内计数。

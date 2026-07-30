@@ -11,7 +11,9 @@
 ## Global Constraints
 
 - P0 parses text and one-based page numbers only; PNG rendering and derived uploads remain P1.
-- Add `pypdf>=6.14,<7.0` and `python-pptx>=1.0,<2.0` only to the Worker optional dependency group.
+- Add `pypdf>=6.14,<7.0` and `python-pptx>=1.0,<2.0` to the Worker optional
+  dependency group, and repeat them in dev so the existing CI can run parser tests
+  without installing the Whisper/PyTorch Worker extra.
 - Add `reportlab>=5.0,<6.0` only to the dev dependency group so tests can generate text-bearing PDFs at runtime; Worker production does not import it.
 - Do not create backend tables, migrations, routes, repositories, or permission code.
 - Do not modify `agent/orchestrator.py`, `agent/skills/common.py`, generic retrieval, Provider routing, or Agent runner.
@@ -90,9 +92,13 @@ In `[project.optional-dependencies].dev`, add:
 
 ```toml
 "reportlab>=5.0,<6.0",
+"pypdf>=6.14,<7.0",
+"python-pptx>=1.0,<2.0",
 ```
 
-ReportLab is test-only. No binary fixture is committed.
+ReportLab is test-only. The parser libraries are repeated in dev only to make the
+existing `.[dev]` CI execute these tests without pulling the ASR dependency. No
+binary fixture is committed.
 
 - [ ] **Step 4: Install declared Worker dependencies**
 
