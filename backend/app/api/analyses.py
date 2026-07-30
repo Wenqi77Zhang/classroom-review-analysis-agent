@@ -13,7 +13,7 @@ from backend.app.dependencies import (
     get_db,
     require_service_identity,
 )
-from backend.app.errors import StateConflictError
+from backend.app.errors import StateConflictError, ValidationFailedError
 from backend.app.models import Classroom, User
 from backend.app.repositories.results import (
     list_conclusions,
@@ -111,6 +111,10 @@ async def post_internal_conclusions(
         raise StateConflictError("只有运行中的任务可以写入分析结论。")
     if TaskStage(task.stage) is not TaskStage.ANALYZE:
         raise StateConflictError("只有 analyze 阶段可以写入分析结论。")
+    if task.trace_id is None or any(
+        item.trace_id != task.trace_id for item in body.conclusions
+    ):
+        raise ValidationFailedError("结论 trace_id 必须与当前任务一致。")
     await replace_pending_conclusions(session, task, body)
     return [
         AnalysisConclusion.model_validate(item)

@@ -604,6 +604,7 @@ def test_reportable_content_by_status() -> None:
 def test_internal_endpoint_scopes_enforce_least_privilege() -> None:
     """Worker 不得写结论，Agent 不得覆盖逐字稿（审查意见 4）。"""
     assert INTERNAL_ENDPOINT_SCOPES["tasks:conclusions"] == frozenset({ServiceIdentity.AGENT})
+    assert INTERNAL_ENDPOINT_SCOPES["tasks:trace"] == frozenset({ServiceIdentity.AGENT})
     assert INTERNAL_ENDPOINT_SCOPES["tasks:transcript"] == frozenset({ServiceIdentity.WORKER})
     assert INTERNAL_ENDPOINT_SCOPES["tasks:claim"] == frozenset({ServiceIdentity.WORKER})
     assert INTERNAL_ENDPOINT_SCOPES["tasks:heartbeat"] == frozenset({ServiceIdentity.WORKER})

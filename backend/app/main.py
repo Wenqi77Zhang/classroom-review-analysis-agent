@@ -29,6 +29,7 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.app.api.analyses import router as analyses_router
+from backend.app.api.audit import router as audit_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.classrooms import router as classrooms_router
 from backend.app.api.reports import router as reports_router
@@ -302,6 +303,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tasks_router, prefix="/api")
     app.include_router(transcripts_router, prefix="/api")
     app.include_router(analyses_router, prefix="/api")
+    app.include_router(audit_router, prefix="/api")
     app.include_router(reports_router, prefix="/api")
 
     @app.get("/health", tags=["health"], summary="存活检查")

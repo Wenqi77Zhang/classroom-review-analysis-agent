@@ -35,6 +35,19 @@
 - 已验证：`pytest tests/integration/test_review_report_api.py -q`、`ruff check backend tests`。
   完整后端与前端门禁将在提交前重跑；报告导出、浏览器端实际接线和真实视频 E2E 不在本项中。
 
+## MVP 加固：Trace、幂等、恢复与权限（堆叠于 PR #22）
+
+- 新增 Agent Trace 写入与教师任务审计读取 API；只接收白名单元数据，拒绝 Prompt 等
+  未声明字段，结论 Trace 强制与任务 Trace 一致。
+- 以 Agent 生成的 `event_id` 作为幂等键；完全相同的重放返回同一事件，冲突重放返回
+  `STATE_CONFLICT`。
+- 权限回归覆盖 Worker/教师不得写 Agent Trace、服务令牌不得读取教师审计、跨账号读取
+  返回 404。
+- PostgreSQL HTTP 流程重复写入逐字稿和待复核结论，验证整批替换不会累积重复结果；
+  重建 FastAPI 实例后，过期租约可由新 Worker 重新领取并保留事件历史。
+- 验证：全量 `pytest` 为 179 passed / 1 skipped，Ruff 与 Alembic drift check 通过。
+  该恢复测试不冒充真实 Worker 进程崩溃或整机重启演练。
+
 | 内容 | 位置 | 可核对方式 |
 |---|---|---|
 | 跨模块 Schema 契约 v1（冻结） | `backend/app/schemas/`、`docs/interface-contracts.md` | `pytest tests/unit/test_backend.py` |

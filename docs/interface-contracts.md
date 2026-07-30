@@ -137,6 +137,7 @@ parse_courseware → build_evidence_index → analyze`
 | `transcripts` | `GET /tasks/{id}/transcript`、`PATCH /transcript-segments/{id}` |
 | `analyses` | `GET /classrooms/{id}/conclusions`、`POST /conclusions/{id}/review`、`GET /conclusions/{id}/history` |
 | `reports` | `GET\|PUT /classrooms/{id}/report`、`POST /reports/{id}/export`、`GET /reports/{id}/export/{fmt}` |
+| `audit` | `GET /tasks/{id}/audit-events`、`POST /internal/tasks/{id}/trace-events` |
 
 实现边界：`analyses` 已提供结论读取、Agent 内部批量写入、教师复核写入和历史读取。
 `reports` 已提供 `GET|PUT /classrooms/{id}/report`；每次保存均从当前状态为
@@ -144,6 +145,17 @@ parse_courseware → build_evidence_index → analyze`
 `included_conclusion_ids` 按结论创建时间、ID 稳定排序，不依赖数据库关联表的返回顺序。
 `POST /reports/{id}/export` 和 `GET /reports/{id}/export/{fmt}` 仍未实现。端点列入冻结
 契约不等于已经可以调用。
+
+### Trace 与审计（MVP 加固）
+
+- Agent 仅可向 `POST /internal/tasks/{id}/trace-events` 写入当前任务的 Trace；请求中的
+  `trace_id` 必须与任务一致，Worker 令牌和教师 JWT 均不得调用。
+- Trace 请求只接受事件名、阶段、模型/Prompt/Skill 版本、耗时和稳定错误码等白名单
+  元数据；不接受 Prompt、课堂文本、原始异常消息、令牌或预签名 URL。
+- 教师通过 `GET /tasks/{id}/audit-events` 读取该任务同一 `trace_id` 的脱敏事件；查询先按
+  `owner_id` 验证任务归属，跨账号任务与随机 UUID 都返回 404。
+- `event_id` 是 Agent 生成的 UUID 幂等键；同一任务重复提交同一事件只保留一条记录，
+  将同一 `event_id` 用于不同内容则返回 `STATE_CONFLICT`。
 
 ### 认证、课程与课堂字段（Day 3）
 

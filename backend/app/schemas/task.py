@@ -128,6 +128,7 @@ INTERNAL_ENDPOINT_SCOPES: dict[str, frozenset[ServiceIdentity]] = {
     "tasks:state": frozenset({ServiceIdentity.WORKER, ServiceIdentity.AGENT}),
     "tasks:transcript": frozenset({ServiceIdentity.WORKER}),
     "tasks:conclusions": frozenset({ServiceIdentity.AGENT}),
+    "tasks:trace": frozenset({ServiceIdentity.AGENT}),
 }
 
 # Agent 只负责 analyze 阶段；媒体处理阶段的状态只能由 Worker 回写。
