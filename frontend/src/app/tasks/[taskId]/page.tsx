@@ -1,2 +1,10 @@
 import { ReviewTaskBaseline } from "@/components/baseline/ReviewTaskBaseline";
-export default function ReviewTaskPage() { return <ReviewTaskBaseline />; }
+
+type ReviewTaskPageProps = {
+  params: Promise<{ taskId: string }>;
+};
+
+export default async function ReviewTaskPage({ params }: ReviewTaskPageProps) {
+  const { taskId } = await params;
+  return <ReviewTaskBaseline classroomId={taskId} />;
+}

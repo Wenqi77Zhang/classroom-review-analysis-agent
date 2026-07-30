@@ -1,11 +1,14 @@
 "use client";
 
+import type { TaskRead, TaskStage } from "@/types/contracts";
+
 export type TaskPreviewState = "empty" | "processing" | "failure" | "ready";
 
 type TaskStatusPanelProps = {
   enabled: boolean;
   state: TaskPreviewState;
   onStateChange: (state: TaskPreviewState) => void;
+  task?: TaskRead | null;
 };
 
 const stages = [
@@ -35,11 +38,104 @@ const stateCopy: Record<TaskPreviewState, { title: string; detail: string }> = {
   },
 };
 
+const realStages: Array<{ value: TaskStage; label: string }> = [
+  { value: "uploaded", label: "资料上传" },
+  { value: "extract_audio", label: "音频抽取" },
+  { value: "segment", label: "媒体分段" },
+  { value: "transcribe", label: "语音识别" },
+  { value: "translate", label: "双语对齐" },
+  { value: "parse_courseware", label: "课件解析" },
+  { value: "build_evidence_index", label: "证据索引" },
+  { value: "analyze", label: "证据分析" },
+];
+
+const realStatusCopy: Record<TaskRead["status"], string> = {
+  pending: "待入队",
+  queued: "等待 Worker",
+  running: "处理中",
+  succeeded: "处理完成",
+  failed: "处理失败",
+  cancelled: "已取消",
+};
+
 export function TaskStatusPanel({
   enabled,
   state,
   onStateChange,
+  task,
 }: TaskStatusPanelProps) {
+  if (task) {
+    const activeIndex = realStages.findIndex((stage) => stage.value === task.stage);
+    return (
+      <section className="task-status-panel" aria-labelledby="task-status-title">
+        <header className="task-status-heading">
+          <div>
+            <span className="mock-pill backend-reachable">真实后台任务</span>
+            <h2 id="task-status-title">课堂处理任务</h2>
+            <p>
+              状态来自后端任务记录，不使用前端计时器伪造进度。任务 ID：
+              <code>{task.id}</code>
+            </p>
+          </div>
+          <span className={`status-badge ${task.status}`}>
+            {realStatusCopy[task.status]}
+          </span>
+        </header>
+
+        <ol className="task-stage-list">
+          {realStages.map((stage, index) => {
+            const stageState =
+              task.status === "failed" && index === activeIndex
+                ? "failed"
+                : task.status === "succeeded" || index < activeIndex
+                  ? "complete"
+                  : index === activeIndex
+                    ? "active"
+                    : "waiting";
+            return (
+              <li className={stageState} key={stage.value}>
+                <span aria-hidden>
+                  {stageState === "complete"
+                    ? "✓"
+                    : stageState === "failed"
+                      ? "!"
+                      : stageState === "active"
+                        ? "↻"
+                        : "○"}
+                </span>
+                <strong>{stage.label}</strong>
+                <small>
+                  {stageState === "active"
+                    ? `${Math.round(task.progress * 100)}%`
+                    : stageState === "complete"
+                      ? "完成"
+                      : stageState === "failed"
+                        ? "失败"
+                        : "等待"}
+                </small>
+              </li>
+            );
+          })}
+        </ol>
+
+        <div
+          className={`task-status-summary ${
+            task.status === "failed" ? "failure" : "processing"
+          }`}
+          role="status"
+        >
+          <div>
+            <strong>{realStatusCopy[task.status]}</strong>
+            <p>
+              {task.last_error_message ??
+                `当前阶段：${task.stage}；真实进度 ${Math.round(task.progress * 100)}%。`}
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   const copy = stateCopy[state];
   const activeIndex =
     state === "empty"

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
+import { getTask } from "@/lib/api";
 import { saveDemoReportDraft } from "@/lib/demo-report-draft";
+import type { TaskRead } from "@/types/contracts";
 import { EvidenceCard } from "../evidence/EvidenceCard";
 import {
   ReviewControls,
@@ -47,7 +49,10 @@ const demoTranscript: TranscriptItem[] = [
   },
 ];
 
-export function ReviewTaskBaseline() {
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
   const [classroom, setClassroom] = useState("尚未创建课堂");
   const [messages, setMessages] = useState<string[]>([]);
   const [conversationStep, setConversationStep] = useState<0 | 1 | 2>(0);
@@ -62,7 +67,23 @@ export function ReviewTaskBaseline() {
   const [reviewStatus, setReviewStatus] =
     useState<ReviewStatus>("pending");
   const [reviewNote, setReviewNote] = useState("");
+  const [realTask, setRealTask] = useState<TaskRead | null>(null);
+  const realClassroomId = UUID_PATTERN.test(classroomId) ? classroomId : "";
+
   useEffect(() => setClassroom(sessionStorage.getItem("classroomName") || "演示课堂 · 尚未保存到后端"), []);
+  useEffect(() => {
+    if (!realTask || ["succeeded", "failed", "cancelled"].includes(realTask.status)) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      getTask(realTask.id)
+        .then(setRealTask)
+        .catch(() => undefined);
+    }, 2_000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [realTask]);
   function send(event: FormEvent) {
     event.preventDefault();
     if (!goal.trim() || conversationStep === 2) return;
@@ -84,8 +105,29 @@ export function ReviewTaskBaseline() {
     <aside className="contract-panel" data-reveal aria-labelledby="contract-title"><div className="panel-heading"><div><span className="contract-icon">✓</span><span><strong id="contract-title">分析契约</strong><small>教师确认后才开始处理</small></span></div><span className={`status-badge ${confirmed ? "ready" : "pending"}`}>{confirmed ? "已确认" : contract ? "待确认" : "待补充"}</span></div>
       {!contract ? <div className="contract-empty"><span aria-hidden>✦</span><strong>尚未形成契约</strong><p>Agent 完成必要追问后，这里将展示可修改的分析范围与证据条件。</p></div> : <form className="contract-form"><label>分析范围<select><option>整节课堂</option><option>指定时间范围</option></select></label><fieldset><legend>关注维度</legend><label><input type="checkbox" defaultChecked /> 内容组织</label><label><input type="checkbox" defaultChecked /> 讲解清晰度</label><label><input type="checkbox" defaultChecked /> 提问等待时间</label></fieldset><div className="contract-rule"><span>证据条件</span><strong>每条判断必须连接视频时间或课堂原文</strong></div><div className="contract-rule"><span>双语要求</span><strong>保留英文原文并提供逐句中文翻译</strong></div><label className="permission-check compact-check"><input type="checkbox" checked={confirmed} onChange={(event) => { setConfirmed(event.target.checked); if (!event.target.checked) setUploadOpen(false); }} /><span>我已核对范围、证据条件和隐私边界</span></label><button className="button primary wide" type="button" disabled={!confirmed} onClick={() => { setUploadOpen(true); setPreview("empty"); requestAnimationFrame(() => document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>确认契约，进入资料上传</button></form>}
     </aside></div>
-    {uploadOpen && <UploadPanel onVideoReadinessChange={setHasVideo} />}
-    <TaskStatusPanel enabled={uploadOpen && hasVideo} state={preview} onStateChange={setPreview} />
+    {uploadOpen && (
+      <UploadPanel
+        classroomId={realClassroomId}
+        analysisContract={{
+          scope: "full_class",
+          focus: ["content_structure", "clarity", "wait_time"],
+          bilingual: true,
+          teacher_goal: messages[0] ?? "",
+          teacher_constraints: messages[1] ?? "",
+        }}
+        onVideoReadinessChange={setHasVideo}
+        onTaskCreated={(task) => {
+          setRealTask(task);
+          setPreview("processing");
+        }}
+      />
+    )}
+    <TaskStatusPanel
+      enabled={uploadOpen && hasVideo}
+      state={preview}
+      onStateChange={setPreview}
+      task={realTask}
+    />
     {preview === "ready" && (
       <section
         className="evidence-workbench"
@@ -121,6 +163,11 @@ export function ReviewTaskBaseline() {
               sourceLabel="演示逐字稿 00:12–00:31"
               reviewStatus={reviewStatus}
               isDemo
+              onSeekEvidence={() => {
+                const evidenceStartMs = demoTranscript[0].startMs;
+                setSeekToMs(evidenceStartMs);
+                setCurrentVideoTimeMs(evidenceStartMs);
+              }}
             />
             <ReviewControls
               status={reviewStatus}

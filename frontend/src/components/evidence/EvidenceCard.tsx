@@ -7,6 +7,7 @@ type EvidenceCardProps = {
   sourceLabel: string;
   reviewStatus: ReviewStatus;
   isDemo?: boolean;
+  onSeekEvidence?: () => void;
 };
 
 const reviewCopy: Record<ReviewStatus, string> = {
@@ -23,6 +24,7 @@ export function EvidenceCard({
   sourceLabel,
   reviewStatus,
   isDemo = false,
+  onSeekEvidence,
 }: EvidenceCardProps) {
   return (
     <article className="evidence-card" aria-labelledby="evidence-card-title">
@@ -59,7 +61,17 @@ export function EvidenceCard({
 
       <footer className="evidence-source">
         <span>证据定位</span>
-        <strong>{sourceLabel}</strong>
+        {onSeekEvidence ? (
+          <button
+            className="evidence-source-button"
+            type="button"
+            onClick={onSeekEvidence}
+          >
+            {sourceLabel} → 定位证据
+          </button>
+        ) : (
+          <strong>{sourceLabel}</strong>
+        )}
       </footer>
     </article>
   );

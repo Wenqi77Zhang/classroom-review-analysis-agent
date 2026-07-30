@@ -20,12 +20,24 @@ const actions: Array<{
   { status: "rejected", label: "驳回" },
 ];
 
+const statusCopy: Record<ReviewStatus, string> = {
+  pending: "等待复核",
+  accepted: "已接受",
+  modified: "已修改",
+  rejected: "已驳回",
+};
+
 export function ReviewControls({
   status,
   note,
   onStatusChange,
   onNoteChange,
 }: ReviewControlsProps) {
+  function resetReview() {
+    onStatusChange("pending");
+    onNoteChange("");
+  }
+
   return (
     <section className="review-controls" aria-labelledby="review-controls-title">
       <div>
@@ -46,7 +58,19 @@ export function ReviewControls({
             {action.label}
           </button>
         ))}
+        <button
+          type="button"
+          className="review-reset"
+          disabled={status === "pending" && !note}
+          onClick={resetReview}
+        >
+          重置
+        </button>
       </div>
+
+      <p className="review-current-status" aria-live="polite">
+        当前操作状态：<strong>{statusCopy[status]}</strong>
+      </p>
 
       {(status === "modified" || status === "rejected") && (
         <label className="review-note">

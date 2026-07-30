@@ -2482,6 +2482,22 @@ textarea {
   font-size: 13px;
 }
 
+.evidence-source-button {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--indigo-deep);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.evidence-source-button:hover {
+  color: var(--success);
+}
+
 .review-controls > div:first-child > p {
   margin: 7px 0 0;
   color: var(--ink-soft);
@@ -2507,6 +2523,20 @@ textarea {
 .review-actions button.active {
   background: rgba(211, 228, 224, 0.86);
   border-color: rgba(82, 109, 114, 0.36);
+}
+
+.review-actions .review-reset {
+  grid-column: 1 / -1;
+}
+
+.review-current-status {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.review-current-status strong {
+  color: var(--ink);
 }
 
 .review-note {
@@ -2855,6 +2885,18 @@ textarea {
   color: var(--ink-faint);
 }
 
+.asset-name progress {
+  width: min(100%, 320px);
+  height: 7px;
+  margin-top: 7px;
+  accent-color: var(--success);
+}
+
+.asset-name .asset-error {
+  color: var(--danger);
+  white-space: normal;
+}
+
 .upload-selection li > button {
   padding: 7px 9px;
   background: transparent;
@@ -2930,6 +2972,13 @@ textarea {
   color: #657171;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.form-security-note {
+  margin: 12px 0 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 @media (max-width: 1080px) {
@@ -3013,6 +3062,14 @@ textarea {
   .transcript-timeline > header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .evidence-card,
+  .transcript-timeline,
+  .review-controls {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
   }
 
   .transcript-item {

@@ -13,6 +13,8 @@ const workspace = fs.readFileSync(
 
 test("任务状态面板明确区分本地预览和真实后台任务", () => {
   assert.match(panel, /本地状态预览 · 非真实任务/);
+  assert.match(panel, /真实后台任务/);
+  assert.match(panel, /状态来自后端任务记录/);
   assert.match(panel, /后端任务 API 接通后/);
   assert.match(panel, /不会自动增加进度/);
 });
@@ -39,7 +41,7 @@ test("任务状态面板覆盖处理阶段、失败原因和安全重试", () =>
 test("复盘流程使用共享任务状态面板并仅在待复核预览展示证据", () => {
   assert.match(
     workspace,
-    /<TaskStatusPanel enabled=\{uploadOpen && hasVideo\} state=\{preview\}/,
+    /<TaskStatusPanel[\s\S]*enabled=\{uploadOpen && hasVideo\}[\s\S]*task=\{realTask\}/,
   );
   assert.match(workspace, /preview === "ready"/);
 });

@@ -51,6 +51,26 @@ assert.match(
   /onStatusChange/,
   "复核组件必须通过回调向上层传递状态",
 );
+assert.match(
+  controls,
+  /onStatusChange\("pending"\)/,
+  "重置操作必须通过受控回调同步父页面状态",
+);
+assert.match(
+  controls,
+  /onNoteChange\(""\)/,
+  "重置操作必须同时清除修改或驳回说明",
+);
+assert.match(
+  task,
+  /onSeekEvidence=\{\(\) => \{/,
+  "证据卡定位入口必须由页面接通",
+);
+assert.match(
+  task,
+  /setSeekToMs\(evidenceStartMs\)/,
+  "证据定位必须驱动播放器目标时间",
+);
 
 assert.match(timeline, /startMs: number/, "时间轴必须使用毫秒时间契约");
 assert.match(timeline, /endMs: number/, "时间轴必须声明片段结束时间");

@@ -8,21 +8,67 @@ import {
   type DragEvent,
 } from "react";
 
-import { getBackendHealth } from "@/lib/api";
-import type { AssetKind } from "@/types/contracts";
+import {
+  ApiClientError,
+  completeUpload,
+  createTask,
+  deleteAsset,
+  getBackendHealth,
+  presignUpload,
+  putPresignedUpload,
+} from "@/lib/api";
+import type {
+  AssetKind,
+  PresignResponse,
+  TaskRead,
+} from "@/types/contracts";
 
 type BackendHealthState = "checking" | "reachable" | "unreachable";
+type UploadPhase =
+  | "pending"
+  | "presigning"
+  | "uploading"
+  | "verifying"
+  | "uploaded"
+  | "failed";
 
 type SelectedAsset = {
   id: string;
   file: File;
   kind: AssetKind;
+  phase: UploadPhase;
+  progress: number;
+  assetId?: string;
+  error?: string;
+};
+
+type UploadPanelProps = {
+  classroomId: string;
+  analysisContract: Record<string, unknown>;
+  onVideoReadinessChange?: (hasVideo: boolean) => void;
+  onTaskCreated?: (task: TaskRead) => void;
 };
 
 const ACCEPTED_EXTENSIONS: Record<AssetKind, string[]> = {
   video: [".mp4", ".mov", ".webm", ".mkv"],
   courseware: [".pdf", ".ppt", ".pptx"],
   transcript: [".txt", ".docx", ".srt", ".vtt"],
+};
+
+const CONTENT_TYPES: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm",
+  ".mkv": "video/x-matroska",
+  ".pdf": "application/pdf",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".txt": "text/plain",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".srt": "application/x-subrip",
+  ".vtt": "text/vtt",
 };
 
 const MAX_BYTES: Record<AssetKind, number> = {
@@ -55,6 +101,15 @@ const KIND_COPY: Record<
   },
 };
 
+const PHASE_COPY: Record<UploadPhase, string> = {
+  pending: "等待上传",
+  presigning: "正在申请安全上传地址",
+  uploading: "正在直传对象存储",
+  verifying: "后端正在核验文件",
+  uploaded: "上传并核验完成",
+  failed: "上传失败，可重试",
+};
+
 function extensionOf(name: string) {
   const index = name.lastIndexOf(".");
   return index >= 0 ? name.slice(index).toLowerCase() : "";
@@ -69,6 +124,10 @@ function classifyFile(file: File): AssetKind | null {
   );
 }
 
+function contentTypeOf(file: File) {
+  return CONTENT_TYPES[extensionOf(file.name)] ?? file.type;
+}
+
 function formatBytes(bytes: number) {
   if (bytes >= 1024 * 1024 * 1024) {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
@@ -79,37 +138,57 @@ function formatBytes(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+function displayError(error: unknown) {
+  if (error instanceof ApiClientError) {
+    return `${error.message}${error.traceId ? `（追踪号：${error.traceId}）` : ""}`;
+  }
+  return error instanceof Error ? error.message : "上传失败，请稍后重试。";
+}
+
 export function UploadPanel({
+  classroomId,
+  analysisContract,
   onVideoReadinessChange,
-}: {
-  onVideoReadinessChange?: (hasVideo: boolean) => void;
-}) {
+  onTaskCreated,
+}: UploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [assets, setAssets] = useState<SelectedAsset[]>([]);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [taskCreated, setTaskCreated] = useState(false);
   const [backendHealth, setBackendHealth] =
     useState<BackendHealthState>("checking");
 
   useEffect(() => {
     const controller = new AbortController();
-
     getBackendHealth(controller.signal)
       .then((health) =>
         setBackendHealth(health.reachable ? "reachable" : "unreachable"),
       )
       .catch(() => setBackendHealth("unreachable"));
-
     return () => controller.abort();
   }, []);
 
+  function updateAsset(
+    id: string,
+    patch: Partial<Omit<SelectedAsset, "id" | "file" | "kind">>,
+  ) {
+    setAssets((current) =>
+      current.map((asset) => (asset.id === id ? { ...asset, ...patch } : asset)),
+    );
+  }
+
   function addFiles(files: File[]) {
     const next: SelectedAsset[] = [];
-
     for (const file of files) {
       const kind = classifyFile(file);
       if (!kind) {
         setError(`“${file.name}”格式不支持，请按页面列出的格式重新选择。`);
+        return;
+      }
+      if (!contentTypeOf(file)) {
+        setError(`无法识别“${file.name}”的 Content-Type。`);
         return;
       }
       if (file.size > MAX_BYTES[kind]) {
@@ -129,10 +208,11 @@ export function UploadPanel({
           id: `${file.name}-${file.size}-${file.lastModified}`,
           file,
           kind,
+          phase: "pending",
+          progress: 0,
         });
       }
     }
-
     setAssets((current) => [...current, ...next]);
     setError(next.length ? "" : "这些文件已经在待上传列表中。");
   }
@@ -148,11 +228,97 @@ export function UploadPanel({
     addFiles(Array.from(event.dataTransfer.files));
   }
 
+  async function removeSelectedAsset(asset: SelectedAsset) {
+    if (asset.assetId) {
+      setSubmitting(true);
+      setError("");
+      try {
+        await deleteAsset(asset.assetId);
+      } catch (removeError) {
+        setError(displayError(removeError));
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+    }
+    setAssets((current) => current.filter((item) => item.id !== asset.id));
+  }
+
   const hasVideo = assets.some((asset) => asset.kind === "video");
+  const allUploaded =
+    assets.length > 0 && assets.every((asset) => asset.phase === "uploaded");
 
   useEffect(() => {
     onVideoReadinessChange?.(hasVideo);
   }, [hasVideo, onVideoReadinessChange]);
+
+  async function uploadAndCreateTask() {
+    if (!hasVideo || !classroomId || backendHealth !== "reachable") return;
+    setSubmitting(true);
+    setError("");
+    const completedAssetIds: string[] = assets
+      .filter((asset) => asset.phase === "uploaded" && asset.assetId)
+      .map((asset) => asset.assetId as string);
+
+    try {
+      for (const asset of assets) {
+        if (asset.phase === "uploaded" && asset.assetId) continue;
+        let upload: PresignResponse | undefined;
+        try {
+          updateAsset(asset.id, {
+            phase: "presigning",
+            progress: 0,
+            error: undefined,
+          });
+          upload = await presignUpload(classroomId, {
+            kind: asset.kind,
+            filename: asset.file.name,
+            contentType: contentTypeOf(asset.file),
+            sizeBytes: asset.file.size,
+          });
+          updateAsset(asset.id, {
+            phase: "uploading",
+            assetId: upload.asset_id,
+          });
+          const etag = await putPresignedUpload(upload, asset.file, (progress) =>
+            updateAsset(asset.id, { progress }),
+          );
+          updateAsset(asset.id, { phase: "verifying", progress: 100 });
+          const completed = await completeUpload(upload.asset_id, etag);
+          completedAssetIds.push(completed.id);
+          updateAsset(asset.id, {
+            phase: "uploaded",
+            progress: 100,
+            assetId: completed.id,
+          });
+        } catch (assetError) {
+          if (upload?.asset_id) {
+            await deleteAsset(upload.asset_id).catch(() => undefined);
+          }
+          const message = displayError(assetError);
+          updateAsset(asset.id, {
+            phase: "failed",
+            progress: 0,
+            assetId: undefined,
+            error: message,
+          });
+          throw assetError;
+        }
+      }
+
+      const task = await createTask(
+        classroomId,
+        completedAssetIds,
+        analysisContract,
+      );
+      setTaskCreated(true);
+      onTaskCreated?.(task);
+    } catch (uploadError) {
+      setError(displayError(uploadError));
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <section
@@ -167,15 +333,15 @@ export function UploadPanel({
             aria-live="polite"
           >
             {backendHealth === "checking"
-              ? "正在检查后端 · 本地校验可用"
+              ? "正在检查后端"
               : backendHealth === "reachable"
-                ? "后端基础服务可达 · 上传接口待实现"
-                : "后端服务未运行 · 本地校验可用"}
+                ? "后端与安全上传接口可达"
+                : "后端服务未运行"}
           </span>
           <h2 id="upload-title">上传课堂资料</h2>
           <p>
-            文件现在只在浏览器中选择和校验，不会被发送或持久保存。健康检查可用不代表上传接口已实现；
-            成员 3 完成预签名接口后再启用真实上传。
+            文件将通过限时预签名地址直接上传到私有对象存储；长期密钥不会进入浏览器，后端会在创建任务前执行
+            HEAD 核验。
           </p>
         </div>
         <span className="upload-step">步骤 3 / 3</span>
@@ -201,6 +367,7 @@ export function UploadPanel({
         <button
           className="button primary upload-select-button"
           type="button"
+          disabled={submitting}
           onClick={() => inputRef.current?.click()}
         >
           <span aria-hidden>＋</span>
@@ -239,7 +406,7 @@ export function UploadPanel({
         <div className="upload-selection">
           <div className="upload-selection-heading">
             <strong>待上传资料</strong>
-            <span>{assets.length} 个文件仅保留在当前页面</span>
+            <span>{assets.length} 个文件</span>
           </div>
           <ul>
             {assets.map((asset) => (
@@ -249,15 +416,23 @@ export function UploadPanel({
                 </span>
                 <span className="asset-name">
                   <strong>{asset.file.name}</strong>
-                  <small>{formatBytes(asset.file.size)}</small>
+                  <small>
+                    {formatBytes(asset.file.size)} · {PHASE_COPY[asset.phase]}
+                    {asset.phase === "uploading"
+                      ? ` ${asset.progress}%`
+                      : ""}
+                  </small>
+                  {asset.error && <small className="asset-error">{asset.error}</small>}
+                  {asset.phase === "uploading" && (
+                    <progress max={100} value={asset.progress}>
+                      {asset.progress}%
+                    </progress>
+                  )}
                 </span>
                 <button
                   type="button"
-                  onClick={() =>
-                    setAssets((current) =>
-                      current.filter((item) => item.id !== asset.id),
-                    )
-                  }
+                  disabled={submitting || taskCreated}
+                  onClick={() => void removeSelectedAsset(asset)}
                   aria-label={`移除 ${asset.file.name}`}
                 >
                   移除
@@ -274,14 +449,35 @@ export function UploadPanel({
             {hasVideo ? "✓" : "○"}
           </span>
           <span>
-            <strong>{hasVideo ? "视频校验通过" : "等待课堂视频"}</strong>
+            <strong>
+              {allUploaded
+                ? "全部文件已通过后端核验"
+                : hasVideo
+                  ? "视频校验通过，可开始真实上传"
+                  : "等待课堂视频"}
+            </strong>
             <small>
               已有逐字稿不能替代视频生成时间戳证据的真实处理链路。
             </small>
           </span>
         </div>
-        <button className="button primary" type="button" disabled>
-          上传服务尚未接通
+        <button
+          className="button primary"
+          type="button"
+          disabled={
+            submitting ||
+            taskCreated ||
+            !hasVideo ||
+            !classroomId ||
+            backendHealth !== "reachable"
+          }
+          onClick={uploadAndCreateTask}
+        >
+          {submitting
+            ? "正在上传并核验…"
+            : taskCreated
+              ? "处理任务已创建"
+              : "上传并创建处理任务"}
         </button>
       </div>
 
