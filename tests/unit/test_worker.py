@@ -14,6 +14,8 @@ import pytest
 
 from backend.app.schemas.common import ErrorCode
 from backend.app.schemas.task import (
+    AssetKind,
+    InternalAssetRead,
     InternalTaskClaim,
     InternalTaskClaimRequest,
     InternalTaskHeartbeat,
@@ -21,6 +23,7 @@ from backend.app.schemas.task import (
     PrivacyMode,
     TaskStage,
     TaskStatus,
+    UploadStatus,
 )
 from backend.app.schemas.transcript import (
     InternalTranscriptSegmentWrite,
@@ -31,7 +34,13 @@ from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode
 from worker.job_store import HttpJobStore, LocalJobStore
 from worker.pipeline import run_pipeline
-from worker.runner import _build_parser, run_claimed_once
+from worker.runner import (
+    WORKER_CLAIM_STAGES,
+    _build_parser,
+    _claimed_input_path,
+    _process_claimed_media,
+    run_claimed_once,
+)
 from worker.stages.extract_audio import extract_audio
 from worker.stages.transcribe import transcribe_audio
 from worker.types import AsrResult, AsrSegment, PipelineTask
@@ -93,6 +102,7 @@ def _silent_wav(path: Path, seconds: int = 1) -> None:
 def test_worker_error_codes_match_media_design() -> None:
     expected = {
         "INPUT_NOT_FOUND",
+        "OBJECT_DOWNLOAD_FAILED",
         "FFMPEG_NOT_FOUND",
         "AUDIO_EXTRACTION_FAILED",
         "AUDIO_EXTRACTION_TIMEOUT",
@@ -191,6 +201,17 @@ def test_remote_runner_has_no_cli_service_token_option() -> None:
 
     assert "--service-token" not in help_text
     assert "WORKER_SERVICE_TOKEN" not in help_text
+
+
+def test_remote_runner_claims_newly_uploaded_tasks_without_object_root() -> None:
+    args = _build_parser().parse_args(["--api-base-url", "http://127.0.0.1:8000"])
+
+    assert args.object_root is None
+    assert WORKER_CLAIM_STAGES == [
+        TaskStage.UPLOADED,
+        TaskStage.EXTRACT_AUDIO,
+        TaskStage.TRANSCRIBE,
+    ]
 
 
 def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
@@ -606,6 +627,207 @@ def test_http_job_store_claim_parses_frozen_contract() -> None:
         store.close()
 
     assert actual == expected
+
+
+def _download_asset(
+    *,
+    size_bytes: int,
+    url: str = "https://storage.example/object",
+    verified_etag: str | None = "verified-etag",
+):
+    return InternalAssetRead(
+        id=uuid4(),
+        classroom_id=uuid4(),
+        kind=AssetKind.VIDEO,
+        filename="authorized-test.mp4",
+        content_type="video/mp4",
+        size_bytes=size_bytes,
+        upload_status=UploadStatus.UPLOADED,
+        object_key="owners/test/classrooms/test/assets/test/source",
+        created_at=datetime.now(UTC),
+        download_url=url,
+        verified_etag=verified_etag,
+    )
+
+
+def test_http_job_store_downloads_without_forwarding_service_token(tmp_path: Path) -> None:
+    seen: list[httpx.Request] = []
+    payload = b"real-video-bytes"
+
+    def download_handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            content=payload,
+            headers={"ETag": '"verified-etag"'},
+        )
+
+    store = HttpJobStore(
+        "https://backend.example",
+        "worker-secret",
+        transport=httpx.MockTransport(lambda _: httpx.Response(204)),
+        download_transport=httpx.MockTransport(download_handler),
+    )
+    target = tmp_path / "source-media"
+    try:
+        store.download_asset(_download_asset(size_bytes=len(payload)), target)
+    finally:
+        store.close()
+
+    assert target.read_bytes() == payload
+    assert seen[0].url == "https://storage.example/object"
+    assert "Authorization" not in seen[0].headers
+
+
+@pytest.mark.parametrize("payload", [b"short", b"content-that-is-too-long"])
+def test_http_job_store_rejects_size_mismatch_and_removes_partial_file(
+    tmp_path: Path,
+    payload: bytes,
+) -> None:
+    expected_size = len(b"expected")
+    store = HttpJobStore(
+        "https://backend.example",
+        "worker-secret",
+        transport=httpx.MockTransport(lambda _: httpx.Response(204)),
+        download_transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                content=payload,
+                headers={"ETag": '"verified-etag"'},
+            )
+        ),
+    )
+    target = tmp_path / "partial"
+    try:
+        with pytest.raises(WorkerError) as raised:
+            store.download_asset(_download_asset(size_bytes=expected_size), target)
+    finally:
+        store.close()
+
+    assert raised.value.code is WorkerErrorCode.OBJECT_DOWNLOAD_FAILED
+    assert raised.value.retryable is True
+    assert not target.exists()
+
+
+@pytest.mark.parametrize("response_etag", [None, '"different-etag"'])
+def test_http_job_store_rejects_missing_or_changed_verified_etag(
+    tmp_path: Path,
+    response_etag: str | None,
+) -> None:
+    payload = b"same-size-content"
+    headers = {"ETag": response_etag} if response_etag is not None else {}
+    store = HttpJobStore(
+        "https://backend.example",
+        "worker-secret",
+        transport=httpx.MockTransport(lambda _: httpx.Response(204)),
+        download_transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, content=payload, headers=headers)
+        ),
+    )
+    target = tmp_path / "replaced-object"
+    try:
+        with pytest.raises(WorkerError) as raised:
+            store.download_asset(_download_asset(size_bytes=len(payload)), target)
+    finally:
+        store.close()
+
+    assert raised.value.code is WorkerErrorCode.OBJECT_DOWNLOAD_FAILED
+    assert not target.exists()
+
+
+def test_http_job_store_download_failure_hides_presigned_url(tmp_path: Path) -> None:
+    sensitive_url = "https://storage.example/object?X-Amz-Signature=must-not-leak"
+    store = HttpJobStore(
+        "https://backend.example",
+        "worker-secret",
+        transport=httpx.MockTransport(lambda _: httpx.Response(204)),
+        download_transport=httpx.MockTransport(
+            lambda _: httpx.Response(403, text="forbidden")
+        ),
+    )
+    try:
+        with pytest.raises(WorkerError) as raised:
+            store.download_asset(
+                _download_asset(size_bytes=1, url=sensitive_url),
+                tmp_path / "partial",
+            )
+    finally:
+        store.close()
+
+    assert sensitive_url not in str(raised.value)
+    assert raised.value.__cause__ is None
+
+
+def test_claimed_input_download_is_private_and_cleaned(tmp_path: Path) -> None:
+    payload = b"downloaded-video"
+    asset = _download_asset(size_bytes=len(payload))
+    claim = _claim().model_copy(update={"assets": [asset]})
+    store = HttpJobStore(
+        "https://backend.example",
+        "worker-secret",
+        transport=httpx.MockTransport(lambda _: httpx.Response(204)),
+        download_transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                content=payload,
+                headers={"ETag": '"verified-etag"'},
+            )
+        ),
+    )
+    try:
+        with _claimed_input_path(claim, store, None) as input_path:
+            work_dir = input_path.parent
+            assert input_path.read_bytes() == payload
+            assert work_dir != tmp_path
+        assert not work_dir.exists()
+    finally:
+        store.close()
+
+
+def test_download_failure_is_persisted_as_retryable_task_failure() -> None:
+    asset = _download_asset(
+        size_bytes=1,
+        url="https://storage.example/object?X-Amz-Signature=private",
+    )
+    claim = _claim().model_copy(update={"assets": [asset]})
+    seen: list[tuple[str, dict[str, object]]] = []
+
+    def backend_handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(204)
+
+    store = HttpJobStore(
+        "https://backend.example",
+        "worker-secret",
+        transport=httpx.MockTransport(backend_handler),
+        download_transport=httpx.MockTransport(lambda _: httpx.Response(503)),
+    )
+    try:
+        with pytest.raises(WorkerError) as raised:
+            _process_claimed_media(
+                claim,
+                threading.Event(),
+                store,
+                FakeAsr(AsrResult(language="zh", segments=())),
+                None,
+            )
+    finally:
+        store.close()
+
+    assert raised.value.code is WorkerErrorCode.OBJECT_DOWNLOAD_FAILED
+    assert seen == [
+        (
+            f"/api/internal/tasks/{claim.task_id}/state",
+            {
+                "stage": "extract_audio",
+                "status": "failed",
+                "progress": 0.0,
+                "message": "OBJECT_DOWNLOAD_FAILED: 课堂视频下载失败或文件不完整。",
+                "error_code": "UPSTREAM_UNAVAILABLE",
+                "trace_id": "trace-claim",
+            },
+        )
+    ]
 
 
 def test_http_job_store_heartbeat_state_and_batch_transcript_paths() -> None:
