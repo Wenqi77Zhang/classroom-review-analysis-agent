@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from backend.app.config import Settings
 from backend.app.dependencies import get_db
 from backend.app.main import create_app
-from backend.app.models import User
+from backend.app.models import ProcessingTask, User
 from backend.app.services.authentication import hash_password
 from backend.app.services.storage import ObjectMetadata
 
@@ -488,6 +489,109 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert retried.status_code == 200
             assert retried.json()["status"] == "queued"
             assert retried.json()["retry_count"] == 1
+
+            reclaimed_source = await client.post(
+                "/api/internal/tasks/claim",
+                json={
+                    "worker_id": "worker-before-expiry",
+                    "stages": ["uploaded"],
+                },
+                headers=worker_headers,
+            )
+            assert reclaimed_source.status_code == 200
+            assert reclaimed_source.json()["task_id"] == retry_task_id
+
+            reached_transcribe = await client.patch(
+                f"/api/internal/tasks/{retry_task_id}/state",
+                json={
+                    "stage": "transcribe",
+                    "status": "running",
+                    "progress": 0.5,
+                },
+                headers=worker_headers,
+            )
+            assert reached_transcribe.status_code == 200
+
+            async with factory.begin() as session:
+                expired_task = await session.get(
+                    ProcessingTask,
+                    uuid.UUID(retry_task_id),
+                )
+                assert expired_task is not None
+                expired_task.lease_expires_at = datetime.now(UTC) - timedelta(
+                    seconds=1
+                )
+
+            reclaimed_transcribe = await client.post(
+                "/api/internal/tasks/claim",
+                json={
+                    "worker_id": "worker-after-expiry",
+                    "stages": ["transcribe"],
+                },
+                headers=worker_headers,
+            )
+            assert reclaimed_transcribe.status_code == 200
+            assert reclaimed_transcribe.json()["task_id"] == retry_task_id
+            assert reclaimed_transcribe.json()["stage"] == "transcribe"
+
+            backward_state = await client.patch(
+                f"/api/internal/tasks/{retry_task_id}/state",
+                json={
+                    "stage": "extract_audio",
+                    "status": "running",
+                    "progress": 0.1,
+                },
+                headers=worker_headers,
+            )
+            assert backward_state.status_code == 409
+            assert backward_state.json()["error"]["code"] == "STATE_CONFLICT"
+
+            resumed_transcript = await client.post(
+                f"/api/internal/tasks/{retry_task_id}/transcript",
+                json={
+                    "source_language": "zh",
+                    "duration_ms": 1000,
+                    "segments": [
+                        {
+                            "index": 0,
+                            "start_ms": 0,
+                            "end_ms": 800,
+                            "text": "租约恢复后的新逐字稿。",
+                        }
+                    ],
+                },
+                headers=worker_headers,
+            )
+            assert resumed_transcript.status_code == 201
+
+            completed_transcribe = await client.patch(
+                f"/api/internal/tasks/{retry_task_id}/state",
+                json={
+                    "stage": "transcribe",
+                    "status": "running",
+                    "progress": 1.0,
+                },
+                headers=worker_headers,
+            )
+            assert completed_transcribe.status_code == 200
+
+            resumed_handoff = await client.post(
+                f"/api/internal/tasks/{retry_task_id}/handoff-agent",
+                json={"worker_id": "worker-after-expiry"},
+                headers=worker_headers,
+            )
+            assert resumed_handoff.status_code == 200
+            assert resumed_handoff.json()["stage"] == "analyze"
+            assert resumed_handoff.json()["status"] == "queued"
+
+            async with factory() as session:
+                handed_off_task = await session.get(
+                    ProcessingTask,
+                    uuid.UUID(retry_task_id),
+                )
+                assert handed_off_task is not None
+                assert handed_off_task.claimed_by is None
+                assert handed_off_task.lease_expires_at is None
     finally:
         async with factory.begin() as session:
             for user_id in (first_id, second_id):

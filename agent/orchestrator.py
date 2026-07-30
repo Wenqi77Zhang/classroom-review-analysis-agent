@@ -28,6 +28,7 @@ from agent.skills.common import get_common_skill
 from agent.state import AgentState, AgentWorkflow
 from agent.tools.retrieve_evidence import EvidenceNotFoundError, EvidenceRetriever
 from backend.app.schemas.analysis_report import (
+    EvidenceSourceType,
     InternalConclusionBatchWrite,
     InternalConclusionWrite,
 )
@@ -218,7 +219,9 @@ class AgentOrchestrator:
                 "结论引用了教师确认范围之外的证据。",
             )
         if contract.bilingual_required and any(
-            not (item.translation or "").strip() for item in evidence
+            item.reference.source_type is EvidenceSourceType.TRANSCRIPT
+            and not (item.translation or "").strip()
+            for item in evidence
         ):
             raise AgentRunError(
                 AgentErrorCode.BILINGUAL_EVIDENCE_INCOMPLETE,

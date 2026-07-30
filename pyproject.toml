@@ -30,6 +30,11 @@ dev = [
   "pytest>=9.1,<10.0",
   "pytest-asyncio>=1.4,<2.0",
   "httpx>=0.28,<1.0",
+  # 仅用于运行时生成带文字的合成 PDF 测试输入，不进入 Worker 生产依赖。
+  "reportlab>=5.0,<6.0",
+  # 解析器属于 Worker；测试也需导入，dev 重复声明以免 CI 安装 Whisper。
+  "pypdf>=6.14,<7.0",
+  "python-pptx>=1.0,<2.0",
   # ruff 跨小版本会调整规则集，锁到小版本让 CI 结果稳定。
   "ruff>=0.16,<0.17",
 ]
@@ -37,6 +42,8 @@ worker = [
   # 本地 ASR 运行时；模型权重运行时下载，不进入仓库，也不拖累纯后端 CI。
   # Whisper 使用 YYYYMMDD 日期版本；上界也必须使用同一量级。
   "openai-whisper>=20250625,<20270000",
+  "pypdf>=6.14,<7.0",
+  "python-pptx>=1.0,<2.0",
 ]
 
 [tool.pytest.ini_options]
