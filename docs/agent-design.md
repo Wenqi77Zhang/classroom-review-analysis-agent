@@ -18,14 +18,17 @@ Perceive–Reason–Action–Learn 作为产品级框架；Learn 只记录教师
 
 当前实现位于 `agent/observability/tracing.py`，提供脱敏事件和可替换的 `TraceSink`。错误事件只记录稳定错误类型、错误码和阶段，禁止记录原始异常消息；含口令、令牌和课堂文本的 Pydantic `ValidationError` 已有回归测试。进程内 Sink 已用于离线测试；接入成员 3 的审计持久化接口仍为 `TODO`，因此当前不能宣称 Trace 可跨进程找回。
 
-## 当前实现边界（2026-07-29）
+## 当前实现边界（更新至 2026-07-30）
 
 - 分析契约、结构化候选输出和任务内证据定义在 `agent/contracts.py`，跨模块结论字段直接复用成员 3 的后端 Schema。
 - `AgentOrchestrator` 只执行已确认契约，按隐私模式选择 Provider；时间范围在模型调用前筛选、结论落地前复核，双语模式拒绝缺少逐句译文的范围内证据。
 - 逐字稿、课件和证据文本是不可议信息，以标记边界内的 Base64 UTF-8 数据发送；系统 Prompt 明确禁止执行证据中的命令，输出仍受契约、Skill 和证据 ID 三层校验。
-- 专业 Skill 通过注册表接入；成员 4 尚未提供的 `computer_ai`、`humanities` 被请求时明确失败，不会伪装成已启用或静默降级为通用分析。
+- 专业 Skill 通过注册表接入；`computer_ai`、`humanities` 与证据门禁已有
+  确定性实现和自动化测试，但尚未用真实 Worker 证据索引完成端到端验收。
 - 报告组合不调用模型，只按复核状态确定性过滤；`modified` 使用教师改写内容。
-- Provider 协议和离线 Fake Provider 测试已完成；真实模型调用、内部 API 回写、Worker 证据和 E2E 仍为 `TODO`。
+- Provider 协议和离线 Fake Provider 测试已完成；后端结论写入 API 已合并。
+  持续领取 `analyze` 任务的 Agent 运行器、真实模型配置、Worker 证据、Trace/报告
+  持久化和 E2E 仍未完成。
 
 ## MCP
 

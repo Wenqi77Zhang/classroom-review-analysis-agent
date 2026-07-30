@@ -6,10 +6,10 @@
 
 | 内容 | 状态 |
 |---|---|
-| Pydantic Schema（`backend/app/schemas/`） | **已实现**，可导入、含校验器、已通过 20 项校验冒烟 |
-| 端点路由（`backend/app/api/`） | **尚未实现**，本文件的端点表是契约，不代表已可调用 |
-| ORM 模型与迁移 | **尚未实现** |
-| TypeScript 类型（`frontend/src/types/contracts.ts`） | 待成员 2 按本文件同步 |
+| Pydantic Schema（`backend/app/schemas/`） | **已实现**，可导入、含校验器并纳入后端/Agent/Worker 测试 |
+| 端点路由（`backend/app/api/`） | **部分实现**：认证、课程/课堂、上传、任务、逐字稿与分析最短接口可调用；教师复核写入/历史和报告接口尚未实现 |
+| ORM 模型与迁移 | **已实现基础持久化**：15 张业务/关联表、Alembic 首迁移与 PostgreSQL 隔离测试 |
+| TypeScript 类型（`frontend/src/types/contracts.ts`） | **部分实现**：已覆盖前端当前上传和任务链路；逐字稿、真实结论、复核历史和报告仍待同步 |
 
 权威来源是代码而不是本文件的散文：字段级细节以 `backend/app/schemas/` 为准，本文件负责
 说明约定、枚举取值和跨模块责任。两者不一致时以代码为准，并由成员 3 立即回写本文件。
@@ -138,6 +138,10 @@ parse_courseware → build_evidence_index → analyze`
 | `analyses` | `GET /classrooms/{id}/conclusions`、`POST /conclusions/{id}/review`、`GET /conclusions/{id}/history` |
 | `reports` | `GET\|PUT /classrooms/{id}/report`、`POST /reports/{id}/export`、`GET /reports/{id}/export/{fmt}` |
 
+实现边界：`analyses` 当前只有结论读取与 Agent 内部批量写入；上表的教师复核
+`POST/GET` 端点尚未实现。`reports` 三个端点也尚未实现。端点列入冻结契约不等于
+已经可以调用。
+
 ### 认证、课程与课堂字段（Day 3）
 
 | 端点 | 请求 | 响应 |
@@ -196,11 +200,11 @@ Shell 历史、进程命令行、录屏或报错截图。
 
 越界回写返回 `PERMISSION_DENIED`。
 
-**租约隔离门禁**：Heartbeat 只能减少过期概率，不能独立阻止旧 Worker 回写。服务端实现
-内部 `state` 与 `transcript` 写入端点时，必须校验写入者仍持有当前且未过期的租约；旧租约
-过期或任务被重新领取后，其状态与逐字稿写入必须返回 `STATE_CONFLICT`。当前该服务端端点
-仍在成员 1/3 的后端集成分支实现中，因此 PR #14 只能声明 Worker 侧停止写入，不能声明
-已经完成跨 Worker 的服务端防重与覆盖隔离。
+**租约隔离门禁**：Heartbeat 只能减少过期概率，不能独立阻止旧 Worker 回写。服务端
+`state` 与 `transcript` 写入端点已经合并，但写入请求目前没有携带 `worker_id`，
+尚不能完整证明写入者仍是当前租约持有人。PR #14 的 Worker 会在 heartbeat 失败后停止
+写入，但跨 Worker 的服务端 fencing（旧租约过期或任务被重新领取后拒绝旧 Worker）
+仍须补契约、实现与并发测试，不能宣称已经完成。
 
 这组接口是 `worker/job_store.py` 与 Agent 回写的**唯一**落库入口；Worker 与 Agent
 不直连数据库。

@@ -21,8 +21,10 @@ Agent 在教师已确认的分析契约和当前任务可定位证据范围内�
 
 ## 尚未完成与协作依赖
 
-- `skills/computer_ai.py`、`skills/humanities.py` 和 `validators/evidence_gate.py` 仍是成员 4 的 `TODO`。协调器已提供 Skill 注册表与校验回调；教师请求的专业 Skill 不可用时会在模型调用前以 `SKILL_UNAVAILABLE` 明确失败，不会降级为看似完整的通用分析。
-- 成员 3 的任务、结论与报告内部路由尚未实现，因此当前 Agent 只生成冻结 Schema 对象，尚未真实回写后端或持久化 Trace。
+- 学科 Skill 与证据门禁已有确定性实现和单元测试，但尚未用真实 Worker 证据索引完成端到端验证。
+- 成员 3 的 Agent 结论写入路由已经实现；当前缺少持续领取 `analyze` 任务、调用
+  协调器并回写结论/状态的 Agent 运行器，因此不能把 API 可写描述成 Agent 已自动运行。
+- 报告后端路由仍未实现，Trace 也尚未形成可由后端审计找回的持久化链路。
 - Worker 尚未生成真实证据索引，当前没有真实视频端到端运行证据。
 - Provider 已实现调用协议，但真实模型端点、模型名和密钥仍需通过后端配置注入；密钥不得来自前端或写入 Trace。
 
