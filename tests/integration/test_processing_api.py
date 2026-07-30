@@ -121,21 +121,22 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 json={"name": "Processing Course"},
                 headers=first_headers,
             )
+            analysis_contract = {
+                "goal": "Review the lesson",
+                "scope": "full_lesson",
+                "focus_areas": ["content structure"],
+                "judgment_criteria": [],
+                "evidence_requirements": ["timestamped transcript"],
+                "bilingual_required": False,
+                "privacy_mode": "local",
+                "course_domain": "general",
+                "confirmed": True,
+            }
             classroom = await client.post(
                 f"/api/courses/{course.json()['id']}/classrooms",
                 json={
                     "title": "Processing Classroom",
-                    "analysis_contract": {
-                        "goal": "Review the lesson",
-                        "scope": "full_lesson",
-                        "focus_areas": ["content structure"],
-                        "judgment_criteria": [],
-                        "evidence_requirements": ["timestamped transcript"],
-                        "bilingual_required": False,
-                        "privacy_mode": "local",
-                        "course_domain": "general",
-                        "confirmed": True,
-                    },
+                    "analysis_contract": analysis_contract,
                 },
                 headers=first_headers,
             )
@@ -214,7 +215,10 @@ async def test_shortest_processing_chain_and_retry() -> None:
 
             task_response = await client.post(
                 f"/api/classrooms/{classroom_id}/tasks",
-                json={"asset_ids": [asset_id]},
+                json={
+                    "asset_ids": [asset_id],
+                    "analysis_contract": analysis_contract,
+                },
                 headers=first_headers,
             )
             assert task_response.status_code == 201
@@ -453,7 +457,10 @@ async def test_shortest_processing_chain_and_retry() -> None:
 
             retry_task = await client.post(
                 f"/api/classrooms/{classroom_id}/tasks",
-                json={"asset_ids": [asset_id]},
+                json={
+                    "asset_ids": [asset_id],
+                    "analysis_contract": analysis_contract,
+                },
                 headers=first_headers,
             )
             retry_task_id = retry_task.json()["id"]
