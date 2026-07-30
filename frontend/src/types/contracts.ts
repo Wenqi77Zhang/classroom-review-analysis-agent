@@ -108,3 +108,59 @@ export type ApiErrorBody = {
   details: Record<string, unknown>;
   trace_id: string;
 };
+
+export type EvidenceSourceType =
+  | "video"
+  | "transcript"
+  | "courseware"
+  | "frame";
+
+export type EvidenceReference = {
+  id?: string | null;
+  source_type: EvidenceSourceType;
+  asset_id?: string | null;
+  segment_id?: string | null;
+  start_ms?: number | null;
+  end_ms?: number | null;
+  page_no?: number | null;
+  image_ref?: string | null;
+};
+
+export type AnalysisConclusion = {
+  id: string;
+  classroom_id: string;
+  task_id: string;
+  type: ConclusionType;
+  content: string;
+  evidence_refs: EvidenceReference[];
+  review_status: ReviewStatus;
+  reviewed_content?: string | null;
+  created_at: string;
+  trace_id: string;
+  model_name?: string | null;
+  skill?: string | null;
+  prompt_version?: string | null;
+};
+
+export type ReviewAction = "accept" | "modify" | "reject";
+
+export type ReviewDecision = {
+  id: string;
+  conclusion_id: string;
+  action: ReviewAction;
+  resulting_status: ReviewStatus;
+  previous_content?: string | null;
+  edited_content?: string | null;
+  note?: string | null;
+  decided_by: UserRef;
+  created_at: string;
+};
+
+export type ReportRead = {
+  id: string;
+  classroom_id: string;
+  title: string;
+  content: string;
+  included_conclusion_ids: string[];
+  updated_at?: string | null;
+};
