@@ -27,13 +27,16 @@ if ($missing.Count -gt 0) {
     exit 1
 }
 
-# 只检查 Git 跟踪的文件。扫描整个工作区会把被忽略目录里的第三方 README.md 算进来
-# （pytest 会生成 .pytest_cache/README.md，node_modules 与 .venv 里也有大量 README.md），
-# 导致任何人装过依赖或跑过一次测试之后本检查就永久误报。
-$trackedReadmes = @(git ls-files "*README.md")
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "无法读取 Git 跟踪文件，README 唯一性检查未执行；请确认当前目录是可访问的 Git 仓库。"
-    exit 1
+# Prefer tracked files. Source archives without .git use an explicit dependency/cache exclusion.
+if (Test-Path -LiteralPath ".git" -PathType Container) {
+    $trackedReadmes = @(git ls-files "*README.md")
+} else {
+    $excluded = '\\(\.venv|node_modules|\.next|\.pytest_cache|\.ruff_cache|logs|tmp|data|artifacts)\\'
+    $trackedReadmes = @(Get-ChildItem -Recurse -File -Filter README.md -ErrorAction SilentlyContinue | Where-Object {
+        $_.FullName -notmatch $excluded
+    } | ForEach-Object {
+        $_.FullName.Substring($ProjectRoot.Length).TrimStart('\').Replace('\', '/')
+    })
 }
 if ($trackedReadmes.Count -ne 1 -or $trackedReadmes[0] -ne "README.md") {
     Write-Error "仓库必须且只能在根目录保留一个 README.md；子目录说明文件应使用职责明确的唯一名称。"
@@ -63,7 +66,44 @@ if ($pythonProject -notmatch '(?m)^requires-python = ">=3\.13,<3\.14"$') {
     exit 1
 }
 
-Write-Host "阶段 0 骨架检查通过。核心流程测试将在实现后启用。"
-# 显式退出码：project-plan-v5.md §2.2 要求"全部通过为 0，任一必要检查失败为非 0"。
-# 隐式成功会让调用方读到上一条命令残留的 $LASTEXITCODE。
+$python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
+    Write-Error "Missing .venv; run .\setup.ps1 before verification."
+    exit 1
+}
+
+if (Test-Path -LiteralPath ".git") {
+    & "$ProjectRoot\scripts\check-secrets.ps1"
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+    $excluded = '\\(\.venv|node_modules|\.next|\.pytest_cache|\.ruff_cache|logs|tmp|data|artifacts)\\'
+    $forbidden = @(Get-ChildItem -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+        $_.FullName -notmatch $excluded -and (
+            $_.Name -eq ".env" -or $_.Extension -match '^\.(mp4|mov|avi|mkv|wav|mp3|pem|key|sqlite|sqlite3)$'
+        )
+    })
+    if ($forbidden) {
+        Write-Error ("Forbidden source files: " + (($forbidden | ForEach-Object FullName) -join ", "))
+        exit 1
+    }
+}
+
+& $python -m pytest -q
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $python -m ruff check backend agent tests
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Push-Location -LiteralPath "frontend"
+try {
+    & npm.cmd test
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & npm.cmd run typecheck
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & npm.cmd run build
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally {
+    Pop-Location
+}
+
+Write-Host "Release verification passed: Python tests/lint and frontend test/typecheck/build."
 exit 0

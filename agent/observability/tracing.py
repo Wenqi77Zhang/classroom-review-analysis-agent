@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
 
 _SENSITIVE_PARTS = ("authorization", "cookie", "password", "secret", "token", "api_key")
+_SENSITIVE_CONTENT_KEYS = {
+    "content",
+    "evidence_text",
+    "prompt",
+    "quote",
+    "raw_input",
+    "raw_response",
+    "system_prompt",
+    "transcript",
+    "translation",
+    "user_prompt",
+}
 
 
 def new_trace_id() -> str:
@@ -15,7 +30,10 @@ def new_trace_id() -> str:
 
 
 def _sanitize(value: Any, *, key: str = "") -> Any:
-    if any(part in key.casefold() for part in _SENSITIVE_PARTS):
+    normalized_key = key.casefold()
+    if normalized_key in _SENSITIVE_CONTENT_KEYS or any(
+        part in normalized_key for part in _SENSITIVE_PARTS
+    ):
         return "[REDACTED]"
     if isinstance(value, dict):
         return {
@@ -51,6 +69,32 @@ class InMemoryTraceSink:
 
     def record(self, event: TraceEvent) -> None:
         self.events.append(event)
+
+
+class JsonlTraceSink:
+    """Append-only persistent trace sink containing only sanitized structured fields."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+
+    def record(self, event: TraceEvent) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "trace_id": event.trace_id,
+            "name": event.name,
+            "occurred_at": event.occurred_at.isoformat(),
+            "attributes": _sanitize(event.attributes),
+        }
+        line = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+        descriptor = os.open(
+            self.path,
+            os.O_APPEND | os.O_CREAT | os.O_WRONLY,
+            0o600,
+        )
+        try:
+            os.write(descriptor, line.encode("utf-8"))
+        finally:
+            os.close(descriptor)
 
 
 class Tracer:
