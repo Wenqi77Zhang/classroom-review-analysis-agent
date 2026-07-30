@@ -898,7 +898,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert actions.count("asset.upload_verified") == 1
             assert actions.count("task.created") == 2
             assert actions.count("task.retried") == 1
-            assert actions.count("transcript.replaced") == 2
+            assert actions.count("transcript.replaced") == 3
             serialized_details = repr([event.details for event in audit_events])
             assert "lesson.mp4" not in serialized_details
             assert object_key not in serialized_details
