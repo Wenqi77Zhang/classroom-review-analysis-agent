@@ -21,6 +21,20 @@ export type TaskStage =
   | "build_evidence_index"
   | "analyze";
 
+export type AnalysisContract = {
+  goal: string;
+  scope: "full_lesson" | "time_range";
+  start_ms?: number | null;
+  end_ms?: number | null;
+  focus_areas: string[];
+  judgment_criteria: string[];
+  evidence_requirements: string[];
+  bilingual_required: boolean;
+  privacy_mode: "local" | "cloud";
+  course_domain: "general" | "computer_ai" | "humanities";
+  confirmed: boolean;
+};
+
 export type BackendHealthResponse = {
   reachable: boolean;
   status: "ok" | "unavailable";
