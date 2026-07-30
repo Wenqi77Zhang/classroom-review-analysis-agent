@@ -20,6 +20,7 @@ class WorkerErrorCode(StrEnum):
     UPSTREAM_UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
     CLEANUP_FAILED = "CLEANUP_FAILED"
     JOB_STORE_FAILED = "JOB_STORE_FAILED"
+    JOB_STORE_AUTH_FAILED = "JOB_STORE_AUTH_FAILED"
     STOPPED = "STOPPED"
 
 
@@ -36,6 +37,7 @@ _PUBLIC_MESSAGES: dict[WorkerErrorCode, str] = {
     WorkerErrorCode.UPSTREAM_UNAVAILABLE: "上游处理服务当前不可用。",
     WorkerErrorCode.CLEANUP_FAILED: "临时媒体清理失败。",
     WorkerErrorCode.JOB_STORE_FAILED: "任务状态服务当前不可用。",
+    WorkerErrorCode.JOB_STORE_AUTH_FAILED: "Worker 服务凭据无效或无权访问内部接口。",
     WorkerErrorCode.STOPPED: "任务租约已停止，Worker 已放弃继续处理。",
 }
 
@@ -60,6 +62,8 @@ class WorkerError(RuntimeError):
 
     @property
     def platform_code(self) -> ErrorCode:
+        if self.code is WorkerErrorCode.JOB_STORE_AUTH_FAILED:
+            return ErrorCode.UNAUTHENTICATED
         if self.code is WorkerErrorCode.INPUT_NOT_FOUND:
             return ErrorCode.RESOURCE_NOT_FOUND
         if self.code in {

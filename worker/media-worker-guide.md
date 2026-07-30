@@ -4,7 +4,7 @@
 
 目的：把对象存储中的视频和课件加工成可检索证据。Worker 不生成教学判断。
 
-当前最短闭环已经实现：
+当前媒体闭环已经实现：
 
 `真实视频 → FFmpeg 16 kHz 单声道 WAV → 本地 Whisper → 带毫秒时间戳逐字稿 → JobStore`
 
@@ -47,9 +47,25 @@ ETag 与上传完成时后端 HEAD 保存的 ETag 对照；成功、失败或租
 只能通过环境变量或部署密钥注入。
 
 ```bash
-WORKER_SERVICE_TOKEN="..." python -m worker.runner \
+export WORKER_SERVICE_TOKEN
+python -m worker.runner \
   --api-base-url http://127.0.0.1:8000 \
   --model tiny
+```
+
+远程模式默认常驻轮询。没有任务时按 `WORKER_POLL_INTERVAL_SECONDS=5` 等待；连接、
+限流和后端临时故障从 1 秒开始退避，最大不超过
+`WORKER_MAX_BACKOFF_SECONDS=30`。401/403 鉴权失败和其他不可重试的客户端错误会立即
+退出，不会无限请求。`SIGINT`/`SIGTERM` 会触发安全停止；租约已停止后不再写入任务状态
+或逐字稿。
+
+`--once` 只用于诊断，一次请求领取后即退出：
+
+```bash
+python -m worker.runner \
+  --api-base-url http://127.0.0.1:8000 \
+  --model tiny \
+  --once
 ```
 
 `--object-root` 仅保留给 MinIO 本地挂载等离线调试；B2 正常模式无需配置本地对象目录。
@@ -58,7 +74,11 @@ WORKER_SERVICE_TOKEN="..." python -m worker.runner \
 
 - 已实现并通过真实输入验收：`HttpJobStore` 领取 `uploaded` 任务、对象存储限时下载、
   文件大小与已验证 ETag 校验、真实视频读取、音频抽取、带时间戳 ASR、租约心跳、
-  状态回写、逐字稿写入、失败记录和临时文件清理。
+  状态回写、逐字稿写入、失败记录、临时文件清理，以及单 Worker 常驻轮询与有界退避。
+- M1 只允许部署一个 Worker。成员 3 冻结并实现 `lease_id` fencing 前，不声称多 Worker
+  并发安全，也不横向扩容。
 - 待实现或待串联：长音频切片、逐句翻译、课件解析、证据索引，以及向 Agent
   阶段的任务交接。
+- 独立指标 HTTP 端口、完整生产容器和高级退避指标属于 P1，本次常驻实现只有不含租户
+  数据的进程内计数。
 - 未实现说话人分离，因此 `speaker` 为 `null`，不伪造教师或学生身份。

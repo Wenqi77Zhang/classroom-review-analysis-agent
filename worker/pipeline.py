@@ -94,6 +94,8 @@ def run_pipeline(
         )
     except WorkerError as exc:
         pipeline_failure = exc
+        if exc.code is WorkerErrorCode.STOPPED:
+            raise
         store.update_state(
             task.task_id,
             _state(
@@ -126,20 +128,25 @@ def run_pipeline(
         except WorkerError as cleanup_error:
             if pipeline_failure is not None:
                 pipeline_failure.add_note(f"{cleanup_error.code}: {cleanup_error}")
-                store.update_state(
-                    task.task_id,
-                    _state(
-                        current_stage,
-                        TaskStatus.FAILED,
-                        0.0,
-                        task.trace_id,
-                        message=(
-                            f"{type(pipeline_failure).__name__}; "
-                            f"{cleanup_error.code}: 临时媒体清理失败"
-                        ),
-                        error_code=cleanup_error.platform_code,
-                    ),
+                stopped = (
+                    isinstance(pipeline_failure, WorkerError)
+                    and pipeline_failure.code is WorkerErrorCode.STOPPED
                 )
+                if not stopped:
+                    store.update_state(
+                        task.task_id,
+                        _state(
+                            current_stage,
+                            TaskStatus.FAILED,
+                            0.0,
+                            task.trace_id,
+                            message=(
+                                f"{type(pipeline_failure).__name__}; "
+                                f"{cleanup_error.code}: 临时媒体清理失败"
+                            ),
+                            error_code=cleanup_error.platform_code,
+                        ),
+                    )
             else:
                 store.update_state(
                     task.task_id,

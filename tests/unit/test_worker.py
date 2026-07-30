@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import threading
@@ -38,7 +39,9 @@ from worker.runner import (
     WORKER_CLAIM_STAGES,
     _build_parser,
     _claimed_input_path,
+    _install_signal_handlers,
     _process_claimed_media,
+    _run_remote,
     run_claimed_once,
 )
 from worker.stages.extract_audio import extract_audio
@@ -113,6 +116,7 @@ def test_worker_error_codes_match_media_design() -> None:
         "UPSTREAM_UNAVAILABLE",
         "CLEANUP_FAILED",
         "JOB_STORE_FAILED",
+        "JOB_STORE_AUTH_FAILED",
         "STOPPED",
     }
     assert {code.value for code in WorkerErrorCode} == expected
@@ -212,6 +216,72 @@ def test_remote_runner_claims_newly_uploaded_tasks_without_object_root() -> None
         TaskStage.EXTRACT_AUDIO,
         TaskStage.TRANSCRIBE,
     ]
+
+
+def _remote_args(*, once: bool) -> argparse.Namespace:
+    return argparse.Namespace(
+        video=None,
+        output=None,
+        model="tiny",
+        language=None,
+        api_base_url="http://127.0.0.1:8000",
+        worker_id="test-worker",
+        lease_seconds=300,
+        object_root=None,
+        once=once,
+        poll_interval=5.0,
+        max_backoff=30.0,
+    )
+
+
+class ClosingFakeStore:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_remote_parser_defaults_to_resident_single_worker() -> None:
+    args = _build_parser().parse_args(["--api-base-url", "http://127.0.0.1:8000"])
+
+    assert args.once is False
+    assert args.poll_interval == 5.0
+    assert args.max_backoff == 30.0
+
+
+def test_once_mode_claims_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    fake_store = ClosingFakeStore()
+    monkeypatch.setenv("WORKER_SERVICE_TOKEN", "test-only-token")
+    monkeypatch.setattr(
+        "worker.runner.run_claimed_once",
+        lambda *args, **kwargs: calls.append("claim"),
+    )
+    monkeypatch.setattr("worker.runner.LocalWhisperAdapter", lambda *args, **kwargs: object())
+    monkeypatch.setattr("worker.runner.HttpJobStore", lambda *args, **kwargs: fake_store)
+
+    assert _run_remote(_remote_args(once=True), threading.Event()) is None
+    assert calls == ["claim"]
+    assert fake_store.closed is True
+
+
+def test_signal_handlers_request_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    handlers: dict[int, object] = {}
+    stop = threading.Event()
+
+    monkeypatch.setattr(
+        "worker.runner.signal.signal",
+        lambda signum, handler: handlers.__setitem__(signum, handler),
+    )
+
+    _install_signal_handlers(stop)
+    assert not stop.is_set()
+
+    handler = handlers[2]
+    assert callable(handler)
+    handler(2, None)
+    assert stop.is_set()
 
 
 def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
@@ -471,7 +541,68 @@ def test_pipeline_does_not_persist_after_lease_stop(tmp_path: Path) -> None:
 
     assert raised.value.code is WorkerErrorCode.STOPPED
     assert task.task_id not in store.transcripts
-    assert store.events[task.task_id][-1].status is TaskStatus.FAILED
+    assert task.task_id not in store.events
+
+
+def test_pipeline_does_not_persist_transcript_after_stop_during_asr(tmp_path: Path) -> None:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required")
+    source = tmp_path / "class.wav"
+    _silent_wav(source)
+    store = LocalJobStore()
+    task = PipelineTask(input_path=source)
+    stop = threading.Event()
+
+    class StopAfterAsr:
+        def transcribe(self, _: Path) -> AsrResult:
+            stop.set()
+            return AsrResult(
+                language="zh",
+                segments=(AsrSegment(0.0, 0.8, "不得写入"),),
+            )
+
+    with pytest.raises(WorkerError) as raised:
+        run_pipeline(task, StopAfterAsr(), store, stop_event=stop)
+
+    assert raised.value.code is WorkerErrorCode.STOPPED
+    assert task.task_id not in store.transcripts
+    assert len(store.events[task.task_id]) == 3
+    assert store.events[task.task_id][-1].stage is TaskStage.TRANSCRIBE
+    assert store.events[task.task_id][-1].progress == 0.0
+
+
+def test_pipeline_cleanup_failure_after_stop_does_not_write_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "class.wav"
+    _silent_wav(source)
+    store = LocalJobStore()
+    task = PipelineTask(input_path=source)
+    stop = threading.Event()
+    stop.set()
+
+    def cleanup_fails(_: Path) -> None:
+        raise WorkerError(
+            WorkerErrorCode.CLEANUP_FAILED,
+            "synthetic cleanup failure",
+            retryable=True,
+        )
+
+    monkeypatch.setattr("worker.pipeline.cleanup_path", cleanup_fails)
+
+    with pytest.raises(WorkerError) as raised:
+        run_pipeline(
+            task,
+            FakeAsr(AsrResult(language="zh", segments=(AsrSegment(0.0, 0.8, "x"),))),
+            store,
+            stop_event=stop,
+        )
+
+    assert raised.value.code is WorkerErrorCode.STOPPED
+    assert "CLEANUP_FAILED" in "\n".join(raised.value.__notes__)
+    assert task.task_id not in store.events
+    assert task.task_id not in store.transcripts
 
 
 def test_pipeline_failure_event_does_not_persist_sensitive_worker_detail(
@@ -886,6 +1017,7 @@ def test_http_job_store_heartbeat_state_and_batch_transcript_paths() -> None:
 @pytest.mark.parametrize(
     "failure",
     [
+        httpx.Response(429, json={"error": {"code": "RATE_LIMITED"}}),
         httpx.Response(503, json={"error": {"code": "UPSTREAM_UNAVAILABLE"}}),
         httpx.ReadTimeout("timed out"),
         httpx.ConnectError("offline"),
@@ -921,3 +1053,49 @@ def test_http_job_store_maps_http_timeout_and_connection_failures(
 
     assert raised.value.code is WorkerErrorCode.JOB_STORE_FAILED
     assert raised.value.retryable is True
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_http_job_store_auth_failure_is_not_retried(status_code: int) -> None:
+    store = HttpJobStore(
+        "https://backend.example",
+        "invalid-token",
+        transport=httpx.MockTransport(lambda _: httpx.Response(status_code)),
+    )
+    try:
+        with pytest.raises(WorkerError) as raised:
+            store.claim(
+                InternalTaskClaimRequest(
+                    worker_id="worker-test",
+                    stages=[TaskStage.TRANSCRIBE],
+                    lease_seconds=30,
+                )
+            )
+    finally:
+        store.close()
+
+    assert raised.value.code is WorkerErrorCode.JOB_STORE_AUTH_FAILED
+    assert raised.value.platform_code is ErrorCode.UNAUTHENTICATED
+    assert raised.value.retryable is False
+
+
+def test_http_job_store_non_transient_client_failure_is_not_retried() -> None:
+    store = HttpJobStore(
+        "https://backend.example",
+        "token",
+        transport=httpx.MockTransport(lambda _: httpx.Response(422)),
+    )
+    try:
+        with pytest.raises(WorkerError) as raised:
+            store.claim(
+                InternalTaskClaimRequest(
+                    worker_id="worker-test",
+                    stages=[TaskStage.TRANSCRIBE],
+                    lease_seconds=30,
+                )
+            )
+    finally:
+        store.close()
+
+    assert raised.value.code is WorkerErrorCode.JOB_STORE_FAILED
+    assert raised.value.retryable is False
