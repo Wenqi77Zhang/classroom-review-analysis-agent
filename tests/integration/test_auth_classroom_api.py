@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import os
 import uuid
+from collections import Counter
 from collections.abc import AsyncIterator
 
 import httpx
 import pytest
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app.config import Settings
 from backend.app.dependencies import get_db
 from backend.app.main import create_app
-from backend.app.models import User
+from backend.app.models import AuditEvent, User
 from backend.app.services.authentication import hash_password
 
 
@@ -199,8 +201,34 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
                 f"/api/classrooms/{classroom_id}", headers=first_headers
             )
             assert still_exists.status_code == 200
+
+        async with factory() as session:
+            events = list(
+                await session.scalars(
+                    select(AuditEvent)
+                    .where(AuditEvent.owner_id == first_id)
+                    .order_by(AuditEvent.created_at, AuditEvent.id)
+                )
+            )
+            assert Counter(event.action for event in events) == Counter(
+                {
+                    "course.created": 1,
+                    "classroom.created": 1,
+                    "classroom.updated": 2,
+                }
+            )
+            assert [event.details for event in events if event.action == "classroom.updated"] == [
+                {"updated_fields": ["title"]},
+                {"updated_fields": ["description"]},
+            ]
+            serialized = repr([event.details for event in events])
+            assert "Updated Search Lecture" not in serialized
+            assert "Initial description" not in serialized
     finally:
         async with factory.begin() as session:
+            await session.execute(
+                delete(AuditEvent).where(AuditEvent.owner_id.in_([first_id, second_id]))
+            )
             for user_id in (first_id, second_id):
                 user = await session.get(User, user_id)
                 if user is not None:

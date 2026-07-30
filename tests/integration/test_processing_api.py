@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app.config import Settings
 from backend.app.dependencies import get_db
+from backend.app.errors import AppError
 from backend.app.main import create_app
 from backend.app.models import AuditEvent, ProcessingTask, TaskEvent, User
 from backend.app.services.authentication import hash_password
@@ -75,8 +76,11 @@ async def test_shortest_processing_chain_and_retry() -> None:
         async with factory() as session:
             try:
                 yield session
-            except Exception:
-                await session.rollback()
+            except Exception as exc:
+                if isinstance(exc, AppError) and exc.commit_changes:
+                    await session.commit()
+                else:
+                    await session.rollback()
                 raise
             else:
                 await session.commit()
@@ -501,8 +505,24 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 headers=first_headers,
             )
             assert audit_events.status_code == 200
-            assert [event["id"] for event in audit_events.json()] == [trace_event_id]
-            assert audit_events.json()[0]["details"] == {
+            task_audit_events = audit_events.json()
+            assert [event["action"] for event in task_audit_events] == [
+                "task.created",
+                "transcript.replaced",
+                "transcript.replaced",
+                "agent.started",
+            ]
+            assert task_audit_events[0]["details"] == {
+                "asset_count": 1,
+                "privacy_mode": "local",
+            }
+            assert task_audit_events[1]["details"] == {
+                "duration_ms": 2000,
+                "segment_count": 1,
+                "source_language": "zh",
+            }
+            assert task_audit_events[-1]["id"] == trace_event_id
+            assert task_audit_events[-1]["details"] == {
                 "stage": "analyze",
                 "model_name": "test-model",
                 "skill": "interaction-analysis",
@@ -863,6 +883,26 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 assert handed_off_task is not None
                 assert handed_off_task.claimed_by is None
                 assert handed_off_task.lease_expires_at is None
+
+        async with factory() as session:
+            audit_events = list(
+                await session.scalars(
+                    select(AuditEvent)
+                    .where(AuditEvent.owner_id == first_id)
+                    .order_by(AuditEvent.created_at, AuditEvent.id)
+                )
+            )
+            actions = [event.action for event in audit_events]
+            assert actions.count("asset.upload_requested") == 2
+            assert actions.count("asset.upload_verification_failed") == 1
+            assert actions.count("asset.upload_verified") == 1
+            assert actions.count("task.created") == 2
+            assert actions.count("task.retried") == 1
+            assert actions.count("transcript.replaced") == 3
+            serialized_details = repr([event.details for event in audit_events])
+            assert "lesson.mp4" not in serialized_details
+            assert object_key not in serialized_details
+            assert "temporary failure" not in serialized_details
     finally:
         async with factory.begin() as session:
             await session.execute(

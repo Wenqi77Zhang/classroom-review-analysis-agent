@@ -53,6 +53,7 @@ from backend.app.schemas.task import (
     TaskStage,
     TaskStatus,
 )
+from backend.app.services.audit import record_audit_event
 from backend.app.services.permissions import get_owned_or_404
 from backend.app.services.storage import ObjectStorage, get_object_storage
 
@@ -131,6 +132,16 @@ async def post_task(
         analysis_contract=body.analysis_contract,
         trace_id=current_trace_id.get(),
     )
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="task.created",
+        resource_type="processing_task",
+        resource_id=task.id,
+        details={"asset_count": len(body.asset_ids), "privacy_mode": body.privacy_mode.value},
+        trace_id=task.trace_id,
+    )
     return _task_read(task)
 
 
@@ -182,6 +193,16 @@ async def post_retry(task_id: UUID, session: Db, user: CurrentUser) -> TaskRead:
     task.finished_at = None
     task.trace_id = current_trace_id.get()
     await append_task_event(session, task, message="教师已请求重试。")
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="task.retried",
+        resource_type="processing_task",
+        resource_id=task.id,
+        details={"retry_count": task.retry_count},
+        trace_id=task.trace_id,
+    )
     await session.refresh(task)
     return _task_read(task)
 
@@ -198,6 +219,15 @@ async def post_cancel(task_id: UUID, session: Db, user: CurrentUser) -> TaskRead
     task.lease_expires_at = None
     task.trace_id = current_trace_id.get()
     await append_task_event(session, task, message="教师已取消任务。")
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="task.cancelled",
+        resource_type="processing_task",
+        resource_id=task.id,
+        trace_id=task.trace_id,
+    )
     await session.refresh(task)
     return _task_read(task)
 

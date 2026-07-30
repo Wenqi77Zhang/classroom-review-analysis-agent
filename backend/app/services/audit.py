@@ -21,12 +21,13 @@ async def record_audit_event(
     actor_user_id: UUID | None = None,
     actor_service: str | None = None,
     details: dict[str, Any] | None = None,
+    trace_id: str | None = None,
 ) -> AuditEvent:
     """Append one event; callers pass only non-sensitive, allowlisted details."""
 
     if (actor_user_id is None) == (actor_service is None):
         raise ValueError("审计事件必须且只能提供一种操作身份。")
-    trace_id = current_trace_id.get()
+    effective_trace_id = trace_id or current_trace_id.get()
     event = AuditEvent(
         owner_id=owner_id,
         actor_user_id=actor_user_id,
@@ -34,7 +35,7 @@ async def record_audit_event(
         action=action,
         resource_type=resource_type,
         resource_id=resource_id,
-        trace_id=None if trace_id == "-" else trace_id,
+        trace_id=None if effective_trace_id == "-" else effective_trace_id,
         details=details or {},
     )
     session.add(event)
