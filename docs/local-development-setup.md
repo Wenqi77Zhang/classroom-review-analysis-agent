@@ -127,8 +127,9 @@ OBJECT_STORAGE_SECRET_ACCESS_KEY=<受限Application Key>
 OBJECT_STORAGE_USE_PATH_STYLE=false
 ```
 
-真实值不得写进本文、`.env.example` 或任何 Git 跟踪文件。没有 B2 权限的成员应使用本地
-MinIO，不应互相复制个人 B2 网站密码。
+真实值不得写进本文、`.env.example` 或任何 Git 跟踪文件。B2 Application Key 需要允许
+后端写入和读取报告导出对象，但仍应限制到本项目 Bucket；不要使用只读 Key 冒充导出链路
+可用。没有 B2 权限的成员应使用本地 MinIO，不应互相复制个人 B2 网站密码。
 
 ## 5. 启动前后端联调链路
 

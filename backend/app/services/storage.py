@@ -28,6 +28,8 @@ class ObjectStorage(Protocol):
 
     async def presign_download(self, object_key: str) -> str: ...
 
+    async def put(self, object_key: str, content: bytes, content_type: str) -> None: ...
+
     async def head(self, object_key: str) -> ObjectMetadata | None: ...
 
     async def delete(self, object_key: str) -> None: ...
@@ -68,6 +70,18 @@ class S3ObjectStorage:
             "get_object",
             {"Bucket": self._bucket, "Key": object_key},
         )
+
+    async def put(self, object_key: str, content: bytes, content_type: str) -> None:
+        try:
+            await asyncio.to_thread(
+                self._client.put_object,
+                Bucket=self._bucket,
+                Key=object_key,
+                Body=content,
+                ContentType=content_type,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise UpstreamUnavailableError("对象存储暂时无法保存导出文件。") from exc
 
     def _presign(self, operation: str, params: dict[str, str]) -> str:
         try:

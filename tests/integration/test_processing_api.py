@@ -31,6 +31,11 @@ class FakeObjectStorage:
     async def presign_download(self, object_key: str) -> str:
         return f"https://storage.invalid/download/{object_key}"
 
+    async def put(self, object_key: str, content: bytes, content_type: str) -> None:
+        self.objects[object_key] = ObjectMetadata(
+            size_bytes=len(content), content_type=content_type
+        )
+
     async def head(self, object_key: str) -> ObjectMetadata | None:
         return self.objects.get(object_key)
 
