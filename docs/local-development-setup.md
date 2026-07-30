@@ -20,6 +20,10 @@
 跨电脑联调应使用团队部署的 HTTPS 测试后端；不要直接把本地数据库、MinIO 控制台或
 无认证的开发后端暴露到公网。
 
+仓库另提供 Cloudflare Quick Tunnel 临时联调入口：它只把成员 1 本机的
+Next.js 前端/BFF 暴露为随机 HTTPS 地址，后端、数据库和对象存储管理端口仍仅限本机。
+该入口用于短时组员联调，不属于最终部署，详见第 6 节。
+
 ## 2. Windows 前置软件
 
 完整本地链路需要：
@@ -195,7 +199,91 @@ http://localhost:3000/tasks/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 `/tasks/demo-review`、`/tasks/day3-audit` 等演示名称不是数据库 UUID，只能用于演示界面，
 不能创建真实上传任务。
 
-## 6. Worker 与 Agent
+## 6. 跨网络的临时团队联调入口
+
+当成员不在同一台电脑或同一局域网时，可以由成员 1 在完整本地链路已启动后，临时开放
+Cloudflare Quick Tunnel。该方案无需注册 Cloudflare 账号，但地址随机、无可用性保证，
+成员 1 的电脑和相关进程必须持续运行；因此只能用于开发测试，不能作为 M1 最终部署。
+
+### 6.1 安装并检查 `cloudflared`
+
+只有负责开启入口的成员需要安装，其他成员不需要：
+
+```powershell
+winget install --id Cloudflare.cloudflared --exact
+cloudflared --version
+```
+
+安装后若当前 PowerShell 仍提示找不到命令，关闭并重新打开 PowerShell。不要从群文件或
+不明镜像下载可执行文件。
+
+### 6.2 开启入口
+
+先按第 5 节启动 PostgreSQL、迁移和后端，但不要另行启动 3000 端口前端。确认
+`http://localhost:8000/health/ready` 返回就绪后，在仓库根目录执行：
+
+```powershell
+.\scripts\start-team-tunnel.ps1
+```
+
+脚本会依次执行以下安全检查与动作：
+
+1. 确认后端和数据库就绪，并为本次生产前端选择独立的本地随机端口；
+2. 使用密码学安全随机数生成本次团队访问码，不写入磁盘或 Git；
+3. 构建并隐藏启动生产版 Next.js，通过随机实例挑战值确认不是旧前端，再只向隧道暴露
+   这个 Next.js 本地端口；
+4. 在终端输出访问码，并由 `cloudflared` 输出随机的
+   `https://<随机名称>.trycloudflare.com` 地址；
+5. 关闭窗口或按 `Ctrl+C` 后，停止本次前端与临时入口。
+
+首次使用或修改脚本后，可先运行只启动本地生产前端、不创建公网入口的预检：
+
+```powershell
+.\scripts\start-team-tunnel.ps1 -PreflightOnly
+```
+
+成员 1 只通过团队私聊分别发送地址和访问码，不把访问码放进群公告、Issue、PR、截图、
+`.env` 或其他仓库文件。组员打开地址后会先看到“临时团队联调环境”门禁；验证成功后，
+浏览器只保存限时 `HttpOnly` Cookie，不保存访问码明文。
+
+### 6.3 真实上传前的对象存储限制
+
+Quick Tunnel 只解决网页和同源 BFF 的访问。远程成员的浏览器无法访问成员 1 本机
+`localhost` 上的 MinIO，因此跨网络真实上传必须使用已配置的私有 Backblaze B2。
+每次 Quick Tunnel 的随机地址变化后，还必须由 B2 管理员把**本次精确 HTTPS 来源**
+加入 Bucket CORS；不要长期允许所有 `trycloudflare.com` 子域。
+
+由持有受限 B2 配置的成员执行（路径替换为实际安全 `.env`）：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\configure-team-tunnel-cors.py `
+  --env-file '.\.env' apply `
+  --origin 'https://<本次随机名称>.trycloudflare.com'
+```
+
+随后运行不上传任何对象的真实预检：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\configure-team-tunnel-cors.py `
+  --env-file '.\.env' verify `
+  --origin 'https://<本次随机名称>.trycloudflare.com'
+```
+
+入口停止后立即移除临时规则，脚本会保留 Bucket 原有的其他 CORS 规则：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\configure-team-tunnel-cors.py `
+  --env-file '.\.env' remove
+```
+
+在 B2 CORS 尚未更新前，页面浏览、登录和普通 BFF 请求可以工作，但浏览器直传 B2 会被
+CORS 拦截。预签名 URL、B2 Application Key、数据库密码和内部服务令牌均不得发送给
+普通联调成员。若后端日志或浏览器控制台报错，截图前仍需按第 8 节脱敏。
+
+若 `cloudflared` 提示用户目录中的 `config.yml` / `config.yaml` 与 Quick Tunnel 冲突，
+不要删除已有正式 Tunnel 配置；先停止操作，由配置所有者临时移走该文件后重试。
+
+## 7. Worker 与 Agent
 
 前后端联调只会把任务创建为待处理状态。要继续消费视频和生成分析，还必须启动 Worker
 与 Agent。两者必须使用同一后端地址，并分别使用 `.env` 中不同的服务令牌：
@@ -210,7 +298,7 @@ Agent 的真实模型端点和密钥只应通过本机或部署平台环境变�
 当前是否已经具备可启动的 Worker/Agent 运行入口，以各模块指南和
 `current-progress.md` 的最新合并事实为准；占位代码和单元测试通过不能当作完整链路完成。
 
-## 7. 常见问题定位
+## 8. 常见问题定位
 
 | 页面或终端现象 | 最可能原因 | 首先检查 |
 |---|---|---|
@@ -221,11 +309,13 @@ Agent 的真实模型端点和密钥只应通过本机或部署平台环境变�
 | 上传成功但任务一直不继续 | Worker 未启动或令牌/后端地址不匹配 | Worker 终端和脱敏日志 |
 | Agent 无法回写结论 | Agent 未启动、令牌错误或真实运行入口尚未接通 | Agent 指南和当前进度 |
 | `EADDRINUSE` | 端口已被其他进程占用 | 确认已有服务是否就是本项目，不要重复启动 |
+| Quick Tunnel 页面要求访问码 | 临时联调门禁正常工作 | 向成员 1 私聊索取本次访问码 |
+| Quick Tunnel 可浏览但 B2 上传失败 | 随机入口尚未加入 B2 CORS | 由 B2 管理员加入本次精确 HTTPS 来源 |
 
 排错截图可以包含页面状态和追踪号，但必须遮住 Cookie、Authorization、Token、密码、
 Application Key、数据库连接串和预签名 URL。
 
-## 8. 停止本地服务
+## 9. 停止本地服务
 
 前端、后端、Worker 和 Agent 窗口使用 `Ctrl+C` 停止。停止 Docker 基础服务：
 
@@ -236,13 +326,17 @@ docker compose --profile local-infra down
 该命令保留数据库和 MinIO 卷中的本地数据。不要随意添加 `-v`；`-v` 会删除卷及其中
 数据，只能在明确需要重置本地环境并确认数据可丢弃时使用。
 
-## 9. 文档维护责任
+## 10. 文档维护责任
 
 - 成员 5：统一启动、部署方式和本文第一负责人；
 - 成员 3：后端、PostgreSQL、迁移和对象存储配置核对；
 - 成员 2：前端启动、BFF 地址和浏览器联调现象核对；
 - 成员 4：Worker 依赖与运行命令核对；
 - 成员 1：范围、安全边界和最终验收确认。
+
+`scripts/start-team-tunnel.ps1` 是成员 1 为当前团队联调提供的临时辅助入口，不能替代
+成员 5 的最终部署交付责任。成员 5 选择并验收最终托管方案后，应删除或降级本文对临时
+入口的依赖，并同步架构、验收矩阵与交付说明。
 
 新增环境变量时，代码负责人必须同步更新 `.env.example`、对应模块指南和本文。统一启动
 脚本实现后，必须先由未参与实现的成员在干净环境复现，再删除本文中的“分窗口启动”限制。

@@ -19,10 +19,13 @@ from backend.app.repositories.results import (
     list_conclusions,
     replace_pending_conclusions,
 )
+from backend.app.repositories.reviews import apply_review, list_review_history
 from backend.app.repositories.tasks import get_internal_task
 from backend.app.schemas.analysis_report import (
     AnalysisConclusion,
     InternalConclusionBatchWrite,
+    ReviewDecision,
+    ReviewRequest,
 )
 from backend.app.schemas.task import ServiceIdentity, TaskStage, TaskStatus
 from backend.app.services.permissions import get_owned_or_404
@@ -49,6 +52,46 @@ async def get_conclusions(
     return [
         AnalysisConclusion.model_validate(item)
         for item in await list_conclusions(session, user.id, classroom_id)
+    ]
+
+
+@router.post(
+    "/conclusions/{conclusion_id}/review",
+    response_model=ReviewDecision,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_review(
+    conclusion_id: UUID,
+    body: ReviewRequest,
+    session: Db,
+    user: CurrentUser,
+) -> ReviewDecision:
+    decision = await apply_review(
+        session,
+        owner_id=user.id,
+        user=user,
+        conclusion_id=conclusion_id,
+        body=body,
+    )
+    return ReviewDecision.model_validate(decision)
+
+
+@router.get(
+    "/conclusions/{conclusion_id}/history",
+    response_model=list[ReviewDecision],
+)
+async def get_review_history(
+    conclusion_id: UUID,
+    session: Db,
+    user: CurrentUser,
+) -> list[ReviewDecision]:
+    return [
+        ReviewDecision.model_validate(item)
+        for item in await list_review_history(
+            session,
+            owner_id=user.id,
+            conclusion_id=conclusion_id,
+        )
     ]
 
 

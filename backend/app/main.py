@@ -31,6 +31,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend.app.api.analyses import router as analyses_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.classrooms import router as classrooms_router
+from backend.app.api.reports import router as reports_router
 from backend.app.api.tasks import router as tasks_router
 from backend.app.api.transcripts import router as transcripts_router
 from backend.app.api.uploads import router as uploads_router
@@ -301,6 +302,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tasks_router, prefix="/api")
     app.include_router(transcripts_router, prefix="/api")
     app.include_router(analyses_router, prefix="/api")
+    app.include_router(reports_router, prefix="/api")
 
     @app.get("/health", tags=["health"], summary="存活检查")
     async def health() -> dict[str, str]:
@@ -314,7 +316,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await session.execute(text("SELECT 1"))
         return {"status": "ready", "database": "ok"}
 
-    # Reports remain a separate follow-up; this branch closes the shortest upload-to-result path.
+    # Report export remains a separate follow-up; persistence and review gates are registered above.
     return app
 
 
