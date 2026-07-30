@@ -72,9 +72,9 @@ python -m worker.runner \
 
 ## 翻译阶段
 
-`translate` 阶段已接入现有逐字稿整批写入接口，不新增后端 API。它逐句检测中文、英文
-和中英混合文本；英文与混合片段只写 `translation`，原始 `text`、时间戳、句序和说话人
-字段保持不变。中文逐字稿不调用翻译适配器。
+`translate` 内部阶段复用现有逐字稿整批写入接口，不新增后端 API。它逐句检测中文、
+英文和中英混合文本；英文与混合片段只写 `translation`，原始 `text`、时间戳、句序和
+说话人字段保持不变。中文逐字稿不调用翻译适配器。
 
 当前只完成了可替换 `TranslationAdapter` 契约、确定性语言检测和失败门禁。测试中的
 `fake-translation-for-tests` 只验证逐句对齐，不能作为真实翻译验收。组长尚未确认候选
@@ -82,9 +82,13 @@ python -m worker.runner \
 
 - 没有新增或下载真实翻译模型；
 - 没有把测试译文写成真实验收结果；
-- 英文/中英混合任务在未配置真实适配器时以
-  `TRANSLATION_UNAVAILABLE` 明确失败，不会静默跳过；
-- 中文任务可以继续完成 `translate` 阶段。
+- 远程 Worker 未配置真实 `TranslationAdapter` 时停在
+  `transcribe / running / 1.0`，通过现有 `handoff-agent` 交给 Agent，不进入
+  `translate`；
+- 直接调用内部翻译阶段处理英文/中英混合逐字稿时仍然 fail closed，未配置适配器会返回
+  `TRANSLATION_UNAVAILABLE`；
+- `translate`、`parse_courseware` 和 `build_evidence_index` 当前都是经过单元测试的
+  内部能力，尚未接入远程纵向链路。
 
 ## 课件与证据草稿
 
@@ -112,8 +116,13 @@ COURSEWARE 证据。证据 ID 对同一任务、来源、定位和正文哈希�
   状态回写、逐字稿写入、失败记录、临时文件清理，以及单 Worker 常驻轮询与有界退避。
 - M1 只允许部署一个 Worker。成员 3 冻结并实现 `lease_id` fencing 前，不声称多 Worker
   并发安全，也不横向扩容。
+- `transcribe` 租约过期后可由新 Worker 在同阶段恢复。本地重新下载视频和准备音频不会
+  回写更早的数据库阶段；下载、媒体处理或清理失败也保持在 `transcribe` 并使用现有稳定
+  错误码。
 - 待实现或待串联：真实本地翻译适配器、长音频切片，以及课件/画面/独立证据的后端
   持久化和 Agent 领取；基于逐字稿的基础 Agent 交接已经接通。
+- 第二段非预置视频的完整远程链路、真实翻译、课件/独立证据持久化和阶段化教师重试仍
+  未完成，不能以内部单元测试替代这些验收。
 - 独立指标 HTTP 端口、完整生产容器和高级退避指标属于 P1，本次常驻实现只有不含租户
   数据的进程内计数。
 - 未实现说话人分离，因此 `speaker` 为 `null`，不伪造教师或学生身份。

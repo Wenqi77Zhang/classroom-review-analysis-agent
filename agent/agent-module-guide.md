@@ -19,7 +19,11 @@ Agent 在教师已确认的分析契约和当前任务可定位证据范围内�
 - `validators/evidence_gate.py`：成员 4 提供的纯专业证据校验；代码/演示结论可要求视觉
   来源，人文结论要求逐字稿原文或带页码课件。它不调用模型或修改 Agent 状态。
 - `tools/retrieve_evidence.py`：只在当前 `task_id + owner_id` 范围内检索，模型引用未知证据 ID 时拒绝输出。
-- `orchestrator.py`：执行已确认的时间范围和双语条件；调用前筛选证据，落地前复核引用范围；一次规划、选择 Skill、调用 Provider、校验模型 JSON并生成后端写入批次。不可信课堂文本以 Base64 数据区发送，不能充当 Prompt 指令。
+- `orchestrator.py`：执行已确认的时间范围和双语条件；双语完整性只检查 transcript 证据
+  的逐句译文，courseware、video 和 frame 继续依靠页码、时间或画面定位，不因没有
+  `translation` 字段被拒绝；调用前筛选证据，落地前复核引用范围；一次规划、选择
+  Skill、调用 Provider、校验模型 JSON 并生成后端写入批次。不可信课堂文本以 Base64
+  数据区发送，不能充当 Prompt 指令。
 - `job_store.py`：使用独立 `AGENT_SERVICE_TOKEN` 领取当前任务证据、续租、写入结论和状态；
   错误不记录响应正文、服务令牌或课堂原文。
 - `runner.py`：单次领取 `analyze` 任务，维持 Agent 租约，调用协调器并批量写入
@@ -31,6 +35,8 @@ Agent 在教师已确认的分析契约和当前任务可定位证据范围内�
 
 - 学科 Skill 与专业证据门禁已有确定性实现和单元测试，但成员 5 尚未把它们注册到真实
   Agent 运行入口，也尚未用真实 Worker 证据索引完成端到端验证。
+- PR #27 的双语门禁修改是成员 4 按审核意见完成的兼容修复，不代表成员 4 接管通用
+  Agent 编排；通用协调器、Agent 常驻运行器和真实 Skill 注册仍归成员 5。
 - Worker → Agent 的显式交棒、Agent 领取/心跳、一次运行与结论/状态回写已实现并有离线
   自动化测试；尚未用真实 PostgreSQL、真实 Worker 逐字稿和真实模型完成端到端验收，
   因此不能描述成生产链路已经通过。
