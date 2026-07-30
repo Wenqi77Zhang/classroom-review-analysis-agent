@@ -18,11 +18,13 @@
 5. Trace：JSONL 持久化、任务面板 `trace_id` 展示以及逐字稿、译文、Prompt、原始输入/
    响应、引用正文和错误详情脱敏测试通过。
 6. 文档同步后复跑 Agent、Trace、报告过滤和统一启动定向测试：`36 passed`。
+7. PR #31 GitHub Actions：scaffold、backend-check、frontend-check 全绿；PostgreSQL
+   后端全仓 `190 passed, 5 skipped`，Ruff 通过。
 
 ## 条件跳过与阻塞
 
-- 当前机器没有 PostgreSQL、Docker、真实 `.env` 和对象存储配置；10 项环境条件测试跳过，
-  因此教师复核/历史和报告持久化只具备代码与测试用例证据，没有本轮数据库执行证据。
+- 当前机器没有 PostgreSQL、Docker、真实 `.env` 和对象存储配置；本机环境条件测试跳过。
+  教师复核/历史和报告持久化已由 GitHub PostgreSQL CI 复验，但完整本地/部署运行仍未执行。
 - 团队已提供临时网页联调入口，但当前会话没有可控 Chrome 或内置浏览器实例，无法执行
   成功流程、失败/重试、双账号、重启恢复、桌面/手机和常见浏览器 E2E；访问码不入库。
 - `agent/skills/computer_ai.py`、`agent/skills/humanities.py` 和
@@ -30,7 +32,8 @@
   契约校验和缺失时 fail-closed 集成点已就绪，不越权代写成员 4 实现。
 - 前端证据工作台仍使用 Mock 结论/复核状态和 `/reports/demo`；真实复核与报告页面接线属于
   成员 1/2，成员 5 仅记录阻塞，不改动其接口或页面。
-- Cloudflare Quick Tunnel 建设依据 `跳过.md` 由其他成员接手，本记录不把临时入口称为正式部署。
+- PR #30 的 Cloudflare Quick Tunnel 与访问门禁已恢复保留；当前没有正在运行的完整服务和
+  本次入口地址，因此未执行远程网页验收，也不把临时入口称为正式部署。
 
 ## 复测准入条件
 
