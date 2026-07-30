@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -9,12 +10,13 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app.config import Settings
 from backend.app.dependencies import get_db
 from backend.app.main import create_app
-from backend.app.models import ProcessingTask, User
+from backend.app.models import AuditEvent, ProcessingTask, TaskEvent, User
 from backend.app.services.authentication import hash_password
 from backend.app.services.storage import ObjectMetadata
 
@@ -214,6 +216,25 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert download.status_code == 200
             assert download.json()["url"].startswith("https://storage.invalid/download/")
 
+            legacy_task_id = uuid.uuid4()
+            async with factory.begin() as session:
+                session.add(
+                    ProcessingTask(
+                        id=legacy_task_id,
+                        owner_id=first_id,
+                        classroom_id=uuid.UUID(classroom_id),
+                        status="queued",
+                        stage="uploaded",
+                        progress=0,
+                        privacy_mode="local",
+                        analysis_contract={
+                            "review_goal": "legacy-private-classroom-content"
+                        },
+                        trace_id="legacy-contract-trace",
+                        created_at=datetime.now(UTC) - timedelta(minutes=1),
+                    )
+                )
+
             task_response = await client.post(
                 f"/api/classrooms/{classroom_id}/tasks",
                 json={
@@ -225,6 +246,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert task_response.status_code == 201
             assert task_response.json()["status"] == "queued"
             task_id = task_response.json()["id"]
+            task_trace_id = task_response.json()["trace_id"]
 
             forbidden_claim = await client.post(
                 "/api/internal/tasks/claim",
@@ -232,6 +254,28 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 headers=worker_headers,
             )
             assert forbidden_claim.status_code == 403
+
+            quarantined_claim = await client.post(
+                "/api/internal/tasks/claim",
+                json={"worker_id": "worker-1", "stages": ["uploaded"]},
+                headers=worker_headers,
+            )
+            assert quarantined_claim.status_code == 200
+            assert quarantined_claim.json() is None
+            async with factory() as session:
+                legacy_task = await session.get(ProcessingTask, legacy_task_id)
+                assert legacy_task is not None
+                assert legacy_task.status == "failed"
+                assert legacy_task.last_error_code == "VALIDATION_ERROR"
+                legacy_events = list(
+                    await session.scalars(
+                        select(TaskEvent).where(TaskEvent.task_id == legacy_task_id)
+                    )
+                )
+                serialized_legacy_events = repr(
+                    [(event.message, event.error_code) for event in legacy_events]
+                )
+                assert "legacy-private-classroom-content" not in serialized_legacy_events
 
             claimed = await client.post(
                 "/api/internal/tasks/claim",
@@ -303,6 +347,25 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert transcript.status_code == 201
             segment_id = transcript.json()["segments"][0]["id"]
+            repeated_transcript = await client.post(
+                f"/api/internal/tasks/{task_id}/transcript",
+                json={
+                    "source_language": "zh",
+                    "duration_ms": 2000,
+                    "segments": [
+                        {
+                            "index": 0,
+                            "start_ms": 100,
+                            "end_ms": 1900,
+                            "speaker": "教师",
+                            "text": "请说明检索的第一步。",
+                        }
+                    ],
+                },
+                headers=worker_headers,
+            )
+            assert repeated_transcript.status_code == 201
+            segment_id = repeated_transcript.json()["segments"][0]["id"]
 
             transcribed = await client.patch(
                 f"/api/internal/tasks/{task_id}/state",
@@ -374,6 +437,165 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert analyzing.status_code == 200
 
+            trace_event_id = str(uuid.uuid4())
+            trace_payload = {
+                "event_id": trace_event_id,
+                "trace_id": task_trace_id,
+                "name": "agent.started",
+                "stage": "analyze",
+                "model_name": "test-model",
+                "skill": "interaction-analysis",
+                "prompt_version": "v1",
+            }
+            forbidden_trace = await client.post(
+                f"/api/internal/tasks/{task_id}/trace-events",
+                json=trace_payload,
+                headers=worker_headers,
+            )
+            assert forbidden_trace.status_code == 403
+            teacher_cannot_write_trace = await client.post(
+                f"/api/internal/tasks/{task_id}/trace-events",
+                json=trace_payload,
+                headers=first_headers,
+            )
+            assert teacher_cannot_write_trace.status_code == 401
+            wrong_trace = await client.post(
+                f"/api/internal/tasks/{task_id}/trace-events",
+                json={**trace_payload, "trace_id": "wrong-trace"},
+                headers=agent_headers,
+            )
+            assert wrong_trace.status_code == 409
+            trace_event = await client.post(
+                f"/api/internal/tasks/{task_id}/trace-events",
+                json=trace_payload,
+                headers=agent_headers,
+            )
+            assert trace_event.status_code == 201
+            duplicate_trace = await client.post(
+                f"/api/internal/tasks/{task_id}/trace-events",
+                json=trace_payload,
+                headers=agent_headers,
+            )
+            assert duplicate_trace.status_code == 201
+            assert duplicate_trace.json()["id"] == trace_event_id
+            conflicting_trace = await client.post(
+                f"/api/internal/tasks/{task_id}/trace-events",
+                json={**trace_payload, "name": "agent.completed"},
+                headers=agent_headers,
+            )
+            assert conflicting_trace.status_code == 409
+            unsafe_trace = await client.post(
+                f"/api/internal/tasks/{task_id}/trace-events",
+                json={**trace_payload, "event_id": str(uuid.uuid4()), "prompt": "private"},
+                headers=agent_headers,
+            )
+            assert unsafe_trace.status_code == 422
+
+            audit_events = await client.get(
+                f"/api/tasks/{task_id}/audit-events",
+                headers=first_headers,
+            )
+            assert audit_events.status_code == 200
+            assert [event["id"] for event in audit_events.json()] == [trace_event_id]
+            assert audit_events.json()[0]["details"] == {
+                "stage": "analyze",
+                "model_name": "test-model",
+                "skill": "interaction-analysis",
+                "prompt_version": "v1",
+            }
+            cross_account_audit = await client.get(
+                f"/api/tasks/{task_id}/audit-events",
+                headers=second_headers,
+            )
+            assert cross_account_audit.status_code == 404
+            service_cannot_read_audit = await client.get(
+                f"/api/tasks/{task_id}/audit-events",
+                headers=agent_headers,
+            )
+            assert service_cannot_read_audit.status_code == 401
+
+            second_trace_task_id = uuid.uuid4()
+            second_trace_id = uuid.uuid4().hex
+            async with factory.begin() as session:
+                session.add(
+                    ProcessingTask(
+                        id=second_trace_task_id,
+                        owner_id=first_id,
+                        classroom_id=uuid.UUID(classroom_id),
+                        status="running",
+                        stage="analyze",
+                        progress=0.5,
+                        privacy_mode="local",
+                        analysis_contract=analysis_contract,
+                        trace_id=second_trace_id,
+                        claimed_by="agent-concurrent",
+                        lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                    )
+                )
+            concurrent_event_id = str(uuid.uuid4())
+            first_concurrent_payload = {
+                **trace_payload,
+                "event_id": concurrent_event_id,
+            }
+            second_concurrent_payload = {
+                **trace_payload,
+                "event_id": concurrent_event_id,
+                "trace_id": second_trace_id,
+            }
+            async with (
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://trace-first"
+                ) as first_trace_client,
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://trace-second"
+                ) as second_trace_client,
+            ):
+                concurrent_trace_responses = await asyncio.gather(
+                    first_trace_client.post(
+                        f"/api/internal/tasks/{task_id}/trace-events",
+                        json=first_concurrent_payload,
+                        headers=agent_headers,
+                    ),
+                    second_trace_client.post(
+                        f"/api/internal/tasks/{second_trace_task_id}/trace-events",
+                        json=second_concurrent_payload,
+                        headers=agent_headers,
+                    ),
+                )
+            assert sorted(response.status_code for response in concurrent_trace_responses) == [
+                201,
+                409,
+            ]
+            conflict_response = next(
+                response
+                for response in concurrent_trace_responses
+                if response.status_code == 409
+            )
+            assert conflict_response.json()["error"]["code"] == "STATE_CONFLICT"
+
+            wrong_conclusion_trace = await client.post(
+                f"/api/internal/tasks/{task_id}/conclusions",
+                json={
+                    "conclusions": [
+                        {
+                            "type": "fact",
+                            "content": "Trace 不一致。",
+                            "trace_id": "wrong-trace",
+                            "evidence_refs": [
+                                {
+                                    "source_type": "transcript",
+                                    "segment_id": segment_id,
+                                    "start_ms": 100,
+                                    "end_ms": 1900,
+                                }
+                            ],
+                        }
+                    ]
+                },
+                headers=agent_headers,
+            )
+            assert wrong_conclusion_trace.status_code == 400
+
             heartbeat_during_analysis = await client.post(
                 f"/api/internal/agent/tasks/{task_id}/heartbeat",
                 json={"agent_id": "agent-1"},
@@ -388,7 +610,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
                         {
                             "type": "fact",
                             "content": "未绑定任务内逐字稿的结论。",
-                            "trace_id": "processing-test-trace",
+                            "trace_id": task_trace_id,
                             "evidence_refs": [
                                 {
                                     "source_type": "transcript",
@@ -411,7 +633,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
                         {
                             "type": "fact",
                             "content": "教师提出了检索步骤问题。",
-                            "trace_id": "processing-test-trace",
+                            "trace_id": task_trace_id,
                             "model_name": "test-model",
                             "skill": "interaction-analysis",
                             "prompt_version": "v1",
@@ -431,6 +653,33 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert conclusions.status_code == 201
             assert conclusions.json()[0]["review_status"] == "pending"
+            repeated_conclusions = await client.post(
+                f"/api/internal/tasks/{task_id}/conclusions",
+                json={
+                    "conclusions": [
+                        {
+                            "type": "fact",
+                            "content": "教师提出了检索步骤问题。",
+                            "trace_id": task_trace_id,
+                            "model_name": "test-model",
+                            "skill": "interaction-analysis",
+                            "prompt_version": "v1",
+                            "evidence_refs": [
+                                {
+                                    "source_type": "transcript",
+                                    "segment_id": segment_id,
+                                    "start_ms": 100,
+                                    "end_ms": 1900,
+                                    "quote": "请说明检索的第一步。",
+                                }
+                            ],
+                        }
+                    ]
+                },
+                headers=agent_headers,
+            )
+            assert repeated_conclusions.status_code == 201
+            assert len(repeated_conclusions.json()) == 1
 
             succeeded = await client.patch(
                 f"/api/internal/tasks/{task_id}/state",
@@ -512,17 +761,24 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert reached_transcribe.status_code == 200
 
-            async with factory.begin() as session:
-                expired_task = await session.get(
-                    ProcessingTask,
-                    uuid.UUID(retry_task_id),
-                )
-                assert expired_task is not None
-                expired_task.lease_expires_at = datetime.now(UTC) - timedelta(
-                    seconds=1
-                )
+        async with factory.begin() as session:
+            expired_task = await session.get(
+                ProcessingTask,
+                uuid.UUID(retry_task_id),
+            )
+            assert expired_task is not None
+            expired_task.lease_expires_at = datetime.now(UTC) - timedelta(
+                seconds=1
+            )
 
-            reclaimed_transcribe = await client.post(
+        restarted_app = create_app(settings)
+        restarted_app.dependency_overrides[get_db] = test_db
+        restarted_app.state.object_storage = storage
+        restarted_transport = httpx.ASGITransport(app=restarted_app)
+        async with httpx.AsyncClient(
+            transport=restarted_transport, base_url="http://restarted"
+        ) as restarted_client:
+            reclaimed_transcribe = await restarted_client.post(
                 "/api/internal/tasks/claim",
                 json={
                     "worker_id": "worker-after-expiry",
@@ -534,7 +790,17 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert reclaimed_transcribe.json()["task_id"] == retry_task_id
             assert reclaimed_transcribe.json()["stage"] == "transcribe"
 
-            backward_state = await client.patch(
+            recovered_events = await restarted_client.get(
+                f"/api/tasks/{retry_task_id}/events",
+                headers=first_headers,
+            )
+            assert recovered_events.status_code == 200
+            assert any(
+                event["message"] == "Worker 在租约到期后重新领取。"
+                for event in recovered_events.json()
+            )
+
+            backward_state = await restarted_client.patch(
                 f"/api/internal/tasks/{retry_task_id}/state",
                 json={
                     "stage": "extract_audio",
@@ -546,7 +812,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert backward_state.status_code == 409
             assert backward_state.json()["error"]["code"] == "STATE_CONFLICT"
 
-            resumed_transcript = await client.post(
+            resumed_transcript = await restarted_client.post(
                 f"/api/internal/tasks/{retry_task_id}/transcript",
                 json={
                     "source_language": "zh",
@@ -564,7 +830,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert resumed_transcript.status_code == 201
 
-            completed_transcribe = await client.patch(
+            completed_transcribe = await restarted_client.patch(
                 f"/api/internal/tasks/{retry_task_id}/state",
                 json={
                     "stage": "transcribe",
@@ -575,7 +841,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert completed_transcribe.status_code == 200
 
-            resumed_handoff = await client.post(
+            resumed_handoff = await restarted_client.post(
                 f"/api/internal/tasks/{retry_task_id}/handoff-agent",
                 json={"worker_id": "worker-after-expiry"},
                 headers=worker_headers,
@@ -594,6 +860,11 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 assert handed_off_task.lease_expires_at is None
     finally:
         async with factory.begin() as session:
+            await session.execute(
+                delete(AuditEvent).where(
+                    AuditEvent.owner_id.in_([first_id, second_id])
+                )
+            )
             for user_id in (first_id, second_id):
                 user = await session.get(User, user_id)
                 if user is not None:
