@@ -26,31 +26,10 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
-  // 👇 用来存储杨晗发来的真实字幕数据
+  // 1. 数据源置空，等待真实数据接口联调
   const [demoTranscript, setDemoTranscript] = useState<TranscriptItem[]>([]);
   
-  useEffect(() => {
-    fetch("/assets/ai.json")
-      .then((res) => res.json())
-      .then((data) => {
-        // 1. 重点修正：从 data.segments 数组中提取真正的字幕列表
-        const rawArray = data?.segments || [];
-        
-        // 2. 核心翻译：把杨晗的数据字段，转成前端组件认识的字段
-        const mappedData = rawArray.map((item: any) => ({
-          id: String(item.index || Math.random()),
-          startMs: item.start_ms || 0,
-          endMs: item.end_ms || 0,
-          speaker: item.speaker || "教师",
-          originalText: item.text || "",
-          translatedText: item.translation || "",
-        }));
-
-        // 3. 将转换好的数据设置给前端状态
-        setDemoTranscript(mappedData);
-      })
-      .catch((err) => console.warn("字幕数据加载失败，请确认 /assets/ai.json 文件是否存在", err));
-  }, []);
+  // 2. 删除了 fetch("/assets/ai.json") 的危险数据加载
 
   const [classroom, setClassroom] = useState("尚未创建课堂");
   const [messages, setMessages] = useState<string[]>([]);
@@ -141,12 +120,13 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
         </header>
         <div className="evidence-workbench-grid">
           <div className="evidence-media-column">
-            {/* 👇 视频路径已改为 /assets/test2.mp4 */}
+            {/* 3. 视频路径暂时留空，等待真实 upload_url 接口 */}
             <VideoPlayer
-              videoUrl="/assets/test2.mp4"
+              videoUrl=""
               seekToMs={seekToMs}
               onTimeUpdate={setCurrentVideoTimeMs}
             />
+            {/* 4. 将 demoTranscript 作为占位，等待真实 getTranscript 接口数据 */}
             <TranscriptTimeline
               items={demoTranscript}
               currentTimeMs={currentVideoTimeMs}
@@ -157,17 +137,16 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
             />
           </div>
           <div className="evidence-review-column">
+            {/* 5. 删除了硬编码的固定事实、判断和建议文本，保留为属性占位 */}
             <EvidenceCard
-              fact="教师提出证据追问后，课堂出现约五秒等待时间，随后学生给出文本依据。"
-              judgment="该片段可作为“提问后留出思考时间”的候选证据，但仍需教师结合完整上下文判断。"
-              suggestion="复核前后片段并确认时间边界；若上下文一致，可保留等待时间并继续追问证据。"
-              sourceLabel="演示逐字稿 00:12–00:31"
+              fact=""
+              judgment=""
+              suggestion=""
+              sourceLabel=""
               reviewStatus={reviewStatus}
               isDemo
               onSeekEvidence={() => {
-                const evidenceStartMs = demoTranscript[0]?.startMs || 0;
-                setSeekToMs(evidenceStartMs);
-                setCurrentVideoTimeMs(evidenceStartMs);
+                // 暂不执行任何跳转，等待真实数据
               }}
             />
             <ReviewControls
@@ -181,27 +160,7 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
               }}
               onNoteChange={setReviewNote}
             />
-            {(reviewStatus === "accepted" || reviewStatus === "modified") && (
-              <Link
-                className="button primary wide"
-                href="/reports/demo"
-                aria-disabled={reviewStatus === "modified" && !reviewNote.trim()}
-                onClick={(event) => {
-                  if (reviewStatus === "modified" && !reviewNote.trim()) {
-                    event.preventDefault();
-                    return;
-                  }
-                  saveDemoReportDraft(reviewStatus, reviewNote);
-                }}
-              >
-                查看报告编辑与预览
-              </Link>
-            )}
-            {reviewStatus === "modified" && !reviewNote.trim() && (
-              <p className="review-transfer-note" role="alert">
-                请先填写教师修改说明，再将修改后的内容带入报告。
-              </p>
-            )}
+            {/* 6. 暂时删除了“查看报告”的 Link，等待 PR #22 修复后使用真实跳转 */}
           </div>
         </div>
       </section>

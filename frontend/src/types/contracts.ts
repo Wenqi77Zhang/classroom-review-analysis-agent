@@ -101,7 +101,7 @@ export type ApiErrorBody = {
 };
 
 // ============================================================
-// 新增：真实业务链路类型 (匹配后端 snake_case)
+// 新增：真实业务链路类型 (匹配后端 snake_case 最终修正版)
 // ============================================================
 
 // 视频下载地址响应
@@ -113,8 +113,10 @@ export interface DownloadUrlResponse {
 // 真实转录读取
 export interface TranscriptRead {
   segments: TranscriptSegment[];
-  has_translation: boolean;
-  language: string;
+  task_id: string;        // 新增：所属任务 ID
+  source_language: string; // 新增：源语言
+  segment_count: number;   // 新增：片段总数
+  duration_ms: number;     // 新增：总时长（毫秒）
 }
 
 // 单个逐字稿片段
@@ -124,17 +126,17 @@ export interface TranscriptSegment {
   start_ms: number;
   end_ms: number;
   speaker: string | null;
-  text: string;
-  translation: string | null;
+  text: string;           // 修正：原为 original_text
+  translation: string | null; // 修正：原为 translated_text
   is_edited: boolean;
-  confidence: number | null;
+  confidence: number | null; // 修正：保持 confidence 字段，后端允许 null
 }
 
 // 逐字稿更新请求
 export interface TranscriptSegmentUpdate {
   speaker?: string | null;
-  original_text?: string | null;
-  translated_text?: string | null;
+  text?: string | null;          // 修正：原为 original_text
+  translation?: string | null;   // 修正：原为 translated_text
 }
 
 // 逐字稿修订记录
@@ -144,16 +146,16 @@ export interface TranscriptSegmentRevision {
   user_id: string;
   changed_at: string;
   old_speaker: string | null;
-  old_original_text: string | null;
-  old_translated_text: string | null;
+  old_text: string | null;           // 修正：原为 old_original_text
+  old_translation: string | null;    // 修正：原为 old_translated_text
   new_speaker: string | null;
-  new_original_text: string | null;
-  new_translated_text: string | null;
+  new_text: string | null;           // 修正：原为 new_original_text
+  new_translation: string | null;    // 修正：原为 new_translated_text
 }
 
 // 证据引用
 export interface EvidenceReference {
-  type: "video" | "transcript" | "frame" | "courseware";
+  source_type: "video" | "transcript" | "frame" | "courseware"; // 修正：原为 type
   asset_id?: string;
   start_ms?: number;
   segment_id?: string;
@@ -178,19 +180,19 @@ export interface AnalysisConclusion {
   updated_at: string;
 }
 
-// 复核请求
+// 复核请求 (修正：状态字段改为 action)
 export interface ReviewRequest {
-  status: "accepted" | "modified" | "rejected";
+  action: "accept" | "modify" | "reject"; // 修正：原为 status
   edited_content?: string | null;
   note?: string | null;
 }
 
-// 复核决定记录 (用于历史)
+// 复核决定记录 (用于历史) (修正：状态字段改为 action)
 export interface ReviewDecision {
   id: string;
   conclusion_id: string;
   user_id: string;
-  status: "accepted" | "modified" | "rejected";
+  action: "accept" | "modify" | "reject"; // 修正：原为 status
   edited_content: string | null;
   note: string | null;
   created_at: string;

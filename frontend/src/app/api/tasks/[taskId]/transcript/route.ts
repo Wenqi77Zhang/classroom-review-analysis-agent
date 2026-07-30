@@ -8,6 +8,6 @@ export async function GET(request: Request, context: RouteContext) {
   const { taskId } = await context.params;
   return proxyAuthenticatedJson(
     request,
-    `/api/tasks/${encodeURIComponent(taskId)}`,
+    `/api/tasks/${encodeURIComponent(taskId)}/transcript`,
   );
 }
