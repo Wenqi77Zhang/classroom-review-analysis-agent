@@ -17,10 +17,16 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from backend.app.schemas.common import ApiModel, OrmModel, ResourceId, UserRef
+
+NonBlankText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+ReportTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
+]
 
 
 class ConclusionType(StrEnum):
@@ -160,8 +166,14 @@ class ReviewAction(StrEnum):
 
 class ReviewRequest(ApiModel):
     action: ReviewAction
-    edited_content: str | None = Field(default=None, description="action=modify 时必填。")
-    note: str | None = Field(default=None, max_length=2000, description="教师备注，进审计。")
+    edited_content: NonBlankText | None = Field(
+        default=None, description="action=modify 时必填。"
+    )
+    note: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="教师备注写入复核历史；审计事件只记录动作和结果状态。",
+    )
 
     @model_validator(mode="after")
     def _check_edited_content(self) -> ReviewRequest:
@@ -210,12 +222,19 @@ class ReportRead(OrmModel):
 
 
 class ReportUpdate(ApiModel):
-    title: str | None = Field(default=None, min_length=1, max_length=255)
+    title: ReportTitle | None = None
     content: str | None = None
+
+    @field_validator("title", "content", mode="before")
+    @classmethod
+    def _provided_fields_cannot_be_null(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("报告字段不能设为 null。")
+        return value
 
     @model_validator(mode="after")
     def _require_any_field(self) -> ReportUpdate:
-        if self.title is None and self.content is None:
+        if not self.model_fields_set:
             raise ValueError("title、content 至少要提供一个。")
         return self
 
