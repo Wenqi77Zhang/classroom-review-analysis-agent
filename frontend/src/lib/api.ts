@@ -1,4 +1,5 @@
 import type {
+  AnalysisContract,
   ApiErrorBody,
   AssetKind,
   AssetRead,
@@ -181,7 +182,7 @@ export async function deleteAsset(assetId: string): Promise<void> {
 export async function createTask(
   classroomId: string,
   assetIds: string[],
-  analysisContract: Record<string, unknown>,
+  analysisContract: AnalysisContract,
 ): Promise<TaskRead> {
   return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/tasks`, {
     method: "POST",

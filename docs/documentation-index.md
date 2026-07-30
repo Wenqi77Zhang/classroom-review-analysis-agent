@@ -5,17 +5,18 @@
 ## 建议阅读顺序
 
 1. `current-progress.md`：当前已合并事实、进行中任务、未完成项和 M1 判断。
-2. `requirements-baseline.md`：网页要求、核心功能和使用边界。
-3. `background-and-needs.md`：任务背景、目标用户、痛点和成功标准。
-4. `product-spec.md`：产品定位、核心流程、页面和交互取舍。
-5. `ui-baseline-v1.md`：成员 1 已确认的第一版视觉与流程基准，以及成员 2 接入规则。
-6. `interface-contracts.md`：前端、后端、Worker 与 Agent 的接口契约。
-7. `architecture.md`：系统架构、存储、任务状态和部署关系。
-8. `agent-design.md`：Agent 编排、模型、Prompt、Skill、工具和证据门禁。
-9. `data-security.md`：隐私、权限、密钥、保留和删除策略。
-10. `acceptance-matrix.md`：要求、负责人、实现位置和验收证据映射。
-11. `validation-plan.md`：真实输入、失败场景、测试和迭代方法。
-12. `scorecard.md`：按官方评分结构进行提交前自检。
+2. `local-development-setup.md`：全体成员统一使用的本地软件、环境变量、分服务启动与排错指南。
+3. `requirements-baseline.md`：网页要求、核心功能和使用边界。
+4. `background-and-needs.md`：任务背景、目标用户、痛点和成功标准。
+5. `product-spec.md`：产品定位、核心流程、页面和交互取舍。
+6. `ui-baseline-v1.md`：成员 1 已确认的第一版视觉与流程基准，以及成员 2 接入规则。
+7. `interface-contracts.md`：前端、后端、Worker 与 Agent 的接口契约。
+8. `architecture.md`：系统架构、存储、任务状态和部署关系。
+9. `agent-design.md`：Agent 编排、模型、Prompt、Skill、工具和证据门禁。
+10. `data-security.md`：隐私、权限、密钥、保留和删除策略。
+11. `acceptance-matrix.md`：要求、负责人、实现位置和验收证据映射。
+12. `validation-plan.md`：真实输入、失败场景、测试和迭代方法。
+13. `scorecard.md`：按官方评分结构进行提交前自检。
 
 ## 项目管理与报告
 

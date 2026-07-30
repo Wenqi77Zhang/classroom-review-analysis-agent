@@ -20,7 +20,7 @@
 - PR #22 的教师复核、版本历史、报告持久化和最小审计归属成员 3，当前分支待合并。
 - PR #20 的 Worker/B2 下载协作、大小/ETag 校验和时间戳逐字稿写回 PostgreSQL 的
   真实单输入验收归属成员 1；该项不改写为成员 3 独立成果。
-- 尚未完成：服务端导出、完整部署 E2E、第二段远程输入与重启恢复验证。
+- 尚未完成：服务端导出、完整部署 E2E、第二段远程输入与整机/Worker 崩溃恢复演练。
 - 上述各 PR 按本节分别归属，不把成员 1 的 #18/#19/#20 协作成果与成员 3 的 #22
   复核、历史、报告和最小审计成果混写。
 
@@ -33,7 +33,7 @@
   生成，`modified` 使用教师改写内容；驳回会同步移除既有报告正文和关联。
 - 复核与报告操作记录脱敏审计元数据，不保存教师备注、改写内容或报告正文。
 - 新增真实 PostgreSQL HTTP 集成测试，覆盖复核、报告门禁、跨账号拒绝和审计脱敏。
-- 已验证：后端全量 `179 passed, 1 skipped`、`ruff check backend tests`，以及前端测试、
+- 已验证：合入最新 `main` 后端全量 `184 passed, 1 skipped`、`ruff check backend tests`，以及前端测试、
   TypeScript 类型检查和生产构建。报告导出、浏览器端实际接线和真实视频 E2E 不在本项中。
 
 ## MVP 加固：Trace、幂等、恢复与权限（堆叠于 PR #22）
@@ -46,7 +46,8 @@
   返回 404。
 - PostgreSQL HTTP 流程重复写入逐字稿和待复核结论，验证整批替换不会累积重复结果；
   重建 FastAPI 实例后，过期租约可由新 Worker 重新领取并保留事件历史。
-- 验证：全量 `pytest` 为 179 passed / 1 skipped，Ruff 与 Alembic drift check 通过。
+- 验证：合入最新 `main` 后全量 `pytest` 为 184 passed / 1 skipped，Ruff 与
+  Alembic drift check 通过。
   该恢复测试不冒充真实 Worker 进程崩溃或整机重启演练。
 
 | 内容 | 位置 | 可核对方式 |
