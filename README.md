@@ -6,7 +6,15 @@
 
 ## 当前状态
 
-阶段 0 已完成，`UI Baseline v1` 与成员 2 的证据工作台已迁入 `frontend/`。后端现已具备账号/课堂、私有对象存储预签名上传与核验、任务/事件/重试、Worker/Agent 最小权限回写，以及逐字稿和证据化结论的读写接口。前端现已通过同源 BFF 接通演示会话、课程/课堂、`presign → B2 PUT → HEAD complete` 上传和任务创建/查询；短期 JWT 只保存在 HttpOnly Cookie，长期对象存储密钥不进入浏览器。证据与报告页面仍包含明确标注的 Mock 数据，真实视频抽取、ASR、翻译与证据索引仍依赖成员 4 的 Worker，报告持久化与完整端到端部署也尚未完成，因此不得把“上传和任务 API 已接通”描述成真实全链路已经跑通。
+截至 2026-07-30 的已合并基线为 `main@1e52c9c`。前端已通过同源 BFF
+接通演示会话、课程/课堂、`presign → B2 PUT → HEAD complete` 上传和任务
+创建/查询；后端已具备账号隔离、私有对象存储、任务、逐字稿和结论的最小权限
+读写接口。短期 JWT 只保存在 HttpOnly Cookie，长期对象存储密钥不进入浏览器。
+
+当前正在其他对话实现 Worker 从 B2 获取上传视频并消费 `queued` 任务；该工作尚未
+合并和验收，不能写成已完成。证据工作台仍使用明确标注的演示数据，教师复核状态和
+报告也尚未持久化。里程碑 M1 因此仍未通过。逐项状态、证据与阻塞统一记录在
+[`docs/current-progress.md`](docs/current-progress.md)。
 
 ## 里程碑
 
@@ -33,6 +41,10 @@ chmod +x setup.sh start.sh verify.sh
 ./verify.sh
 ```
 
+当前 `start.ps1` / `start.sh` 仍是成员 5 的统一启动占位入口，不能一次启动完整
+前端、后端和 Worker；其退出非零属于已知未完成项。现阶段应按各模块指南分别启动，
+不得把阶段 0 脚本检查通过描述成 M1 冒烟验证通过。
+
 阶段 0 的安装脚本只创建项目内 `.venv` 并安装当前已声明依赖；后续依赖由责任成员在实现时补充并锁定。脚本不会写入真实密钥。
 
 ## 开发环境基线
@@ -49,6 +61,7 @@ chmod +x setup.sh start.sh verify.sh
 本文件是仓库唯一使用通用名称 `README.md` 的总入口。子目录说明均使用能直接表达用途的唯一文件名，避免出现多个同名 README。
 
 - 正式需求、产品、架构、安全与验收文档：`docs/documentation-index.md`
+- 当前已合并进度、进行中任务与集成阻塞：`docs/current-progress.md`
 - 完整四天五人规划与目标骨架：`docs/project-plan-v5.md`
 - 文件和模块责任：`OWNERSHIP.md`
 - 前端模块：`frontend/frontend-module-guide.md`（含成员 2 交接）
