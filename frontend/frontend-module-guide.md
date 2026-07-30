@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-截至 `main@1e52c9c`，首页、课程/课堂创建、复盘任务和报告页面均可交互。
+截至 `main@d27c592`，首页、课程/课堂创建、复盘任务和报告页面均可交互。
 前端通过同源 BFF 使用 HttpOnly Cookie 保存短期演示会话，并已接通课程/课堂、
 真实 B2 预签名上传、上传完成核验、任务创建和任务状态查询。成员 2 的证据组件
 已经合并，但逐字稿、证据卡和结论仍使用醒目标注的演示数据；教师复核没有写入
@@ -26,7 +26,8 @@ npm ci
 npm run dev
 ```
 
-同时启动已正确配置 PostgreSQL 与 B2 的后端后，可执行真实上传和任务创建。任务创建
-后的媒体处理依赖 Worker；当前 Worker/B2 集成仍在其他对话实现，尚未合并验收。
+同时启动已正确配置 PostgreSQL 与 B2 的后端和 Worker 后，可执行真实上传、任务创建、
+B2 下载、视频转写与 PostgreSQL 逐字稿写回。前端尚未读取和播放这份真实逐字稿，
+因此证据工作台仍不得移除 Mock 标识。
 
 提交前至少运行：`npm test`、`npm run typecheck`、`npm run build`。`tests/evidence-workbench.test.mjs` 负责守住证据定位、教师复核和 Mock 边界；详细视觉基准见 `docs/ui-baseline-v1.md`。
