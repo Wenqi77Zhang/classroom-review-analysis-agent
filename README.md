@@ -13,8 +13,9 @@
 
 PR #20 已接通 Worker 对 `uploaded` 任务的领取、B2 限时下载、文件大小与 ETag
 校验、FFmpeg、Whisper 和 PostgreSQL 逐字稿写回，并用一段获授权真实视频完成验收。
-证据工作台仍使用明确标注的演示数据，翻译、课件、证据索引、Agent、教师复核状态和
-报告尚未形成完整持久化链路。里程碑 M1 因此仍未通过。逐项状态、证据与阻塞统一记录在
+证据工作台仍使用明确标注的演示数据，翻译、课件和真实证据索引尚未接入。Agent 已接入
+本地 Ollama `qwen3.5:4b`，但真实模型验收仍只使用合成时间戳证据；教师复核历史和报告
+持久化后端已通过 PostgreSQL CI。里程碑 M1 因此仍未通过。逐项状态、证据与阻塞统一记录在
 [`docs/current-progress.md`](docs/current-progress.md)。
 
 ## 里程碑
@@ -29,6 +30,7 @@ Windows：
 
 ```powershell
 .\setup.ps1
+ollama pull qwen3.5:4b
 .\start.ps1
 .\verify.ps1
 ```
@@ -38,13 +40,15 @@ macOS/Linux：
 ```bash
 chmod +x setup.sh start.sh verify.sh
 ./setup.sh
+ollama pull qwen3.5:4b
 ./start.sh
 ./verify.sh
 ```
 
-当前 `start.ps1` / `start.sh` 仍是成员 5 的统一启动占位入口，不能一次启动完整
-前端、后端和 Worker；其退出非零属于已知未完成项。现阶段应按各模块指南分别启动，
-不得把阶段 0 脚本检查通过描述成 M1 冒烟验证通过。
+`start.ps1` / `start.sh` 会读取本机 `.env`，启动前端、FastAPI、Worker 轮询和 Agent
+轮询，并把运行日志写入已忽略的 `logs/`。脚本会先检查 `.venv`、`.env`、npm、必需
+变量和 Worker/Agent 令牌隔离；缺失配置时 fail-closed。当前已完成语法、静态安全和
+缺配置失败测试，仍需在具备 PostgreSQL、对象存储和真实任务的机器上完成整套启动验收。
 
 阶段 0 的安装脚本只创建项目内 `.venv` 并安装当前已声明依赖；后续依赖由责任成员在实现时补充并锁定。脚本不会写入真实密钥。
 

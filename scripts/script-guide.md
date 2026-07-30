@@ -18,6 +18,12 @@
 或读取并打印 `.env` 秘密。安装方式、运行顺序、B2 CORS 和安全边界统一见
 `../docs/local-development-setup.md` 第 6 节。
 
+## `runtime_preflight.py` 与 `run_service_loop.py`
+
+统一启动入口先用 `runtime_preflight.py` 检查项目内 `.venv`、本机 `.env`、必需配置与
+Worker/Agent 令牌隔离，再由 `run_service_loop.py` 以环境变量传递服务令牌并常驻轮询。
+两者不会把令牌写入命令行；停止统一入口时会向当前子进程转发终止信号并清理进程。
+
 ## `configure-team-tunnel-cors.py`
 
 该脚本使用持有者本机 `.env` 中的受限 B2 Application Key，为本次
