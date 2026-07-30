@@ -1228,7 +1228,12 @@ def test_reclaimed_transcribe_completes_without_backward_state_and_hands_off(
     def claimed_path(*_: object):
         yield source
 
+    def fake_extract_audio(_: Path, output_path: Path) -> Path:
+        _silent_wav(output_path)
+        return output_path
+
     monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+    monkeypatch.setattr("worker.pipeline.extract_audio", fake_extract_audio)
 
     result = _process_claimed_media(
         claim,
@@ -1272,7 +1277,12 @@ def test_reclaimed_transcribe_cleanup_failure_stays_at_transcribe(
             retryable=True,
         )
 
+    def fake_extract_audio(_: Path, output_path: Path) -> Path:
+        _silent_wav(output_path)
+        return output_path
+
     monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+    monkeypatch.setattr("worker.pipeline.extract_audio", fake_extract_audio)
 
     with pytest.raises(WorkerError) as raised:
         _process_claimed_media(
