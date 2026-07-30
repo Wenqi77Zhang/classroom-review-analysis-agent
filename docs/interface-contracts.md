@@ -7,7 +7,7 @@
 | 内容 | 状态 |
 |---|---|
 | Pydantic Schema（`backend/app/schemas/`） | **已实现**，可导入、含校验器并纳入后端/Agent/Worker 测试 |
-| 端点路由（`backend/app/api/`） | **部分实现**：认证、课程/课堂、上传、任务、逐字稿、分析、教师复核/历史与报告读取/保存可调用；报告导出尚未实现 |
+| 端点路由（`backend/app/api/`） | **部分实现**：认证、课程/课堂、上传、任务、逐字稿与分析最短接口可调用；教师复核写入/历史和报告接口尚未实现 |
 | ORM 模型与迁移 | **已实现基础持久化**：15 张业务/关联表、Alembic 首迁移与 PostgreSQL 隔离测试 |
 | TypeScript 类型（`frontend/src/types/contracts.ts`） | **部分实现**：已覆盖前端当前上传和任务链路；逐字稿、真实结论、复核历史和报告仍待同步 |
 
@@ -143,14 +143,10 @@ parse_courseware → build_evidence_index → analyze`
 | `analyses` | `GET /classrooms/{id}/conclusions`、`POST /conclusions/{id}/review`、`GET /conclusions/{id}/history` |
 | `reports` | `GET\|PUT /classrooms/{id}/report`、`POST /reports/{id}/export`、`GET /reports/{id}/export/{fmt}` |
 
-实现边界：`analyses` 已提供结论读取、Agent 内部批量写入、教师复核写入和历史读取。
-`reports` 已提供 `GET|PUT /classrooms/{id}/report`；PUT 请求只接受 `title`，报告 Markdown
-正文由服务端从当前状态为 `accepted` / `modified` 的本课堂结论生成，客户端不能提交或覆盖
-正文。`modified` 结论使用教师的 `reviewed_content`，其余可报告结论使用模型原文。每次保存
-或复核状态变化都会重新计算正文和关联，已驳回的结论不得保留在报告中。
-`included_conclusion_ids` 按结论创建时间、ID 稳定排序，不依赖数据库关联表的返回顺序。
-`POST /reports/{id}/export` 和 `GET /reports/{id}/export/{fmt}` 仍未实现。端点列入冻结
-契约不等于已经可以调用。
+实现边界：`analyses` 已实现结论读取、教师复核 append-only 历史与 Agent 内部批量写入；
+`reports` 已实现 `GET|PUT /classrooms/{id}/report` 持久化草稿，关联结论由后端从
+`accepted/modified` 状态计算，客户端不能提交结论 ID 绕过门禁。报告导出端点仍为
+`TODO`，端点列入冻结契约不等于已经可以调用。
 
 ### 认证、课程与课堂字段（Day 3）
 

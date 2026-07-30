@@ -39,3 +39,48 @@
 完成状态和安全失败处理。该工作复用成员 5 已实现的编排、Provider、Skill、证据门禁
 和 Trace 结构，不改写为成员 5 已独立完成的运行时工作，也不转移成员 5 对 Agent 与
 质量的主责。分支合并、真实模型、真实证据和完整 E2E 通过前，Agent 仍不得标为完成。
+
+后续状态：PR #26 已由成员 1 合并，暂代运行时集成到此结束；这部分不计作成员 5 独立
+实现。成员 5 从真实模型 P0 继续。
+
+## 2026-07-30：Ollama `qwen3.5:4b` 真实 Provider 接入
+
+- 安装并选定本地 Ollama `qwen3.5:4b`，沿用 `LOCAL_MODEL_CHAT_COMPLETIONS_URL` 与
+  `LOCAL_MODEL_NAME`，新增可选 `LOCAL_MODEL_REASONING_EFFORT=none`，不改跨模块 Schema。
+- 实测简单严格 JSON Schema 请求成功；完整 Agent Schema 首轮暴露 thinking 空正文和
+  Ollama 0.32.5 `failed to parse grammar`。按 Ollama 官方兼容能力关闭 thinking，并仅在
+  本地模型生成期剥离其语法编译器不支持的描述、格式和长度约束；返回结果仍通过原完整
+  Pydantic Schema、Skill 与证据 ID 门禁。
+- 完整 Agent 编排真实调用返回 3 条结构化结论，记录模型 `qwen3.5:4b`、Prompt
+  `analysis-v1`、Skill `common`、Trace，并验证所有引用保持在输入的毫秒时间范围内。
+- 自动验证：成员 5 定向测试 `26 passed`，`ruff check agent tests/unit/test_agent.py`
+  通过。完整 Agent 调用输入为明确的合成时间戳证据；团队临时网页因当前没有可用浏览器
+  控制实例而未进入，因此真实视频逐字稿、后端写回和 P0 完整验收仍标记 `TODO`。
+
+## 2026-07-30：Trace 与统一启动入口
+
+- 复核已有 JSONL Trace Sink、运行器接线、后端任务/结论 `trace_id` 和前端展示，修复
+  Trace 对逐字稿、Prompt、译文、引用正文和原始输入/响应只截断不全量脱敏的问题。
+- Trace/后端定向测试 `113 passed`，前端包含 `trace_id` 展示在内的完整契约测试通过；
+  错误继续只记录稳定错误类型、错误码和阶段。
+- 将 `start.ps1` / `start.sh` 从阶段 0 占位替换为四服务入口；Worker/Agent 使用成员 5
+  循环包装持续领取，令牌只从环境继承，日志进入忽略目录，父入口退出时清理子进程。
+- PowerShell 两个脚本语法通过，启动脚本静态测试 `3 passed`，缺少 `.env` 时实测在启动
+  任何服务前失败。因当前无真实 `.env`、PostgreSQL 和对象存储，本轮不把统一启动代码
+  描述为完整环境已运行。
+
+## 2026-07-30：发布门禁与剩余链路复核
+
+- 将 `verify.ps1` / `verify.sh` 从阶段 0 棐架检查升级为 Python 全仓测试、Ruff、前端
+  契约测试、TypeScript、生产构建、README 契约和敏感文件路径检查；无 `.git` 的源码
+  快照使用排除虚拟环境、依赖、缓存、日志和临时目录的保守回退扫描。
+- 本机 `verify.ps1` 实际结果为 `183 passed, 10 skipped`，Ruff、前端测试、类型检查和
+  Next.js 生产构建全部通过；`scripts/verify-readme.ps1` 再次执行同一发布门禁并通过。
+  10 项跳过来自未配置 PostgreSQL 等外部环境条件，不能算数据库验收通过。
+- 复核成员 3 新增接口后确认：教师复核/历史、报告保存读取以及仅收录
+  `accepted/modified` 的数据库集成测试代码已经存在；当前机器没有 PostgreSQL/Docker，
+  前端证据工作台也仍使用本地 Mock 状态和 `/reports/demo`，故只标记“局部通过”。
+- 团队临时联调网址已提供，但当前会话没有可控 Chrome 或内置浏览器实例，未执行网页
+  E2E；访问码未写入仓库。Quick Tunnel 建设按 `跳过.md` 由其他成员负责。
+- 收口检查确认 Ollama 模型仍在、本机 PostgreSQL 5432 未监听；Agent、Trace、报告过滤和
+  统一启动定向测试复跑 `36 passed`。

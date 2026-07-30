@@ -17,16 +17,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
 
-from pydantic import Field, StringConstraints, model_validator
+from pydantic import Field, model_validator
 
 from backend.app.schemas.common import ApiModel, OrmModel, ResourceId, UserRef
-
-NonBlankText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-ReportTitle = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
-]
 
 
 class ConclusionType(StrEnum):
@@ -166,14 +160,8 @@ class ReviewAction(StrEnum):
 
 class ReviewRequest(ApiModel):
     action: ReviewAction
-    edited_content: NonBlankText | None = Field(
-        default=None, description="action=modify 时必填。"
-    )
-    note: str | None = Field(
-        default=None,
-        max_length=2000,
-        description="教师备注写入复核历史；审计事件只记录动作和结果状态。",
-    )
+    edited_content: str | None = Field(default=None, description="action=modify 时必填。")
+    note: str | None = Field(default=None, max_length=2000, description="教师备注，进审计。")
 
     @model_validator(mode="after")
     def _check_edited_content(self) -> ReviewRequest:
@@ -213,9 +201,7 @@ class ReportRead(OrmModel):
     id: ResourceId
     classroom_id: ResourceId
     title: str
-    content: str = Field(
-        description="服务端从 accepted/modified 结论生成的 Markdown 正文。"
-    )
+    content: str = Field(description="Markdown 正文，教师可在前端编辑。")
     included_conclusion_ids: list[ResourceId] = Field(
         description="实际组合进报告的结论；后端保证其 review_status 都在 "
         "REPORTABLE_REVIEW_STATUSES 内。"
@@ -224,7 +210,14 @@ class ReportRead(OrmModel):
 
 
 class ReportUpdate(ApiModel):
-    title: ReportTitle
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    content: str | None = None
+
+    @model_validator(mode="after")
+    def _require_any_field(self) -> ReportUpdate:
+        if self.title is None and self.content is None:
+            raise ValueError("title、content 至少要提供一个。")
+        return self
 
 
 class ReportExportRequest(ApiModel):

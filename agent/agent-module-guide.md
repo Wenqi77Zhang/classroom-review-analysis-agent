@@ -43,7 +43,10 @@ Agent 在教师已确认的分析契约和当前任务可定位证据范围内�
 ```
 
 必要配置为 `BACKEND_URL`、`AGENT_SERVICE_TOKEN`，以及与任务隐私模式对应的一组模型
-配置。私有课堂使用 `LOCAL_MODEL_CHAT_COMPLETIONS_URL` 与 `LOCAL_MODEL_NAME`；公开课堂
+配置。M1 选定本地 Ollama `qwen3.5:4b`，先运行 `ollama pull qwen3.5:4b`。私有课堂使用
+`LOCAL_MODEL_CHAT_COMPLETIONS_URL`、`LOCAL_MODEL_NAME` 与可选的
+`LOCAL_MODEL_REASONING_EFFORT`；Qwen 结构化输出设为 `none`，确保响应正文是待校验 JSON。
+公开课堂
 明确选择云模式时才读取 `CLOUD_MODEL_CHAT_COMPLETIONS_URL`、`CLOUD_MODEL_NAME` 和
 `CLOUD_MODEL_API_KEY`。命令行不接收令牌或密钥，避免进入 Shell 历史和进程列表。
 

@@ -18,17 +18,24 @@ from agent.contracts import (
     AnalysisScope,
     CourseDomain,
     EvidenceItem,
+    SkillSpec,
 )
 from agent.job_store import HttpAgentJobStore
-from agent.observability.tracing import InMemoryTraceSink, Tracer
+from agent.observability.tracing import InMemoryTraceSink, JsonlTraceSink, Tracer
 from agent.orchestrator import AgentOrchestrator, AgentRunError
 from agent.providers import ProviderNotConfiguredError, ProviderRouter
+from agent.providers import base as provider_base
 from agent.providers.base import ModelProvider, ModelRequest, ModelResponse
 from agent.providers.cloud import CloudModelProvider
 from agent.providers.local import LocalModelProvider
 from agent.runner import run_claimed_once
+from agent.skills import computer_ai as computer_ai_skill_module
+from agent.skills import humanities as humanities_skill_module
+from agent.skills import load_domain_skills
 from agent.state import AgentState, AgentWorkflow, InvalidAgentTransition
 from agent.tools.retrieve_evidence import EvidenceNotFoundError, EvidenceRetriever
+from agent.validators import evidence_gate as evidence_gate_module
+from agent.validators import load_conclusion_validator
 from backend.app.schemas.agent_runtime import (
     InternalAgentClaimRequest,
     InternalAgentEvidence,
@@ -39,6 +46,7 @@ from backend.app.schemas.analysis_report import (
     EvidenceReference,
     EvidenceSourceType,
     InternalConclusionBatchWrite,
+    InternalConclusionWrite,
 )
 from backend.app.schemas.task import (
     InternalTaskStateUpdate,
@@ -351,6 +359,60 @@ def test_provider_endpoint_security_rules() -> None:
     assert provider.model_name == "m"
 
 
+@pytest.mark.asyncio
+async def test_local_provider_can_disable_reasoning_for_structured_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self, _: int) -> bytes:
+            return json.dumps(
+                {
+                    "model": "qwen3.5:4b",
+                    "choices": [{"message": {"content": '{"ok":true}'}}],
+                }
+            ).encode()
+
+    def fake_urlopen(request, *, timeout: float):
+        captured.update(json.loads(request.data))
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(provider_base, "urlopen", fake_urlopen)
+    provider = LocalModelProvider(
+        endpoint="http://127.0.0.1:11434/v1/chat/completions",
+        model="qwen3.5:4b",
+        reasoning_effort="none",
+    )
+
+    response = await provider.generate_structured(
+        ModelRequest(
+            system_prompt="system",
+            user_prompt="user",
+            trace_id="trace-redacted",
+            response_schema={
+                "title": "Smoke",
+                "type": "object",
+                "properties": {"ok": {"type": "boolean", "description": "result"}},
+            },
+        )
+    )
+
+    assert captured["reasoning_effort"] == "none"
+    sent_schema = captured["response_format"]["json_schema"]["schema"]
+    assert "title" not in sent_schema
+    assert "description" not in sent_schema["properties"]["ok"]
+    assert captured["timeout"] == 120.0
+    assert response.data == {"ok": True}
+
+
 def test_retriever_rejects_unknown_evidence_id() -> None:
     analysis_input = _input()
     retriever = EvidenceRetriever(
@@ -421,6 +483,45 @@ def test_missing_member4_domain_skill_is_reported_not_faked() -> None:
     assert plan.unavailable_skills == ["humanities"]
 
 
+def test_member4_skill_and_validator_integration_contract(monkeypatch) -> None:
+    computer_skill = SkillSpec(
+        name="computer_ai",
+        version="member4-test",
+        instructions="只用于验证成员 5 的装载契约。",
+    )
+    humanities_skill = SkillSpec(
+        name="humanities",
+        version="member4-test",
+        instructions="只用于验证成员 5 的装载契约。",
+    )
+    observed: list[InternalConclusionWrite] = []
+
+    monkeypatch.setattr(
+        computer_ai_skill_module,
+        "get_computer_ai_skill",
+        lambda: computer_skill,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        humanities_skill_module,
+        "get_humanities_skill",
+        lambda: humanities_skill,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        evidence_gate_module,
+        "validate_conclusion",
+        observed.append,
+        raising=False,
+    )
+
+    assert load_domain_skills() == {
+        "computer_ai": computer_skill,
+        "humanities": humanities_skill,
+    }
+    assert load_conclusion_validator() is not None
+
+
 @pytest.mark.asyncio
 async def test_missing_member4_domain_skill_fails_before_model_call() -> None:
     analysis_input = _input(domain=CourseDomain.COMPUTER_AI)
@@ -442,6 +543,25 @@ def test_trace_redacts_sensitive_attributes() -> None:
         "api_key": "[REDACTED]",
         "nested": {"password": "[REDACTED]"},
     }
+
+
+def test_jsonl_trace_sink_persists_only_sanitized_fields(tmp_path) -> None:
+    path = tmp_path / "traces" / "agent.jsonl"
+    tracer = Tracer(JsonlTraceSink(path), "trace-persisted")
+
+    tracer.event(
+        "agent.model.completed",
+        model_name="qwen3.5:4b",
+        api_key="must-not-appear",
+        transcript="x" * 2501,
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["trace_id"] == "trace-persisted"
+    assert payload["attributes"]["model_name"] == "qwen3.5:4b"
+    assert payload["attributes"]["api_key"] == "[REDACTED]"
+    assert "must-not-appear" not in path.read_text(encoding="utf-8")
+    assert payload["attributes"]["transcript"] == "[REDACTED]"
 
 
 def test_trace_error_never_records_validation_input_or_message() -> None:

@@ -13,13 +13,13 @@ from backend.app.dependencies import (
     get_db,
     require_service_identity,
 )
-from backend.app.errors import StateConflictError
+from backend.app.errors import StateConflictError, current_trace_id
 from backend.app.models import Classroom, User
 from backend.app.repositories.results import (
     list_conclusions,
     replace_pending_conclusions,
 )
-from backend.app.repositories.reviews import apply_review, list_review_history
+from backend.app.repositories.reviews import list_review_history, review_conclusion
 from backend.app.repositories.tasks import get_internal_task
 from backend.app.schemas.analysis_report import (
     AnalysisConclusion,
@@ -57,42 +57,37 @@ async def get_conclusions(
 
 @router.post(
     "/conclusions/{conclusion_id}/review",
-    response_model=ReviewDecision,
-    status_code=status.HTTP_201_CREATED,
+    response_model=AnalysisConclusion,
 )
-async def post_review(
+async def post_conclusion_review(
     conclusion_id: UUID,
     body: ReviewRequest,
     session: Db,
     user: CurrentUser,
-) -> ReviewDecision:
-    decision = await apply_review(
+) -> AnalysisConclusion:
+    return await review_conclusion(
         session,
-        owner_id=user.id,
-        user=user,
+        owner=user,
         conclusion_id=conclusion_id,
-        body=body,
+        request=body,
+        trace_id=current_trace_id.get(),
     )
-    return ReviewDecision.model_validate(decision)
 
 
 @router.get(
     "/conclusions/{conclusion_id}/history",
     response_model=list[ReviewDecision],
 )
-async def get_review_history(
+async def get_conclusion_history(
     conclusion_id: UUID,
     session: Db,
     user: CurrentUser,
 ) -> list[ReviewDecision]:
-    return [
-        ReviewDecision.model_validate(item)
-        for item in await list_review_history(
-            session,
-            owner_id=user.id,
-            conclusion_id=conclusion_id,
-        )
-    ]
+    return await list_review_history(
+        session,
+        owner_id=user.id,
+        conclusion_id=conclusion_id,
+    )
 
 
 @router.post(

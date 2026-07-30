@@ -430,6 +430,71 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert conclusions.status_code == 201
             assert conclusions.json()[0]["review_status"] == "pending"
+            conclusion_id = conclusions.json()[0]["id"]
+
+            foreign_review = await client.post(
+                f"/api/conclusions/{conclusion_id}/review",
+                json={"action": "accept"},
+                headers=second_headers,
+            )
+            assert foreign_review.status_code == 404
+            accepted = await client.post(
+                f"/api/conclusions/{conclusion_id}/review",
+                json={"action": "accept", "note": "确认事实"},
+                headers=first_headers,
+            )
+            assert accepted.status_code == 200
+            assert accepted.json()["review_status"] == "accepted"
+            history = await client.get(
+                f"/api/conclusions/{conclusion_id}/history",
+                headers=first_headers,
+            )
+            assert [item["action"] for item in history.json()] == ["accept"]
+
+            report = await client.put(
+                f"/api/classrooms/{classroom_id}/report",
+                json={"title": "Processing Report"},
+                headers=first_headers,
+            )
+            assert report.status_code == 200
+            assert report.json()["included_conclusion_ids"] == [conclusion_id]
+            assert "教师提出了检索步骤问题" in report.json()["content"]
+
+            modified = await client.post(
+                f"/api/conclusions/{conclusion_id}/review",
+                json={"action": "modify", "edited_content": "教师确认后的改写事实。"},
+                headers=first_headers,
+            )
+            assert modified.status_code == 200
+            assert modified.json()["review_status"] == "modified"
+            refreshed_report = await client.get(
+                f"/api/classrooms/{classroom_id}/report",
+                headers=first_headers,
+            )
+            assert "教师确认后的改写事实" in refreshed_report.json()["content"]
+            assert "教师提出了检索步骤问题" not in refreshed_report.json()["content"]
+
+            rejected = await client.post(
+                f"/api/conclusions/{conclusion_id}/review",
+                json={"action": "reject"},
+                headers=first_headers,
+            )
+            assert rejected.status_code == 200
+            rejected_report = await client.get(
+                f"/api/classrooms/{classroom_id}/report",
+                headers=first_headers,
+            )
+            assert rejected_report.json()["included_conclusion_ids"] == []
+            assert "教师确认后的改写事实" not in rejected_report.json()["content"]
+            final_history = await client.get(
+                f"/api/conclusions/{conclusion_id}/history",
+                headers=first_headers,
+            )
+            assert [item["action"] for item in final_history.json()] == [
+                "accept",
+                "modify",
+                "reject",
+            ]
 
             succeeded = await client.patch(
                 f"/api/internal/tasks/{task_id}/state",

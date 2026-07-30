@@ -16,6 +16,11 @@ jobs:
       - name: Reject committed local secrets
         shell: bash
         run: bash scripts/check-secrets.sh
+      - name: Validate startup script syntax
+        shell: bash
+        run: |
+          bash -n start.sh
+          pwsh -NoProfile -Command '[void][scriptblock]::Create((Get-Content -Raw ./start.ps1))'
 
   backend-check:
     runs-on: ubuntu-latest

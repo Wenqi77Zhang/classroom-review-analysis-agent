@@ -7,7 +7,7 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -51,15 +51,19 @@ class OpenAICompatibleProvider(ModelProvider):
         model: str,
         api_key: str | None,
         timeout_seconds: float = 60.0,
+        reasoning_effort: Literal["none", "low", "medium", "high"] | None = None,
     ) -> None:
         if not model.strip():
             raise ValueError("model 不能为空。")
         if not 1 <= timeout_seconds <= 600:
             raise ValueError("timeout_seconds 必须在 1 到 600 之间。")
+        if reasoning_effort not in {None, "none", "low", "medium", "high"}:
+            raise ValueError("reasoning_effort 必须是 none、low、medium 或 high。")
         self._endpoint = endpoint
         self._model = model
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
+        self._reasoning_effort = reasoning_effort
 
     @property
     def model_name(self) -> str:
@@ -102,11 +106,13 @@ class OpenAICompatibleProvider(ModelProvider):
                 "json_schema": {
                     "name": "classroom_analysis",
                     "strict": True,
-                    "schema": request.response_schema,
+                    "schema": self._prepare_response_schema(request.response_schema),
                 },
             },
             "temperature": 0,
         }
+        if self._reasoning_effort is not None:
+            payload["reasoning_effort"] = self._reasoning_effort
         headers = {
             "Content-Type": "application/json",
             "X-Trace-Id": request.trace_id,
@@ -135,3 +141,7 @@ class OpenAICompatibleProvider(ModelProvider):
         if not isinstance(decoded, dict):
             raise ModelProviderError("模型服务响应不是 JSON object。")
         return decoded
+
+    def _prepare_response_schema(self, schema: dict[str, Any]) -> dict[str, Any]:
+        """Allow provider-specific generation schemas; callers still validate the full schema."""
+        return schema

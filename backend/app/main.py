@@ -316,7 +316,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await session.execute(text("SELECT 1"))
         return {"status": "ready", "database": "ok"}
 
-    # Report export remains a separate follow-up; persistence and review gates are registered above.
+    # Reports remain a separate follow-up; this branch closes the shortest upload-to-result path.
     return app
 
 
