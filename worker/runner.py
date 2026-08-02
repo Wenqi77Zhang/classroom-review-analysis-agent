@@ -5,13 +5,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import FrameType
 from typing import Self
 
+from backend.app.schemas.agent_runtime import InternalAgentHandoff
 from backend.app.schemas.task import (
     AssetKind,
     InternalAssetRead,
@@ -23,10 +27,12 @@ from backend.app.schemas.task import (
     TaskStatus,
 )
 from worker.adapters.asr import AsrAdapter, LocalWhisperAdapter
+from worker.adapters.translation import TranslationAdapter
 from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_message
 from worker.job_store import ClaimingJobStore, HttpJobStore, LocalJobStore
 from worker.pipeline import run_pipeline
+from worker.runtime import PollPolicy, RuntimeCounters, run_forever
 from worker.types import PipelineResult, PipelineTask
 
 WORKER_CLAIM_STAGES = [
@@ -34,6 +40,29 @@ WORKER_CLAIM_STAGES = [
     TaskStage.EXTRACT_AUDIO,
     TaskStage.TRANSCRIBE,
 ]
+
+
+class _LeaseStopEvent(threading.Event):
+    """Combine a lease-local stop with the process stop without sharing ownership."""
+
+    def __init__(self, process_stop_event: threading.Event | None = None) -> None:
+        super().__init__()
+        self._process_stop_event = process_stop_event
+
+    def is_set(self) -> bool:
+        return super().is_set() or (
+            self._process_stop_event is not None
+            and self._process_stop_event.is_set()
+        )
+
+    def wait(self, timeout: float | None = None) -> bool:
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while not self.is_set():
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                return self.is_set()
+            super().wait(0.05 if remaining is None else min(0.05, remaining))
+        return True
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -46,6 +75,17 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--worker-id", default=os.getenv("WORKER_ID", "media-worker-local"))
     parser.add_argument("--lease-seconds", type=int, default=300)
     parser.add_argument("--object-root", type=Path)
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=float(os.getenv("WORKER_POLL_INTERVAL_SECONDS", "5")),
+    )
+    parser.add_argument(
+        "--max-backoff",
+        type=float,
+        default=float(os.getenv("WORKER_MAX_BACKOFF_SECONDS", "30")),
+    )
     return parser
 
 
@@ -60,6 +100,7 @@ class HeartbeatLease:
         worker_id: str,
         lease_seconds: int,
         interval_seconds: float | None = None,
+        process_stop_event: threading.Event | None = None,
     ) -> None:
         self.store = store
         self.claim = claim
@@ -68,7 +109,7 @@ class HeartbeatLease:
             lease_seconds=lease_seconds,
         )
         self.interval_seconds = interval_seconds or max(1.0, lease_seconds / 3)
-        self.stop_event = threading.Event()
+        self.stop_event = _LeaseStopEvent(process_stop_event)
         self._finished = threading.Event()
         self._failure: WorkerError | None = None
         self._thread = threading.Thread(
@@ -112,6 +153,7 @@ def run_claimed_once[T](
     process: Callable[[InternalTaskClaim, threading.Event], T],
     *,
     heartbeat_interval_seconds: float | None = None,
+    process_stop_event: threading.Event | None = None,
 ) -> T | None:
     claim = store.claim(request)
     if claim is None:
@@ -122,6 +164,7 @@ def run_claimed_once[T](
         worker_id=request.worker_id,
         lease_seconds=request.lease_seconds,
         interval_seconds=heartbeat_interval_seconds,
+        process_stop_event=process_stop_event,
     ) as lease:
         result = process(claim, lease.stop_event)
         lease.raise_if_failed()
@@ -181,6 +224,8 @@ def _process_claimed_media(
     store: HttpJobStore,
     adapter: AsrAdapter,
     object_root: Path | None,
+    worker_id: str,
+    translation_adapter: TranslationAdapter | None = None,
 ) -> PipelineResult:
     pipeline_started = False
     pipeline_completed = False
@@ -196,14 +241,33 @@ def _process_claimed_media(
                 adapter,
                 store,
                 stop_event=stop,
+                translation_adapter=translation_adapter,
+                reported_stage_floor=claim.stage,
             )
             pipeline_completed = True
-            return result
+        if stop.is_set():
+            raise WorkerError(
+                WorkerErrorCode.STOPPED,
+                "进程或任务租约已停止，放弃交接 Agent。",
+                retryable=True,
+            )
+        store.handoff_agent(
+            claim.task_id,
+            InternalAgentHandoff(worker_id=worker_id),
+        )
+        return result
     except WorkerError as exc:
+        if exc.code is WorkerErrorCode.STOPPED:
+            raise
         # run_pipeline 自己记录其内部失败。下载尚未进入 pipeline，或 pipeline
         # 成功后外层下载目录清理失败时，必须由 runner 补写真实失败状态。
         if not pipeline_started or pipeline_completed:
-            stage = TaskStage.EXTRACT_AUDIO if not pipeline_started else TaskStage.TRANSCRIBE
+            if claim.stage is TaskStage.TRANSCRIBE:
+                stage = TaskStage.TRANSCRIBE
+            elif pipeline_completed and translation_adapter is not None:
+                stage = TaskStage.TRANSLATE
+            else:
+                stage = TaskStage.EXTRACT_AUDIO
             store.update_state(
                 claim.task_id,
                 InternalTaskStateUpdate(
@@ -218,37 +282,93 @@ def _process_claimed_media(
         raise
 
 
+def _install_signal_handlers(stop_event: threading.Event) -> None:
+    """Request a graceful stop from the process main thread."""
+
+    def request_stop(_signum: int, _frame: FrameType | None) -> None:
+        stop_event.set()
+
+    signal.signal(signal.SIGINT, request_stop)
+    signal.signal(signal.SIGTERM, request_stop)
+
+
+def _run_remote(
+    args: argparse.Namespace,
+    stop_event: threading.Event,
+) -> RuntimeCounters | None:
+    """Run one diagnostic claim or the resident single-Worker loop."""
+
+    service_token = os.getenv("WORKER_SERVICE_TOKEN")
+    if not service_token:
+        raise WorkerError(
+            WorkerErrorCode.JOB_STORE_AUTH_FAILED,
+            "远程模式缺少 WORKER_SERVICE_TOKEN。",
+            retryable=False,
+        )
+
+    adapter = LocalWhisperAdapter(args.model, language=args.language)
+    store = HttpJobStore(args.api_base_url, service_token)
+    request = InternalTaskClaimRequest(
+        worker_id=args.worker_id,
+        stages=WORKER_CLAIM_STAGES,
+        lease_seconds=args.lease_seconds,
+    )
+
+    def run_once() -> PipelineResult | None:
+        return run_claimed_once(
+            store,
+            request,
+            lambda claim, stop: _process_claimed_media(
+                claim,
+                stop,
+                store,
+                adapter,
+                args.object_root,
+                args.worker_id,
+            ),
+            process_stop_event=stop_event,
+        )
+
+    try:
+        if args.once:
+            run_once()
+            return None
+        return run_forever(
+            run_once,
+            stop_event=stop_event,
+            policy=PollPolicy(
+                idle_seconds=args.poll_interval,
+                max_backoff_seconds=args.max_backoff,
+            ),
+        )
+    finally:
+        store.close()
+
+
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
 
     if args.api_base_url:
-        service_token = os.getenv("WORKER_SERVICE_TOKEN")
-        if not service_token:
+        if not os.getenv("WORKER_SERVICE_TOKEN"):
             parser.error("远程模式必须配置 WORKER_SERVICE_TOKEN 环境变量")
-        adapter = LocalWhisperAdapter(args.model, language=args.language)
-        store = HttpJobStore(args.api_base_url, service_token)
-        request = InternalTaskClaimRequest(
-            worker_id=args.worker_id,
-            stages=WORKER_CLAIM_STAGES,
-            lease_seconds=args.lease_seconds,
-        )
+        if args.poll_interval < 0:
+            parser.error("--poll-interval 必须大于或等于 0")
+        if args.max_backoff < 1:
+            parser.error("--max-backoff 必须大于或等于 1")
 
-        try:
-            completed = run_claimed_once(
-                store,
-                request,
-                lambda claim, stop: _process_claimed_media(
-                    claim,
-                    stop,
-                    store,
-                    adapter,
-                    args.object_root,
-                ),
+        stop_event = threading.Event()
+        _install_signal_handlers(stop_event)
+        counters = _run_remote(args, stop_event)
+        if counters is None:
+            print("已完成一次诊断领取")
+        else:
+            print(
+                "Worker 已停止："
+                f"处理 {counters.claimed} 个任务，"
+                f"空闲轮询 {counters.idle} 次，"
+                f"可重试失败 {counters.retryable_failures} 次"
             )
-        finally:
-            store.close()
-        print("没有待处理任务" if completed is None else "已完成本次领取任务的转写阶段")
         return 0
 
     if args.video is None or args.output is None:

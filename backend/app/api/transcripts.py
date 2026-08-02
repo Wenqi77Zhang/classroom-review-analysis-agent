@@ -14,7 +14,7 @@ from backend.app.dependencies import (
     require_service_identity,
 )
 from backend.app.errors import StateConflictError, ValidationFailedError
-from backend.app.models import User
+from backend.app.models import ProcessingTask, User
 from backend.app.repositories.results import (
     edit_transcript_segment,
     get_transcript_segments,
@@ -28,6 +28,8 @@ from backend.app.schemas.transcript import (
     TranscriptSegment,
     TranscriptSegmentUpdate,
 )
+from backend.app.services.audit import record_audit_event
+from backend.app.services.permissions import get_owned_or_404
 
 router = APIRouter(tags=["transcripts"])
 Db = Annotated[AsyncSession, Depends(get_db)]
@@ -72,6 +74,20 @@ async def patch_segment(
         segment_id=segment_id,
         body=body,
     )
+    task = await get_owned_or_404(session, ProcessingTask, segment.task_id, user.id)
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="transcript_segment.edited",
+        resource_type="processing_task",
+        resource_id=task.id,
+        details={
+            "segment_id": str(segment.id),
+            "updated_fields": sorted(body.model_fields_set),
+        },
+        trace_id=task.trace_id,
+    )
     return TranscriptSegment.model_validate(segment)
 
 
@@ -84,7 +100,7 @@ async def post_internal_transcript(
     task_id: UUID,
     body: InternalTranscriptWrite,
     session: Db,
-    _identity: WorkerWriter,
+    identity: WorkerWriter,
 ) -> TranscriptRead:
     task = await get_internal_task(session, task_id)
     if TaskStatus(task.status) is not TaskStatus.RUNNING:
@@ -96,4 +112,18 @@ async def post_internal_transcript(
             "逐字稿时间范围不能超过声明的媒体时长。"
         )
     segments = await replace_transcript(session, task, body)
+    await record_audit_event(
+        session,
+        owner_id=task.owner_id,
+        actor_service=identity.value,
+        action="transcript.replaced",
+        resource_type="processing_task",
+        resource_id=task.id,
+        details={
+            "duration_ms": body.duration_ms,
+            "segment_count": len(segments),
+            "source_language": body.source_language,
+        },
+        trace_id=task.trace_id,
+    )
     return _transcript_read(task.id, segments)

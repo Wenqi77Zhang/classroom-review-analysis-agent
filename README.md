@@ -13,8 +13,9 @@
 
 PR #20 已接通 Worker 对 `uploaded` 任务的领取、B2 限时下载、文件大小与 ETag
 校验、FFmpeg、Whisper 和 PostgreSQL 逐字稿写回，并用一段获授权真实视频完成验收。
-证据工作台仍使用明确标注的演示数据，翻译、课件、证据索引、Agent、教师复核状态和
-报告尚未形成完整持久化链路。里程碑 M1 因此仍未通过。逐项状态、证据与阻塞统一记录在
+证据工作台仍使用明确标注的演示数据，翻译、课件和真实证据索引尚未接入。Agent 已接入
+本地 Ollama `qwen3.5:4b`，但真实模型验收仍只使用合成时间戳证据；教师复核历史和报告
+持久化后端已通过 PostgreSQL CI。里程碑 M1 因此仍未通过。逐项状态、证据与阻塞统一记录在
 [`docs/current-progress.md`](docs/current-progress.md)。
 
 ## 里程碑
@@ -29,6 +30,7 @@ Windows：
 
 ```powershell
 .\setup.ps1
+ollama pull qwen3.5:4b
 .\start.ps1
 .\verify.ps1
 ```
@@ -38,15 +40,35 @@ macOS/Linux：
 ```bash
 chmod +x setup.sh start.sh verify.sh
 ./setup.sh
+ollama pull qwen3.5:4b
 ./start.sh
 ./verify.sh
 ```
 
-当前 `start.ps1` / `start.sh` 仍是成员 5 的统一启动占位入口，不能一次启动完整
-前端、后端和 Worker；其退出非零属于已知未完成项。现阶段应按各模块指南分别启动，
-不得把阶段 0 脚本检查通过描述成 M1 冒烟验证通过。
+`start.ps1` / `start.sh` 会读取本机 `.env`，启动前端、FastAPI、Worker 轮询和 Agent
+轮询，并把运行日志写入已忽略的 `logs/`。脚本会先检查 `.venv`、`.env`、npm、必需
+变量和 Worker/Agent 令牌隔离；缺失配置时 fail-closed。当前已完成语法、静态安全和
+缺配置失败测试，仍需在具备 PostgreSQL、对象存储和真实任务的机器上完成整套启动验收。
 
 阶段 0 的安装脚本只创建项目内 `.venv` 并安装当前已声明依赖；后续依赖由责任成员在实现时补充并锁定。脚本不会写入真实密钥。
+
+### 临时团队联调入口（非最终部署）
+
+当成员不在同一电脑或局域网时，可由入口负责人按
+[`docs/local-development-setup.md`](docs/local-development-setup.md) 第 6 节启动
+Cloudflare Quick Tunnel。组员无需安装项目环境，使用浏览器打开负责人私聊发送的地址，
+再输入本次访问码。
+
+每次启动后由负责人私下填写和发送以下模板；**访问码必须保持为空再提交到 GitHub**：
+
+```text
+临时联调地址：https://<本次随机名称>.trycloudflare.com
+本次访问码：
+用途：仅供组员短时联调，不是最终部署环境
+```
+
+入口依赖负责人电脑、后端及隧道进程持续运行，停止后地址和访问码立即失效。不要把真实
+访问码、Cookie、预签名 URL 或课堂隐私数据写入群公告、Issue、PR 和仓库文件。
 
 ## 开发环境基线
 
@@ -63,6 +85,8 @@ chmod +x setup.sh start.sh verify.sh
 
 - 正式需求、产品、架构、安全与验收文档：`docs/documentation-index.md`
 - 当前已合并进度、进行中任务与集成阻塞：`docs/current-progress.md`
+- 全体成员本地软件、环境变量、分服务启动与排错：`docs/local-development-setup.md`
+- 跨网络临时联调入口：`scripts/start-team-tunnel.ps1`（非最终部署，使用前阅读统一环境指南第 6 节）
 - 完整四天五人规划与目标骨架：`docs/project-plan-v5.md`
 - 文件和模块责任：`OWNERSHIP.md`
 - 前端模块：`frontend/frontend-module-guide.md`（含成员 2 交接）

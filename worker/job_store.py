@@ -9,6 +9,7 @@ from uuid import UUID
 
 import httpx
 
+from backend.app.schemas.agent_runtime import InternalAgentHandoff
 from backend.app.schemas.task import (
     InternalAssetRead,
     InternalTaskClaim,
@@ -30,6 +31,8 @@ class ClaimingJobStore(JobStore, Protocol):
     def claim(self, request: InternalTaskClaimRequest) -> InternalTaskClaim | None: ...
 
     def heartbeat(self, task_id: UUID, heartbeat: InternalTaskHeartbeat) -> None: ...
+
+    def handoff_agent(self, task_id: UUID, handoff: InternalAgentHandoff) -> None: ...
 
 
 @dataclass(slots=True)
@@ -70,17 +73,41 @@ class HttpJobStore:
             transport=download_transport,
         )
 
+    def handoff_agent(self, task_id: UUID, handoff: InternalAgentHandoff) -> None:
+        self._request(
+            "POST",
+            f"/api/internal/tasks/{task_id}/handoff-agent",
+            json=handoff.model_dump(mode="json"),
+        )
+
     def _request(self, method: str, path: str, *, json: dict[str, object]) -> httpx.Response:
         try:
             response = self.client.request(method, path, json=json)
-            response.raise_for_status()
-            return response
-        except httpx.HTTPError as exc:
+        except httpx.RequestError as exc:
             raise WorkerError(
                 WorkerErrorCode.JOB_STORE_FAILED,
                 f"后端内部接口调用失败：{method} {path}",
                 retryable=True,
             ) from exc
+        if response.status_code in {401, 403}:
+            raise WorkerError(
+                WorkerErrorCode.JOB_STORE_AUTH_FAILED,
+                "内部任务接口拒绝 Worker 凭据。",
+                retryable=False,
+            )
+        if response.status_code >= 500 or response.status_code in {408, 429}:
+            raise WorkerError(
+                WorkerErrorCode.JOB_STORE_FAILED,
+                f"后端内部接口暂时不可用：{method} {path}",
+                retryable=True,
+            )
+        if response.is_error:
+            raise WorkerError(
+                WorkerErrorCode.JOB_STORE_FAILED,
+                f"后端内部接口拒绝请求：{method} {path}",
+                retryable=False,
+            )
+        return response
 
     def claim(self, request: InternalTaskClaimRequest) -> InternalTaskClaim | None:
         response = self._request(
@@ -90,7 +117,10 @@ class HttpJobStore:
         )
         if response.status_code == 204 or not response.content:
             return None
-        return InternalTaskClaim.model_validate(response.json())
+        payload = response.json()
+        if payload is None:
+            return None
+        return InternalTaskClaim.model_validate(payload)
 
     def heartbeat(self, task_id: UUID, heartbeat: InternalTaskHeartbeat) -> None:
         self._request(

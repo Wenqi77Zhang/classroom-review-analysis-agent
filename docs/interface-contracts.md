@@ -7,7 +7,7 @@
 | 内容 | 状态 |
 |---|---|
 | Pydantic Schema（`backend/app/schemas/`） | **已实现**，可导入、含校验器并纳入后端/Agent/Worker 测试 |
-| 端点路由（`backend/app/api/`） | **部分实现**：认证、课程/课堂、上传、任务、逐字稿与分析最短接口可调用；教师复核写入/历史和报告接口尚未实现 |
+| 端点路由（`backend/app/api/`） | **部分实现**：认证、课程/课堂、上传、任务、逐字稿、分析、教师复核/历史、报告读取/保存与服务端导出可调用 |
 | ORM 模型与迁移 | **已实现基础持久化**：15 张业务/关联表、Alembic 首迁移与 PostgreSQL 隔离测试 |
 | TypeScript 类型（`frontend/src/types/contracts.ts`） | **部分实现**：已覆盖前端当前上传和任务链路；逐字稿、真实结论、复核历史和报告仍待同步 |
 
@@ -121,6 +121,11 @@ parse_courseware → build_evidence_index → analyze`
 - 每次 `(stage, status)` 变更由**后端**追加一条 `TaskEvent`（含 `progress`、`message`、
   `trace_id`）。Worker 不直接写事件表。前端进度条读事件流，因此不需要模拟计时器。
 - `lease_expires_at` 到期任务可被重新领取，Worker 进程被杀不会让任务永久卡在 `running`。
+- Worker 完成逐字稿写入并把 `transcribe / running` 更新到 `progress=1.0` 后，必须调用
+  `/internal/tasks/{id}/handoff-agent`。后端原子地把任务切为
+  `analyze / queued`、释放 Worker 租约，再由 Agent 独立领取；不得让两个服务共享同一租约。
+- Agent 更新 `analyze / running` 时保留租约并继续心跳；仅在
+  `succeeded / failed / cancelled` 时释放，避免长模型调用期间被重复领取。
 
 ## 端点契约
 
@@ -137,10 +142,29 @@ parse_courseware → build_evidence_index → analyze`
 | `transcripts` | `GET /tasks/{id}/transcript`、`PATCH /transcript-segments/{id}` |
 | `analyses` | `GET /classrooms/{id}/conclusions`、`POST /conclusions/{id}/review`、`GET /conclusions/{id}/history` |
 | `reports` | `GET\|PUT /classrooms/{id}/report`、`POST /reports/{id}/export`、`GET /reports/{id}/export/{fmt}` |
+| `audit` | `GET /tasks/{id}/audit-events`、`POST /internal/tasks/{id}/trace-events` |
 
-实现边界：`analyses` 当前只有结论读取与 Agent 内部批量写入；上表的教师复核
-`POST/GET` 端点尚未实现。`reports` 三个端点也尚未实现。端点列入冻结契约不等于
-已经可以调用。
+实现边界：`analyses` 已提供结论读取、Agent 内部批量写入、教师复核写入和历史读取。
+`reports` 已提供 `GET|PUT /classrooms/{id}/report`；PUT 请求只接受 `title`，报告 Markdown
+正文由服务端从当前状态为 `accepted` / `modified` 的本课堂结论生成，客户端不能提交或覆盖
+正文。`modified` 结论使用教师的 `reviewed_content`，其余可报告结论使用模型原文。每次保存
+或复核状态变化都会重新计算正文和关联，已驳回的结论不得保留在报告中。
+`included_conclusion_ids` 按结论创建时间、ID 稳定排序，不依赖数据库关联表的返回顺序。
+`POST /reports/{id}/export` 根据当前受控正文生成 `markdown`、`html` 或 `pdf` 对象，
+`GET /reports/{id}/export/{fmt}` 只为已经生成且仍对应当前标题/正文的对象签发限时下载地址。
+导出前后端会锁定课堂并重算报告门禁；复核或标题变化后，旧对象不再能通过 GET 取得新签名，
+由对象存储生命周期清理。响应中的 `download_url` 不写数据库、日志或审计；审计仅记录格式。
+
+### Trace 与审计（MVP 加固）
+
+- Agent 仅可向 `POST /internal/tasks/{id}/trace-events` 写入当前任务的 Trace；请求中的
+  `trace_id` 必须与任务一致，Worker 令牌和教师 JWT 均不得调用。
+- Trace 请求只接受事件名、阶段、模型/Prompt/Skill 版本、耗时和稳定错误码等白名单
+  元数据；不接受 Prompt、课堂文本、原始异常消息、令牌或预签名 URL。
+- 教师通过 `GET /tasks/{id}/audit-events` 读取该任务同一 `trace_id` 的脱敏事件；查询先按
+  `owner_id` 验证任务归属，跨账号任务与随机 UUID 都返回 404。
+- `event_id` 是 Agent 生成的 UUID 幂等键；同一任务重复提交同一事件只保留一条记录，
+  将同一 `event_id` 用于不同内容则返回 `STATE_CONFLICT`。
 
 ### 认证、课程与课堂字段（Day 3）
 
@@ -174,6 +198,9 @@ parse_courseware → build_evidence_index → analyze`
 |---|---|---|---|
 | `POST /internal/tasks/claim` | `InternalTaskClaimRequest` → `InternalTaskClaim` | `worker` | 成员 4 |
 | `POST /internal/tasks/{id}/heartbeat` | `InternalTaskHeartbeat` | `worker` | 成员 4 |
+| `POST /internal/tasks/{id}/handoff-agent` | `InternalAgentHandoff` | `worker` | 成员 4、5 |
+| `POST /internal/agent/tasks/claim` | `InternalAgentClaimRequest` → `InternalAgentTaskClaim` | `agent` | 成员 5 |
+| `POST /internal/agent/tasks/{id}/heartbeat` | `InternalAgentHeartbeat` | `agent` | 成员 5 |
 | `PATCH /internal/tasks/{id}/state` | `InternalTaskStateUpdate` | `worker`、`agent` | 成员 4、5 |
 | `POST /internal/tasks/{id}/transcript` | `InternalTranscriptWrite` | `worker` | 成员 4 |
 | `POST /internal/tasks/{id}/conclusions` | `InternalConclusionBatchWrite` | `agent` | 成员 5 |
@@ -184,6 +211,10 @@ Worker 必须使用不携带 `Authorization` 默认头的独立客户端访问�
 `WORKER_SERVICE_TOKEN` 转发给对象存储。Worker 下载后核对实际字节数与 `size_bytes`，
 并把响应 ETag 与后端上传完成时 HEAD 保存的 `verified_etag` 对照，防止限时 PUT 地址
 过期前发生同大小对象替换；无论成功、失败或租约停止都清理本地临时文件。
+
+`InternalAgentTaskClaim` 只包含当前 `task_id + owner_id` 的分析契约与可定位证据，不包含
+对象存储密钥、预签名 URL 或其他课堂内容。当前最短集成链路把逐字稿片段映射为
+`InternalAgentEvidence`；课件页、画面证据和独立证据索引仍待成员 4 补齐。
 
 身份由令牌区分：`WORKER_SERVICE_TOKEN` → `worker`，`AGENT_SERVICE_TOKEN` → `agent`。
 两者**必须配置为不同的值**。共用一个令牌意味着 Agent 也能覆盖逐字稿、Worker 也能写入

@@ -13,16 +13,19 @@ from backend.app.dependencies import (
     get_db,
     require_service_identity,
 )
-from backend.app.errors import StateConflictError
+from backend.app.errors import StateConflictError, ValidationFailedError
 from backend.app.models import Classroom, User
 from backend.app.repositories.results import (
     list_conclusions,
     replace_pending_conclusions,
 )
+from backend.app.repositories.reviews import apply_review, list_review_history
 from backend.app.repositories.tasks import get_internal_task
 from backend.app.schemas.analysis_report import (
     AnalysisConclusion,
     InternalConclusionBatchWrite,
+    ReviewDecision,
+    ReviewRequest,
 )
 from backend.app.schemas.task import ServiceIdentity, TaskStage, TaskStatus
 from backend.app.services.permissions import get_owned_or_404
@@ -53,6 +56,46 @@ async def get_conclusions(
 
 
 @router.post(
+    "/conclusions/{conclusion_id}/review",
+    response_model=ReviewDecision,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_review(
+    conclusion_id: UUID,
+    body: ReviewRequest,
+    session: Db,
+    user: CurrentUser,
+) -> ReviewDecision:
+    decision = await apply_review(
+        session,
+        owner_id=user.id,
+        user=user,
+        conclusion_id=conclusion_id,
+        body=body,
+    )
+    return ReviewDecision.model_validate(decision)
+
+
+@router.get(
+    "/conclusions/{conclusion_id}/history",
+    response_model=list[ReviewDecision],
+)
+async def get_review_history(
+    conclusion_id: UUID,
+    session: Db,
+    user: CurrentUser,
+) -> list[ReviewDecision]:
+    return [
+        ReviewDecision.model_validate(item)
+        for item in await list_review_history(
+            session,
+            owner_id=user.id,
+            conclusion_id=conclusion_id,
+        )
+    ]
+
+
+@router.post(
     "/internal/tasks/{task_id}/conclusions",
     response_model=list[AnalysisConclusion],
     status_code=status.HTTP_201_CREATED,
@@ -68,6 +111,10 @@ async def post_internal_conclusions(
         raise StateConflictError("只有运行中的任务可以写入分析结论。")
     if TaskStage(task.stage) is not TaskStage.ANALYZE:
         raise StateConflictError("只有 analyze 阶段可以写入分析结论。")
+    if task.trace_id is None or any(
+        item.trace_id != task.trace_id for item in body.conclusions
+    ):
+        raise ValidationFailedError("结论 trace_id 必须与当前任务一致。")
     await replace_pending_conclusions(session, task, body)
     return [
         AnalysisConclusion.model_validate(item)

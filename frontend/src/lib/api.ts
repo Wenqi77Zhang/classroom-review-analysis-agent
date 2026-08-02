@@ -1,12 +1,21 @@
 import type {
+  AnalysisContract,
+  AnalysisConclusion,
   ApiErrorBody,
   AssetKind,
   AssetRead,
   BackendHealthResponse,
   ClassroomRead,
   CourseRead,
+  DownloadUrlResponse,
   PresignResponse,
+  ReportRead,
+  ReviewAction,
+  ReviewDecision,
   TaskRead,
+  TranscriptRead,
+  TranscriptSegment,
+  TranscriptSegmentUpdate,
   UserRef,
 } from "@/types/contracts";
 
@@ -58,11 +67,9 @@ export async function getBackendHealth(
     cache: "no-store",
     signal,
   });
-
   if (!response.ok) {
     throw new Error("后端健康检查代理返回异常状态。");
   }
-
   return (await response.json()) as BackendHealthResponse;
 }
 
@@ -159,9 +166,7 @@ export function putPresignedUpload(
     request.addEventListener("error", () =>
       reject(new Error("无法连接对象存储，请检查网络与 B2 CORS 配置。")),
     );
-    request.addEventListener("abort", () =>
-      reject(new Error("上传已取消。")),
-    );
+    request.addEventListener("abort", () => reject(new Error("上传已取消。")));
     request.send(file);
   });
 }
@@ -178,10 +183,16 @@ export async function deleteAsset(assetId: string): Promise<void> {
   throw new ApiClientError(response.status, payload?.error ?? {});
 }
 
+export async function getAssetDownloadUrl(
+  assetId: string,
+): Promise<DownloadUrlResponse> {
+  return requestJson(`/api/assets/${encodeURIComponent(assetId)}/download-url`);
+}
+
 export async function createTask(
   classroomId: string,
   assetIds: string[],
-  analysisContract: Record<string, unknown>,
+  analysisContract: AnalysisContract,
 ): Promise<TaskRead> {
   return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/tasks`, {
     method: "POST",
@@ -197,44 +208,67 @@ export async function getTask(taskId: string): Promise<TaskRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}`);
 }
 
-// ============================================================
-// 👇 下面是刚才组长要求新增的 4 个用于读取真实数据的 API 客户端 👇
-// ============================================================
-
-/**
- * 获取视频文件的限时播放下载地址
- */
-export async function getAssetDownloadUrl(assetId: string): Promise<{ url: string }> {
-  return requestJson(`/api/assets/${encodeURIComponent(assetId)}/download-url`);
-}
-
-/**
- * 获取指定任务的真实课堂逐字稿
- */
-export async function getTranscript(taskId: string): Promise<any> {
+export async function getTranscript(taskId: string): Promise<TranscriptRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/transcript`);
 }
 
-/**
- * 修改（编辑）某个具体的逐字稿片段
- */
 export async function updateTranscriptSegment(
   segmentId: string,
-  update: {
-    speaker?: string | null;
-    original_text?: string | null;
-    translated_text?: string | null;
-  },
-): Promise<any> {
+  input: TranscriptSegmentUpdate,
+): Promise<TranscriptSegment> {
   return requestJson(`/api/transcript-segments/${encodeURIComponent(segmentId)}`, {
     method: "PATCH",
-    body: JSON.stringify(update),
+    body: JSON.stringify(input),
   });
 }
 
-/**
- * 获取某课堂下所有的 AI 分析结论（事实、判断、建议）
- */
-export async function getConclusions(classroomId: string): Promise<any[]> {
-  return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/conclusions`);
+export async function getConclusions(
+  classroomId: string,
+): Promise<AnalysisConclusion[]> {
+  return requestJson(
+    `/api/classrooms/${encodeURIComponent(classroomId)}/conclusions`,
+  );
+}
+
+export async function reviewConclusion(
+  conclusionId: string,
+  input: {
+    action: ReviewAction;
+    editedContent?: string | null;
+    note?: string | null;
+  },
+): Promise<AnalysisConclusion> {
+  return requestJson(
+    `/api/conclusions/${encodeURIComponent(conclusionId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action: input.action,
+        edited_content: input.editedContent ?? null,
+        note: input.note ?? null,
+      }),
+    },
+  );
+}
+
+export async function getReviewHistory(
+  conclusionId: string,
+): Promise<ReviewDecision[]> {
+  return requestJson(
+    `/api/conclusions/${encodeURIComponent(conclusionId)}/history`,
+  );
+}
+
+export async function getReport(classroomId: string): Promise<ReportRead> {
+  return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/report`);
+}
+
+export async function updateReport(
+  classroomId: string,
+  input: { title?: string; content?: string },
+): Promise<ReportRead> {
+  return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/report`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
 }
