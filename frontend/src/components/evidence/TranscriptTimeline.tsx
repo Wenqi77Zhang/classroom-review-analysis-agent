@@ -1,5 +1,3 @@
-// frontend/src/components/evidence/TranscriptTimeline.tsx
-
 export type TranscriptItem = {
   id: string;
   startMs: number;
@@ -10,7 +8,7 @@ export type TranscriptItem = {
 };
 
 type TranscriptTimelineProps = {
-  items: TranscriptItem[];
+  items?: TranscriptItem[];
   currentTimeMs: number;
   onSeek: (timeMs: number) => void;
 };
@@ -27,8 +25,9 @@ export function TranscriptTimeline({
   currentTimeMs,
   onSeek,
 }: TranscriptTimelineProps) {
-  // 如果没有数据，显示占位符
-  if (!items || items.length === 0) {
+  const safeItems = Array.isArray(items) ? items : [];
+
+  if (safeItems.length === 0) {
     return (
       <section className="transcript-timeline" aria-labelledby="transcript-timeline-title">
         <header>
@@ -56,11 +55,10 @@ export function TranscriptTimeline({
       </header>
 
       <div className="transcript-items">
-        {items.map((item) => {
-          // 判断当前字幕是否处于高亮区间（毫秒级精准判断）
+        {safeItems.map((item) => {
           const isActive =
             currentTimeMs >= item.startMs && currentTimeMs < item.endMs;
-            
+
           return (
             <button
               type="button"

@@ -7,11 +7,15 @@ import type {
   BackendHealthResponse,
   ClassroomRead,
   CourseRead,
+  DownloadUrlResponse,
   PresignResponse,
   ReportRead,
   ReviewAction,
   ReviewDecision,
   TaskRead,
+  TranscriptRead,
+  TranscriptSegment,
+  TranscriptSegmentUpdate,
   UserRef,
 } from "@/types/contracts";
 
@@ -63,11 +67,9 @@ export async function getBackendHealth(
     cache: "no-store",
     signal,
   });
-
   if (!response.ok) {
     throw new Error("后端健康检查代理返回异常状态。");
   }
-
   return (await response.json()) as BackendHealthResponse;
 }
 
@@ -164,9 +166,7 @@ export function putPresignedUpload(
     request.addEventListener("error", () =>
       reject(new Error("无法连接对象存储，请检查网络与 B2 CORS 配置。")),
     );
-    request.addEventListener("abort", () =>
-      reject(new Error("上传已取消。")),
-    );
+    request.addEventListener("abort", () => reject(new Error("上传已取消。")));
     request.send(file);
   });
 }
@@ -181,6 +181,12 @@ export async function deleteAsset(assetId: string): Promise<void> {
     error?: Partial<ApiErrorBody>;
   } | null;
   throw new ApiClientError(response.status, payload?.error ?? {});
+}
+
+export async function getAssetDownloadUrl(
+  assetId: string,
+): Promise<DownloadUrlResponse> {
+  return requestJson(`/api/assets/${encodeURIComponent(assetId)}/download-url`);
 }
 
 export async function createTask(
@@ -200,6 +206,20 @@ export async function createTask(
 
 export async function getTask(taskId: string): Promise<TaskRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}`);
+}
+
+export async function getTranscript(taskId: string): Promise<TranscriptRead> {
+  return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/transcript`);
+}
+
+export async function updateTranscriptSegment(
+  segmentId: string,
+  input: TranscriptSegmentUpdate,
+): Promise<TranscriptSegment> {
+  return requestJson(`/api/transcript-segments/${encodeURIComponent(segmentId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function getConclusions(
