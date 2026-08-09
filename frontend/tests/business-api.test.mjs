@@ -20,6 +20,10 @@ const taskAssetsRoute = read("src/app/api/tasks/[taskId]/assets/route.ts");
 const transcriptSegmentRoute = read(
   "src/app/api/transcript-segments/[segmentId]/route.ts",
 );
+const reportExportRoute = read("src/app/api/reports/[reportId]/export/route.ts");
+const reportExportDownloadRoute = read(
+  "src/app/api/reports/[reportId]/export/[exportFormat]/route.ts",
+);
 const serverBackend = read("src/lib/server/backend.ts");
 const classroom = read("src/components/baseline/ClassroomBaseline.tsx");
 const api = read("src/lib/api.ts");
@@ -95,6 +99,20 @@ assert.match(
   api,
   /reviewConclusion[\s\S]*Promise<ReviewDecision>/,
   "复核写入必须使用后端 ReviewDecision 响应契约",
+);
+assert.match(reportExportRoute, /export async function POST/, "报告生成必须通过 BFF POST 代理");
+assert.match(reportExportRoute, /\/api\/reports\/.*\/export/, "报告生成 BFF 必须代理正确后端路径");
+assert.match(reportExportDownloadRoute, /export async function GET/, "已生成报告必须可重新获取短时下载地址");
+assert.match(
+  api,
+  /createReportExport[\s\S]*Promise<ReportExportResponse>/,
+  "报告导出客户端必须使用完整响应契约",
+);
+assert.match(contracts, /ReportExportFormat = "markdown" \| "html" \| "pdf"/, "报告格式必须与后端一致");
+assert.match(
+  api,
+  /updateReport\([\s\S]*input: \{ title: string \}/,
+  "报告更新前端契约只允许修改标题",
 );
 assert.doesNotMatch(
   api,

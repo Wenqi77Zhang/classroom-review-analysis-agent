@@ -15,6 +15,7 @@
 - 暂代成员 5 完成 Agent 运行时的跨模块集成：在独立分支实现 Worker→Agent 原子交接、Agent 最小权限领取与续租、结构化结论写回、任务完成和安全失败处理，并让分析契约从前端任务创建贯通到 Agent。Agent 编排原始实现与长期主责仍归成员 5，本项只记录成员 1 的补位集成和人工决策。
 - 复验成员 3 的 PR #24 修复：使用隔离 PostgreSQL 17 实例确认旧契约毒任务隔离和跨任务 `event_id` 并发冲突；PR #27 合入 `main` 后，在独立 worktree 组合保留应用重建租约恢复与 transcribe 阶段不倒退测试，完成冲突整合并通过全仓 Ruff、`265 passed, 1 skipped`。Trace 与审计功能实现仍归成员 3。
 - Day 3 真实试用暂时延期；先完成静态流程审查，将核心内容改为默认可见、显现动画改为可选增强，并验证关闭 JavaScript 后任务页仍可阅读。此项不冒充真实用户试用或同任务复测。
+- 在 PR #34 的真实证据工作台基础上完成报告前端集成：坚持正文只能由后端按教师复核状态生成，前端仅修改标题；补充真实报告读取/首次创建/预览、Markdown/HTML/PDF 导出及短时下载链接，并保留 `/reports/demo` 的独立 Mock 边界。
 
 ## 可核验证据
 
@@ -28,6 +29,8 @@
 - `tests/manual/day3-member1-static-audit.md`
 - `frontend/tests/task-status-panel.test.mjs`
 - `frontend/tests/report-flow.test.mjs`
+- `frontend/src/components/reports/RealReportEditor.tsx`
+- `frontend/src/app/api/reports/`
 - `frontend/tests/complete-flow.test.mjs`
 - `backend/app/api/uploads.py`
 - `backend/app/api/tasks.py`
@@ -45,10 +48,10 @@
 ## 当前限制
 
 - 成员 1 未独立完成平台后端、Worker、Agent 编排原始实现或证据工作台；跨模块修复与暂代集成均按协作贡献记录。
-- 前端已接入课程、课堂、上传和任务 API；成员 1 已在浏览器完成真实视频上传和任务创建人工验证。Worker 的对象下载、抽音频与本地 ASR 已用一段获授权英语视频完成真实验收并持久化合法时间戳逐字稿；PR #27 已合入翻译、课件解析和内存证据索引基础能力，但真实翻译 Adapter、后端证据持久化和远程纵向链路仍未验收，真实模型分析仍依赖成员 5；证据和报告持久化尚未替换当前明确标注的演示数据。
+- 前端已接入课程、课堂、上传、任务、真实证据复核与服务端报告；但完整真实视频从模型分析到人工复核和最终报告下载的浏览器 E2E 尚未执行，真实翻译、课件证据与远程纵向链路仍未验收。
 - PostgreSQL 17.10、Alembic head、后端认证/课堂以及真实 B2
   `presign → PUT → HEAD complete → task → download → FFmpeg → Whisper → transcript`
   已在协作验收中通过；任务当前停在 `transcribe / running / 1.0` 等待 Agent，
   因此不把该证据扩大表述为后续分析已经完成。
-- Day 2 的复核交接只使用当前浏览器 `sessionStorage`；浏览器打印/PDF 可执行，但 DOCX、服务器保存和跨设备恢复尚未实现。
+- `/reports/demo` 仍是明确标注的本地演示；真实课堂报告已改走服务端持久化和 Markdown/HTML/PDF 导出，但本分支合并后的人工下载与跨设备恢复尚未验收。
 - Day 3 尚未执行非开发同学独立试用、反馈驱动修改和同任务复测，因此退出条件尚未通过。

@@ -1572,6 +1572,88 @@ nav {
   gap: 18px;
 }
 
+.report-state-panel {
+  display: grid;
+  gap: 14px;
+  min-height: 360px;
+  place-content: center;
+  padding: clamp(28px, 6vw, 72px);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: var(--radius-lg);
+  background: rgba(249, 250, 247, 0.76);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+}
+
+.report-state-panel .button {
+  justify-self: center;
+}
+
+.report-server-note {
+  margin: 0;
+  padding: 14px 16px;
+  border-left: 3px solid rgba(75, 105, 99, 0.52);
+  background: rgba(229, 236, 234, 0.52);
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.report-title-actions,
+.report-download-result,
+.report-export-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.report-title-actions {
+  justify-content: space-between;
+}
+
+.report-title-actions > span,
+.report-download-result p,
+.report-server-content > div > span {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+.report-server-content {
+  display: grid;
+  gap: 10px;
+}
+
+.report-server-content h2 {
+  margin: 4px 0 0;
+}
+
+.report-empty-state {
+  margin: 0;
+  padding: 24px;
+  border: 1px dashed rgba(95, 100, 123, 0.24);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.38);
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.report-export-real {
+  align-items: flex-start;
+}
+
+.report-download-result {
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(66, 120, 105, 0.18);
+  border-radius: 16px;
+  background: rgba(231, 243, 237, 0.72);
+}
+
+.report-download-result p {
+  margin: 4px 0 0;
+}
+
 .report-editor-heading h1 {
   margin: 10px 0 6px;
 }
@@ -1737,6 +1819,11 @@ nav {
     flex-direction: column;
   }
 
+  .report-download-result {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .report-mode-switch {
     align-self: flex-start;
   }
@@ -1757,6 +1844,10 @@ nav {
   .report-transfer-ok,
   .report-print-fallback,
   .report-export-bar {
+    display: none !important;
+  }
+
+  .report-download-result {
     display: none !important;
   }
 

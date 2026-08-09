@@ -1,11 +1,16 @@
 import { ReportEditor } from "@/components/reports/ReportEditor";
 import { SiteChrome } from "@/components/baseline/SiteChrome";
 
-export default function ReportPage() {
+type ReportPageProps = {
+  params: Promise<{ reportId: string }>;
+};
+
+export default async function ReportPage({ params }: ReportPageProps) {
+  const { reportId } = await params;
   return (
     <SiteChrome>
       <main className="report-page">
-        <ReportEditor />
+        <ReportEditor classroomId={reportId} />
       </main>
     </SiteChrome>
   );
