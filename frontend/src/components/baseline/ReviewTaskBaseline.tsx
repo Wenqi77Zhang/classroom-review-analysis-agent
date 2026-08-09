@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { getTask } from "@/lib/api";
 import { saveDemoReportDraft } from "@/lib/demo-report-draft";
 import type { TaskRead } from "@/types/contracts";
 import { EvidenceCard } from "../evidence/EvidenceCard";
+import { RealEvidenceWorkbench } from "../evidence/RealEvidenceWorkbench";
 import {
   ReviewControls,
   type ReviewStatus,
@@ -52,7 +54,8 @@ const demoTranscript: TranscriptItem[] = [
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
+export function ReviewTaskBaseline({ resourceId }: { resourceId: string }) {
+  const router = useRouter();
   const [classroom, setClassroom] = useState("尚未创建课堂");
   const [messages, setMessages] = useState<string[]>([]);
   const [conversationStep, setConversationStep] = useState<0 | 1 | 2>(0);
@@ -68,10 +71,30 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
     useState<ReviewStatus>("pending");
   const [reviewNote, setReviewNote] = useState("");
   const [realTask, setRealTask] = useState<TaskRead | null>(null);
-  const realClassroomId = UUID_PATTERN.test(classroomId) ? classroomId : "";
+  const realClassroomId = realTask?.classroom_id ?? (UUID_PATTERN.test(resourceId) ? resourceId : "");
   const bilingualRequired = /双语|翻译|英文原文/.test(messages[1] ?? "");
 
   useEffect(() => setClassroom(sessionStorage.getItem("classroomName") || "演示课堂 · 尚未保存到后端"), []);
+  useEffect(() => {
+    if (!UUID_PATTERN.test(resourceId)) return;
+    let active = true;
+    getTask(resourceId)
+      .then((task) => {
+        if (!active) return;
+        setRealTask(task);
+        setPreview(
+          task.status === "succeeded"
+            ? "ready"
+            : task.status === "failed"
+              ? "failure"
+              : "processing",
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [resourceId]);
   useEffect(() => {
     if (!realTask || ["succeeded", "failed", "cancelled"].includes(realTask.status)) {
       return;
@@ -124,6 +147,7 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
         onTaskCreated={(task) => {
           setRealTask(task);
           setPreview("processing");
+          router.replace(`/tasks/${task.id}`);
         }}
       />
     )}
@@ -133,7 +157,8 @@ export function ReviewTaskBaseline({ classroomId }: { classroomId: string }) {
       onStateChange={setPreview}
       task={realTask}
     />
-    {preview === "ready" && (
+    {realTask?.status === "succeeded" && <RealEvidenceWorkbench task={realTask} />}
+    {!realTask && preview === "ready" && (
       <section
         className="evidence-workbench"
         aria-labelledby="evidence-workbench-title"

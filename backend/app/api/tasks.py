@@ -23,6 +23,7 @@ from backend.app.repositories.tasks import (
     claim_task,
     create_processing_task,
     get_internal_task,
+    get_task_assets,
     handoff_task_to_agent,
     list_task_events,
     list_tasks,
@@ -148,6 +149,22 @@ async def post_task(
 @router.get("/tasks/{task_id}", response_model=TaskRead)
 async def get_task(task_id: UUID, session: Db, user: CurrentUser) -> TaskRead:
     return _task_read(await get_owned_or_404(session, ProcessingTask, task_id, user.id))
+
+
+@router.get("/tasks/{task_id}/assets", response_model=list[AssetRead])
+async def get_assets(task_id: UUID, session: Db, user: CurrentUser) -> list[AssetRead]:
+    """Return the authenticated teacher's task inputs for refresh recovery.
+
+    Only stable asset metadata is returned. Object keys are never converted to
+    public URLs here; the browser requests a short-lived download URL for the
+    selected video through the dedicated asset endpoint.
+    """
+
+    await get_owned_or_404(session, ProcessingTask, task_id, user.id)
+    return [
+        AssetRead.model_validate(asset)
+        for asset in await get_task_assets(session, task_id, user.id)
+    ]
 
 
 @router.get("/tasks", response_model=list[TaskRead])

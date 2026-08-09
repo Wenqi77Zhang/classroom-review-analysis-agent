@@ -9,7 +9,7 @@
 | Pydantic Schema（`backend/app/schemas/`） | **已实现**，可导入、含校验器并纳入后端/Agent/Worker 测试 |
 | 端点路由（`backend/app/api/`） | **部分实现**：认证、课程/课堂、上传、任务、逐字稿、分析、教师复核/历史、报告读取/保存与服务端导出可调用 |
 | ORM 模型与迁移 | **已实现基础持久化**：15 张业务/关联表、Alembic 首迁移与 PostgreSQL 隔离测试 |
-| TypeScript 类型（`frontend/src/types/contracts.ts`） | **部分实现**：已覆盖前端当前上传和任务链路；逐字稿、真实结论、复核历史和报告仍待同步 |
+| TypeScript 类型（`frontend/src/types/contracts.ts`） | **已覆盖 MVP 当前链路**：上传、任务、逐字稿、证据引用、真实结论、复核历史和报告均与后端 Schema 对齐 |
 
 权威来源是代码而不是本文件的散文：字段级细节以 `backend/app/schemas/` 为准，本文件负责
 说明约定、枚举取值和跨模块责任。两者不一致时以代码为准，并由成员 3 立即回写本文件。
@@ -138,13 +138,16 @@ parse_courseware → build_evidence_index → analyze`
 | `auth` | `POST /auth/login`、`POST /auth/demo`、`GET /auth/me` |
 | `classrooms` | `POST\|GET /courses`、`POST\|GET /courses/{id}/classrooms`、`GET\|PATCH\|DELETE /classrooms/{id}` |
 | `uploads` | `POST /classrooms/{id}/uploads/presign`、`POST /assets/{id}/complete`、`GET /assets/{id}/download-url`、`DELETE /assets/{id}` |
-| `tasks` | `POST /classrooms/{id}/tasks`、`GET /tasks/{id}`、`GET /tasks?classroom_id=`、`GET /tasks/{id}/events`、`POST /tasks/{id}/retry`、`POST /tasks/{id}/cancel` |
+| `tasks` | `POST /classrooms/{id}/tasks`、`GET /tasks/{id}`、`GET /tasks?classroom_id=`、`GET /tasks/{id}/assets`、`GET /tasks/{id}/events`、`POST /tasks/{id}/retry`、`POST /tasks/{id}/cancel` |
 | `transcripts` | `GET /tasks/{id}/transcript`、`PATCH /transcript-segments/{id}` |
 | `analyses` | `GET /classrooms/{id}/conclusions`、`POST /conclusions/{id}/review`、`GET /conclusions/{id}/history` |
 | `reports` | `GET\|PUT /classrooms/{id}/report`、`POST /reports/{id}/export`、`GET /reports/{id}/export/{fmt}` |
 | `audit` | `GET /tasks/{id}/audit-events`、`POST /internal/tasks/{id}/trace-events` |
 
 实现边界：`analyses` 已提供结论读取、Agent 内部批量写入、教师复核写入和历史读取。
+`GET /tasks/{id}/assets` 只向任务所属教师返回稳定的素材元数据，用于刷新后恢复工作台；
+真实视频仍需通过独立的 `/assets/{id}/download-url` 即时签发限时地址，该地址不进入
+localStorage、sessionStorage、数据库或日志。
 `reports` 已提供 `GET|PUT /classrooms/{id}/report`；PUT 请求只接受 `title`，报告 Markdown
 正文由服务端从当前状态为 `accepted` / `modified` 的本课堂结论生成，客户端不能提交或覆盖
 正文。`modified` 结论使用教师的 `reviewed_content`，其余可报告结论使用模型原文。每次保存

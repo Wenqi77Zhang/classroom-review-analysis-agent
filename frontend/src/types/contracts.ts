@@ -142,6 +142,7 @@ export type EvidenceReference = {
   end_ms?: number | null;
   page_no?: number | null;
   image_ref?: string | null;
+  quote?: string | null;
 };
 export type AnalysisConclusion = {
   id: string;

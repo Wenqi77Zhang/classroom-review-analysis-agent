@@ -3411,3 +3411,209 @@ textarea {
   }
 }
 
+/* 真实证据工作台：限时视频授权、逐字稿校订与教师复核。 */
+.real-evidence-state,
+.real-evidence-empty,
+.transcript-editor,
+.real-conclusion-card {
+  border: 1px solid rgba(91, 104, 91, 0.2);
+  border-radius: 24px;
+  background: rgba(247, 249, 245, 0.72);
+  box-shadow: 0 20px 60px rgba(43, 52, 47, 0.08);
+  backdrop-filter: blur(24px);
+}
+
+.real-evidence-state {
+  max-width: 1180px;
+  margin: 28px auto 0;
+  padding: 28px 32px;
+}
+
+.real-evidence-state.error {
+  border-color: rgba(151, 73, 65, 0.28);
+}
+
+.real-evidence-state p,
+.real-evidence-empty p,
+.real-evidence-heading-actions p,
+.real-report-boundary p,
+.transcript-editor-actions p,
+.real-review-feedback {
+  margin: 7px 0 0;
+  color: var(--muted);
+}
+
+.real-evidence-heading-actions {
+  max-width: 420px;
+  text-align: right;
+}
+
+.real-evidence-heading-actions .text-button {
+  margin-top: 8px;
+}
+
+.transcript-editor,
+.real-conclusion-card,
+.real-evidence-empty {
+  padding: 22px;
+}
+
+.transcript-editor header,
+.real-conclusion-card header,
+.transcript-editor-actions,
+.real-review-actions,
+.real-conclusion-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.transcript-editor header {
+  margin-bottom: 18px;
+}
+
+.transcript-editor h3 {
+  margin: 3px 0 0;
+}
+
+.transcript-editor label,
+.real-conclusion-card label {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.transcript-editor input,
+.transcript-editor textarea,
+.real-conclusion-card textarea {
+  width: 100%;
+  border: 1px solid rgba(82, 96, 87, 0.22);
+  border-radius: 14px;
+  padding: 11px 13px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.68);
+  resize: vertical;
+}
+
+.transcript-editor-actions {
+  margin-top: 16px;
+  justify-content: flex-start;
+}
+
+.real-conclusion-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.real-conclusion-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  content: "";
+  background: rgba(76, 106, 89, 0.7);
+}
+
+.real-conclusion-card.judgment::before {
+  background: rgba(91, 91, 139, 0.72);
+}
+
+.real-conclusion-card.suggestion::before {
+  background: rgba(147, 112, 64, 0.72);
+}
+
+.real-conclusion-card header > span {
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.real-conclusion-content,
+.real-reviewed-content {
+  margin: 17px 0 0;
+  line-height: 1.75;
+}
+
+.real-reviewed-content {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(211, 223, 211, 0.42);
+}
+
+.real-evidence-references {
+  display: grid;
+  gap: 8px;
+  margin-top: 17px;
+}
+
+.real-evidence-references button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  border: 1px solid rgba(91, 104, 91, 0.16);
+  border-radius: 14px;
+  padding: 11px 13px;
+  color: var(--ink);
+  text-align: left;
+  background: rgba(255, 255, 255, 0.48);
+  cursor: pointer;
+}
+
+.real-evidence-references button:hover {
+  border-color: rgba(75, 96, 82, 0.42);
+  transform: translateY(-1px);
+}
+
+.real-evidence-references span,
+.real-conclusion-card footer small {
+  color: var(--muted);
+}
+
+.real-review-actions {
+  margin-top: 16px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.real-report-boundary p {
+  text-align: center;
+}
+
+.real-review-actions button {
+  min-height: 42px;
+  border: 1px solid rgba(79, 94, 85, 0.22);
+  border-radius: 999px;
+  padding: 8px 16px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+}
+
+.real-review-actions button:hover:not(:disabled) {
+  background: rgba(215, 226, 216, 0.78);
+}
+
+.real-conclusion-card footer {
+  align-items: flex-start;
+  margin-top: 17px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(91, 104, 91, 0.14);
+  flex-direction: column;
+}
+
+@media (max-width: 760px) {
+  .real-evidence-heading-actions {
+    max-width: none;
+    text-align: left;
+  }
+
+  .transcript-editor header,
+  .transcript-editor-actions,
+  .real-conclusion-card header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
