@@ -9,6 +9,8 @@ import type {
   CourseRead,
   DownloadUrlResponse,
   PresignResponse,
+  ReportExportFormat,
+  ReportExportResponse,
   ReportRead,
   ReviewAction,
   ReviewDecision,
@@ -269,10 +271,29 @@ export async function getReport(classroomId: string): Promise<ReportRead> {
 
 export async function updateReport(
   classroomId: string,
-  input: { title?: string; content?: string },
+  input: { title: string },
 ): Promise<ReportRead> {
   return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/report`, {
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export async function createReportExport(
+  reportId: string,
+  format: ReportExportFormat,
+): Promise<ReportExportResponse> {
+  return requestJson(`/api/reports/${encodeURIComponent(reportId)}/export`, {
+    method: "POST",
+    body: JSON.stringify({ format }),
+  });
+}
+
+export async function getReportExport(
+  reportId: string,
+  format: ReportExportFormat,
+): Promise<ReportExportResponse> {
+  return requestJson(
+    `/api/reports/${encodeURIComponent(reportId)}/export/${encodeURIComponent(format)}`,
+  );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import {
   ApiClientError,
@@ -247,10 +248,10 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
             ["accepted", "modified"].includes(item.review_status),
           ) && (
             <div className="real-report-boundary">
-              <button className="button primary wide" type="button" disabled>
-                真实报告编辑正在接入
-              </button>
-              <p>复核记录已真实保存；当前报告页仍是演示稿，暂不把真实课堂内容带入。</p>
+              <Link className="button primary wide" href={`/reports/${task.classroom_id}`}>
+                进入真实报告编辑与导出
+              </Link>
+              <p>报告只组合教师已接受或修改确认的结论，待复核与已驳回内容会被排除。</p>
             </div>
           )}
         </div>

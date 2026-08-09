@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { loadDemoReportDraft, type DemoReportDraft } from "@/lib/demo-report-draft";
+import { RealReportEditor } from "@/components/reports/RealReportEditor";
 import type { ReviewStatus } from "@/types/contracts";
 
 type ReportConclusion = {
@@ -46,7 +47,14 @@ const demoConclusions: ReportConclusion[] = [
 
 const allowedStatuses = new Set<ReviewStatus>(["accepted", "modified"]);
 
-export function ReportEditor() {
+export function ReportEditor({ classroomId = "demo" }: { classroomId?: string }) {
+  if (classroomId !== "demo") {
+    return <RealReportEditor classroomId={classroomId} />;
+  }
+  return <DemoReportEditor />;
+}
+
+function DemoReportEditor() {
   const [draft, setDraft] = useState<DemoReportDraft | null>(null);
   const [draftChecked, setDraftChecked] = useState(false);
   const [title, setTitle] = useState("课堂复盘报告（本地演示草稿）");

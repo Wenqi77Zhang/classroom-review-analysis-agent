@@ -179,3 +179,9 @@ export type ReportRead = {
   included_conclusion_ids: string[];
   updated_at?: string | null;
 };
+export type ReportExportFormat = "markdown" | "html" | "pdf";
+export type ReportExportResponse = {
+  format: ReportExportFormat;
+  download_url: string;
+  expires_at: string;
+};
