@@ -16,6 +16,10 @@
 - 复验成员 3 的 PR #24 修复：使用隔离 PostgreSQL 17 实例确认旧契约毒任务隔离和跨任务 `event_id` 并发冲突；PR #27 合入 `main` 后，在独立 worktree 组合保留应用重建租约恢复与 transcribe 阶段不倒退测试，完成冲突整合并通过全仓 Ruff、`265 passed, 1 skipped`。Trace 与审计功能实现仍归成员 3。
 - Day 3 真实试用暂时延期；先完成静态流程审查，将核心内容改为默认可见、显现动画改为可选增强，并验证关闭 JavaScript 后任务页仍可阅读。此项不冒充真实用户试用或同任务复测。
 - 在 PR #34 的真实证据工作台基础上完成报告前端集成：坚持正文只能由后端按教师复核状态生成，前端仅修改标题；补充真实报告读取/首次创建/预览、Markdown/HTML/PDF 导出及短时下载链接，并保留 `/reports/demo` 的独立 Mock 边界。
+- 主持单输入真实数据技术 E2E：识别并保留旧契约隔离与旧 B2 对象 404 两类失败证据，
+  重新走预签名上传与 HEAD 核验，启动 Worker/Agent，让真实时间戳逐字稿驱动本地
+  `qwen3.5:4b` 生成三类证据结论；随后验证接受、修改、驳回、复核历史、报告过滤及
+  Markdown/HTML/PDF 真实下载。该项属于跨模块集成与验收，不改变成员 4/5 的原始主责。
 
 ## 可核验证据
 
@@ -27,6 +31,7 @@
 - `tests/manual/day1-integration-acceptance.md`
 - `tests/manual/day2-member1-flow-audit.md`
 - `tests/manual/day3-member1-static-audit.md`
+- `tests/manual/failure-and-retry-record.md`
 - `frontend/tests/task-status-panel.test.mjs`
 - `frontend/tests/report-flow.test.mjs`
 - `frontend/src/components/reports/RealReportEditor.tsx`
@@ -48,10 +53,11 @@
 ## 当前限制
 
 - 成员 1 未独立完成平台后端、Worker、Agent 编排原始实现或证据工作台；跨模块修复与暂代集成均按协作贡献记录。
-- 前端已接入课程、课堂、上传、任务、真实证据复核与服务端报告；但完整真实视频从模型分析到人工复核和最终报告下载的浏览器 E2E 尚未执行，真实翻译、课件证据与远程纵向链路仍未验收。
+- 前端已接入课程、课堂、上传、任务、真实证据复核与服务端报告；单输入真实数据技术 E2E
+  已通过，但浏览器全程点击、非开发教师试用、第二输入、真实翻译和课件证据仍未验收。
 - PostgreSQL 17.10、Alembic head、后端认证/课堂以及真实 B2
   `presign → PUT → HEAD complete → task → download → FFmpeg → Whisper → transcript`
-  已在协作验收中通过；任务当前停在 `transcribe / running / 1.0` 等待 Agent，
-  因此不把该证据扩大表述为后续分析已经完成。
+  已在协作验收中通过；后续新任务已完成 `succeeded / analyze / 1.0` 并形成三条证据结论。
+  该单输入结果不得扩大表述为第二输入、翻译、课件或完整 M1 已完成。
 - `/reports/demo` 仍是明确标注的本地演示；真实课堂报告已改走服务端持久化和 Markdown/HTML/PDF 导出，但本分支合并后的人工下载与跨设备恢复尚未验收。
 - Day 3 尚未执行非开发同学独立试用、反馈驱动修改和同任务复测，因此退出条件尚未通过。
