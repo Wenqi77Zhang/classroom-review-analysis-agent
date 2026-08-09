@@ -16,6 +16,7 @@ const downloadRoute = read(
 const transcriptRoute = read(
   "src/app/api/tasks/[taskId]/transcript/route.ts",
 );
+const taskAssetsRoute = read("src/app/api/tasks/[taskId]/assets/route.ts");
 const transcriptSegmentRoute = read(
   "src/app/api/transcript-segments/[segmentId]/route.ts",
 );
@@ -69,6 +70,12 @@ assert.match(
   "必须提供任务逐字稿读取 BFF",
 );
 assert.match(
+  taskAssetsRoute,
+  /\/tasks\/.*\/assets/,
+  "任务刷新后必须可按登录教师恢复关联素材",
+);
+assert.match(api, /getTaskAssets\(taskId: string\): Promise<AssetRead\[\]>/, "任务素材读取不得返回 any");
+assert.match(
   transcriptSegmentRoute,
   /export async function PATCH/,
   "必须提供带 segmentId 的逐字稿编辑 BFF",
@@ -83,6 +90,11 @@ assert.match(
   api,
   /input: TranscriptSegmentUpdate/,
   "逐字稿修改必须复用后端对齐契约",
+);
+assert.match(
+  api,
+  /reviewConclusion[\s\S]*Promise<ReviewDecision>/,
+  "复核写入必须使用后端 ReviewDecision 响应契约",
 );
 assert.doesNotMatch(
   api,
@@ -99,6 +111,7 @@ assert.match(
   /translation_language: string \| null/,
   "逐字稿片段必须保留译文语言",
 );
+assert.match(contracts, /quote\?: string \| null/, "证据引用必须保留后端返回的原文摘录");
 assert.match(
   serverBackend,
   /\[204, 205, 304\]\.includes\(response\.status\)/,

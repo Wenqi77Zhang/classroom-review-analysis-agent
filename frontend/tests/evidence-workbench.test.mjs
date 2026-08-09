@@ -10,6 +10,7 @@ const card = read("src/components/evidence/EvidenceCard.tsx");
 const controls = read("src/components/evidence/ReviewControls.tsx");
 const timeline = read("src/components/evidence/TranscriptTimeline.tsx");
 const player = read("src/components/evidence/VideoPlayer.tsx");
+const realWorkbench = read("src/components/evidence/RealEvidenceWorkbench.tsx");
 
 assert.match(
   task,
@@ -81,5 +82,22 @@ assert.match(player, /preload="metadata"/, "播放器不得自动下载完整课
 assert.match(player, /playsInline/, "移动端播放器应支持页内播放");
 assert.match(player, /暂无真实视频可播放/, "缺少视频地址时必须诚实降级");
 assert.match(player, /尚未连接对象存储授权地址/, "不得伪造对象存储接入");
+
+assert.match(task, /realTask\?\.status === "succeeded"/, "真实证据只能在真实任务成功后显示");
+assert.match(task, /router\.replace\(`\/tasks\/\$\{task\.id\}`\)/, "创建任务后 URL 必须切换为可恢复的真实任务 ID");
+for (const boundary of [
+  "getTaskAssets(task.id)",
+  "getTranscript(task.id)",
+  "getConclusions(task.classroom_id)",
+  "getAssetDownloadUrl(video.id)",
+  "updateTranscriptSegment",
+  "reviewConclusion",
+]) {
+  assert.ok(realWorkbench.includes(boundary), `真实工作台缺少调用：${boundary}`);
+}
+assert.match(realWorkbench, /classroomConclusions\.filter/, "课堂结论必须再次按 task_id 隔离");
+assert.match(realWorkbench, /action === "reject" && !note\.trim\(\)/, "驳回必须在界面要求原因");
+assert.match(realWorkbench, /视频地址为限时授权/, "必须向教师说明视频授权的短期边界");
+assert.doesNotMatch(realWorkbench, /localStorage|sessionStorage/, "真实证据和预签名地址不得进入浏览器持久化存储");
 
 console.log("EVIDENCE_WORKBENCH_CONTRACT_OK");

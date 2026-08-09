@@ -257,6 +257,19 @@ async def test_shortest_processing_chain_and_retry() -> None:
             task_id = task_response.json()["id"]
             task_trace_id = task_response.json()["trace_id"]
 
+            task_assets = await client.get(
+                f"/api/tasks/{task_id}/assets",
+                headers=first_headers,
+            )
+            assert task_assets.status_code == 200
+            assert [item["id"] for item in task_assets.json()] == [asset_id]
+            assert task_assets.json()[0]["kind"] == "video"
+            cross_account_task_assets = await client.get(
+                f"/api/tasks/{task_id}/assets",
+                headers=second_headers,
+            )
+            assert cross_account_task_assets.status_code == 404
+
             forbidden_claim = await client.post(
                 "/api/internal/tasks/claim",
                 json={"worker_id": "worker-1", "stages": ["uploaded", "analyze"]},

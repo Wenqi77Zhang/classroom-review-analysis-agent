@@ -208,6 +208,10 @@ export async function getTask(taskId: string): Promise<TaskRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}`);
 }
 
+export async function getTaskAssets(taskId: string): Promise<AssetRead[]> {
+  return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/assets`);
+}
+
 export async function getTranscript(taskId: string): Promise<TranscriptRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/transcript`);
 }
@@ -237,7 +241,7 @@ export async function reviewConclusion(
     editedContent?: string | null;
     note?: string | null;
   },
-): Promise<AnalysisConclusion> {
+): Promise<ReviewDecision> {
   return requestJson(
     `/api/conclusions/${encodeURIComponent(conclusionId)}/review`,
     {

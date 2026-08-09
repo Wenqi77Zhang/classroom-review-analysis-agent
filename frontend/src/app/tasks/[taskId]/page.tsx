@@ -6,5 +6,5 @@ type ReviewTaskPageProps = {
 
 export default async function ReviewTaskPage({ params }: ReviewTaskPageProps) {
   const { taskId } = await params;
-  return <ReviewTaskBaseline classroomId={taskId} />;
+  return <ReviewTaskBaseline resourceId={taskId} />;
 }
