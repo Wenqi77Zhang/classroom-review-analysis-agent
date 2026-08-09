@@ -16,9 +16,9 @@ Perceive–Reason–Action–Learn 作为产品级框架；Learn 只记录教师
 
 记录 Trace ID、模型、Prompt、Skill 版本、证据、延迟、错误、调用量和教师修改版本。
 
-当前实现位于 `agent/observability/tracing.py`，提供脱敏事件和可替换的 `TraceSink`。错误事件只记录稳定错误类型、错误码和阶段，禁止记录原始异常消息；含口令、令牌和课堂文本的 Pydantic `ValidationError` 已有回归测试。进程内 Sink 已用于离线测试；接入成员 3 的审计持久化接口仍为 `TODO`，因此当前不能宣称 Trace 可跨进程找回。
+当前实现位于 `agent/observability/tracing.py`，提供脱敏事件和可替换的 `TraceSink`。错误事件只记录稳定错误类型、错误码和阶段，禁止记录原始异常消息；含口令、令牌和课堂文本的 Pydantic `ValidationError` 已有回归测试。运行器默认写入权限收敛的本地 JSONL，任务与结论同时持久化同一 `trace_id`，前端任务面板可展示该标识；这支持本机跨进程回溯，但仍不是集中式生产可观测平台。
 
-## 当前实现边界（更新至 2026-07-30）
+## 当前实现边界（更新至 2026-08-10）
 
 - 分析契约、结构化候选输出和任务内证据定义在 `agent/contracts.py`，跨模块结论字段直接复用成员 3 的后端 Schema。
 - `AgentOrchestrator` 只执行已确认契约，按隐私模式选择 Provider；时间范围在模型调用前筛选、结论落地前复核，双语模式拒绝缺少逐句译文的范围内证据。
@@ -29,11 +29,11 @@ Perceive–Reason–Action–Learn 作为产品级框架；Learn 只记录教师
 - Provider 协议和离线 Fake Provider 测试已完成；M1 本地模型选定 Ollama
   `qwen3.5:4b`。真实 HTTP 调用已验证简单 Schema 与完整 Agent Schema；本地 Provider
   关闭 thinking，并移除 Ollama 0.32.5 无法编译的生成期 Schema 元数据/长度约束，模型
-  返回后仍使用完整 Pydantic Schema 和证据门禁校验。该验证使用合成时间戳证据，不等于
-  真实视频逐字稿验收。后端结论写入 API 已合并。
+  返回后仍使用完整 Pydantic Schema 和证据门禁校验。2026-08-10 已以真实 Worker
+  时间戳逐字稿生成事实、判断、建议各 1 条，每条绑定有效起止时间证据。后端结论写入 API 已合并。
   Worker → Agent 原子交棒、Agent 领取/心跳、一次运行及结论/状态回写已实现并通过离线
-  测试；真实视频逐字稿的模型联调、真实 PostgreSQL 集成复验、课件/画面证据、Trace/报告持久化和
-  E2E 仍未完成。
+  测试；真实 PostgreSQL/B2/Worker/Agent/复核/报告的单输入技术 E2E 已通过。专业 Skill
+  真实输入、课件/画面证据、第二输入、浏览器全程用户验收和生产级 Trace 平台仍未完成。
 
 ## Worker → Agent 接力
 

@@ -49,3 +49,14 @@
 通过主仓库已安装的 `.venv` 执行，并将 `PYTHONPATH` 指向当前工作树；当前工作树自己的
 `.venv` 因外部 PyPI 域名解析失败未完成依赖安装。因此这些结果是源码回归证据，
 不是独立环境安装、真实 PostgreSQL、真实模型或浏览器完整 E2E 证据。
+
+## 2026-08-10 单输入真实数据技术 E2E 与发布门禁
+
+成员 1 监督一段获授权真实视频完成 B2 上传、Worker 转写、本地 `qwen3.5:4b` 分析、
+三类证据结论、接受/修改/驳回和 Markdown/HTML/PDF 报告。任务、Trace、失败恢复和
+隐私边界详见 `manual/failure-and-retry-record.md`；该记录不是非开发教师浏览器试用。
+
+文档同步后运行根目录 `verify.ps1`：Python `267 passed, 11 skipped`，Ruff、前端测试、
+TypeScript 类型检查与 Next.js 生产构建全部通过。首次运行的 49 个 fixture error 全部来自
+Codex 沙箱无权写入 Windows 用户临时目录；将 `TEMP/TMP` 指向可写工作区并禁用 pytest
+缓存后复验通过，因此不记录为代码回归。
