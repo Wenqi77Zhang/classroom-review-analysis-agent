@@ -1707,6 +1707,14 @@ nav {
   line-height: 1.6;
 }
 
+.report-transfer-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .report-transfer-warning,
 .report-print-fallback,
 .review-transfer-note {
