@@ -6,6 +6,7 @@ import {
   ApiClientError,
   createReportExport,
   getReport,
+  startDemoSession,
   updateReport,
 } from "@/lib/api";
 import type {
@@ -27,9 +28,10 @@ const exportLabels: Record<ReportExportFormat, string> = {
 function normalizeError(error: unknown): {
   message: string;
   traceId?: string;
+  status?: number;
 } {
   if (error instanceof ApiClientError) {
-    return { message: error.message, traceId: error.traceId };
+    return { message: error.message, traceId: error.traceId, status: error.status };
   }
   return { message: "报告服务暂时不可用，请稍后重试。" };
 }
@@ -50,7 +52,11 @@ export function RealReportEditor({ classroomId }: RealReportEditorProps) {
   const [exporting, setExporting] = useState<ReportExportFormat | null>(null);
   const [exportResult, setExportResult] = useState<ReportExportResponse | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [error, setError] = useState<{ message: string; traceId?: string } | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    traceId?: string;
+    status?: number;
+  } | null>(null);
 
   async function loadOrCreateReport() {
     setLoading(true);
@@ -80,6 +86,18 @@ export function RealReportEditor({ classroomId }: RealReportEditorProps) {
     // classroomId changes identify an entirely different report resource.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomId]);
+
+  async function recoverDemoSession() {
+    setLoading(true);
+    setError(null);
+    try {
+      await startDemoSession();
+      await loadOrCreateReport();
+    } catch (sessionError) {
+      setError(normalizeError(sessionError));
+      setLoading(false);
+    }
+  }
 
   const lines = useMemo(() => reportLines(report?.content ?? ""), [report?.content]);
   const titleChanged = Boolean(report && title.trim() !== report.title);
@@ -134,14 +152,23 @@ export function RealReportEditor({ classroomId }: RealReportEditorProps) {
   }
 
   if (error && !report) {
+    const sessionExpired = error.status === 401;
     return (
       <section className="report-editor report-state-panel" role="alert">
-        <span className="eyebrow">REPORT SERVICE</span>
-        <h1>报告暂时无法载入</h1>
-        <p>{error.message}</p>
+        <span className="eyebrow">{sessionExpired ? "SESSION REQUIRED" : "REPORT SERVICE"}</span>
+        <h1>{sessionExpired ? "浏览器会话尚未建立" : "报告暂时无法载入"}</h1>
+        <p>
+          {sessionExpired
+            ? "当前浏览器没有有效的演示会话。重新建立会话后，系统会自动载入这份报告。"
+            : error.message}
+        </p>
         {error.traceId && <small>追踪编号：{error.traceId}</small>}
-        <button className="button primary" type="button" onClick={() => void loadOrCreateReport()}>
-          重新加载
+        <button
+          className="button primary"
+          type="button"
+          onClick={() => void (sessionExpired ? recoverDemoSession() : loadOrCreateReport())}
+        >
+          {sessionExpired ? "建立演示会话并重试" : "重新加载"}
         </button>
       </section>
     );
@@ -190,10 +217,17 @@ export function RealReportEditor({ classroomId }: RealReportEditorProps) {
       </div>
 
       {error && (
-        <p className="report-transfer-warning" role="alert">
-          {error.message}
-          {error.traceId ? `（追踪编号：${error.traceId}）` : ""}
-        </p>
+        <div className="report-transfer-warning" role="alert">
+          <span>
+            {error.status === 401 ? "浏览器会话已失效，请重新建立会话后继续。" : error.message}
+            {error.traceId ? `（追踪编号：${error.traceId}）` : ""}
+          </span>
+          {error.status === 401 && (
+            <button className="button secondary" type="button" onClick={() => void recoverDemoSession()}>
+              重新建立演示会话
+            </button>
+          )}
+        </div>
       )}
       {feedback && <p className="report-transfer-ok" role="status">{feedback}</p>}
 

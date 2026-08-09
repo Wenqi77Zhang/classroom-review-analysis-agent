@@ -60,6 +60,16 @@ test("真实报告首次读取、404 创建与标题保存均通过后端", () =
   assert.match(realEditor, /前端只能修改标题/);
 });
 
+test("真实报告在浏览器会话缺失时可安全恢复并自动重试", () => {
+  assert.match(realEditor, /startDemoSession/);
+  assert.match(realEditor, /error\.status === 401/);
+  assert.match(realEditor, /await startDemoSession\(\)/);
+  assert.match(realEditor, /await loadOrCreateReport\(\)/);
+  assert.match(realEditor, /建立演示会话并重试/);
+  assert.match(realEditor, /HttpOnly|浏览器没有有效的演示会话|浏览器会话尚未建立/);
+  assert.doesNotMatch(realEditor, /document\.cookie|localStorage|sessionStorage/);
+});
+
 test("真实报告展示后端门禁正文并支持三种真实导出", () => {
   assert.match(realEditor, /report\.included_conclusion_ids\.length/);
   assert.match(realEditor, /reportLines\(report\?\.content/);
