@@ -210,6 +210,12 @@ export async function getTask(taskId: string): Promise<TaskRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}`);
 }
 
+export async function cancelTask(taskId: string): Promise<TaskRead> {
+  return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, {
+    method: "POST",
+  });
+}
+
 export async function getTaskAssets(taskId: string): Promise<AssetRead[]> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/assets`);
 }

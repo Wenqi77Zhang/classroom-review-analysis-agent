@@ -10,6 +10,7 @@ import {
   getTaskAssets,
   getTranscript,
   reviewConclusion,
+  startDemoSession,
   updateTranscriptSegment,
 } from "@/lib/api";
 import type {
@@ -42,11 +43,22 @@ const reviewLabels = {
   rejected: "教师已驳回",
 } as const;
 
-function displayError(error: unknown) {
+function normalizeError(error: unknown): {
+  message: string;
+  traceId?: string;
+  status?: number;
+} {
   if (error instanceof ApiClientError) {
-    return `${error.message}${error.traceId ? `（Trace ${error.traceId}）` : ""}`;
+    return { message: error.message, traceId: error.traceId, status: error.status };
   }
-  return error instanceof Error ? error.message : "证据读取失败，请稍后重试。";
+  return {
+    message: error instanceof Error ? error.message : "证据读取失败，请稍后重试。",
+  };
+}
+
+function displayError(error: unknown) {
+  const normalized = normalizeError(error);
+  return `${normalized.message}${normalized.traceId ? `（追踪编号：${normalized.traceId}）` : ""}`;
 }
 
 function formatTimestamp(timeMs?: number | null) {
@@ -60,7 +72,11 @@ function formatTimestamp(timeMs?: number | null) {
 export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
   const [data, setData] = useState<WorkbenchData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{
+    message: string;
+    traceId?: string;
+    status?: number;
+  } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [currentVideoTimeMs, setCurrentVideoTimeMs] = useState(0);
   const [seekToMs, setSeekToMs] = useState(0);
@@ -68,7 +84,7 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
 
   const loadWorkbench = useCallback(async () => {
     setLoading(true);
-    setError("");
+    setError(null);
     try {
       const [assets, transcript, classroomConclusions] = await Promise.all([
         getTaskAssets(task.id),
@@ -90,11 +106,23 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
           : transcript.segments[0]?.id ?? null,
       );
     } catch (loadError) {
-      setError(displayError(loadError));
+      setError(normalizeError(loadError));
     } finally {
       setLoading(false);
     }
   }, [task.classroom_id, task.id]);
+
+  async function recoverDemoSession() {
+    setLoading(true);
+    setError(null);
+    try {
+      await startDemoSession();
+      await loadWorkbench();
+    } catch (sessionError) {
+      setError(normalizeError(sessionError));
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     void loadWorkbench();
@@ -172,12 +200,22 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
   }
 
   if (error || !data) {
+    const sessionExpired = error?.status === 401;
     return (
       <section className="real-evidence-state error" role="alert">
-        <strong>真实证据工作台暂时无法载入</strong>
-        <p>{error || "后端没有返回可用证据。"}</p>
-        <button className="button secondary compact" type="button" onClick={() => setReloadKey((key) => key + 1)}>
-          重试读取
+        <strong>{sessionExpired ? "浏览器会话尚未建立" : "真实证据工作台暂时无法载入"}</strong>
+        <p>
+          {sessionExpired
+            ? "当前浏览器没有有效的演示会话。建立会话后，系统会自动重新读取任务证据。"
+            : error?.message || "后端没有返回可用证据。"}
+        </p>
+        {error?.traceId && <small>追踪编号：{error.traceId}</small>}
+        <button
+          className={`button ${sessionExpired ? "primary" : "secondary compact"}`}
+          type="button"
+          onClick={() => void (sessionExpired ? recoverDemoSession() : setReloadKey((key) => key + 1))}
+        >
+          {sessionExpired ? "建立演示会话并重试" : "重试读取"}
         </button>
       </section>
     );

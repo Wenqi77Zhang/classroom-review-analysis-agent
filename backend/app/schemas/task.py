@@ -298,6 +298,7 @@ class TaskRead(OrmModel):
     stage: TaskStage
     progress: float = Field(ge=0.0, le=1.0, description="当前阶段进度，真实值，不是前端计时器。")
     privacy_mode: PrivacyMode
+    analysis_contract: AnalysisContract
     retry_count: int = Field(ge=0)
     last_error_code: ErrorCode | None = None
     last_error_message: str | None = None

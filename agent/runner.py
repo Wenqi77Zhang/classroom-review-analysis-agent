@@ -88,6 +88,11 @@ def _analysis_input(claim: InternalAgentTaskClaim) -> AnalysisInput:
 
 def _public_failure(error: BaseException) -> tuple[ErrorCode, str]:
     if isinstance(error, AgentRunError):
+        if error.code is AgentErrorCode.BILINGUAL_EVIDENCE_INCOMPLETE:
+            return (
+                ErrorCode.SCHEMA_INVALID,
+                "分析契约要求中英双语，但当前逐字稿没有完整译文。请补充译文，或确认本节为纯中文后关闭双语并重新处理。",
+            )
         if error.code in {
             AgentErrorCode.PROVIDER_NOT_CONFIGURED,
             AgentErrorCode.MODEL_PROVIDER_ERROR,
