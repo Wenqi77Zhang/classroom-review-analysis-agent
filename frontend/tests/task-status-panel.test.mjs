@@ -46,7 +46,13 @@ test("真实任务面板展示后端可回溯 trace_id", () => {
 test("复盘流程使用共享任务状态面板并仅在待复核预览展示证据", () => {
   assert.match(
     workspace,
-    /<TaskStatusPanel[\s\S]*enabled=\{uploadOpen && hasVideo\}[\s\S]*task=\{realTask\}/,
+    /<TaskStatusPanel[\s\S]*enabled[\s\S]*task=\{realTask\}/,
+    "已创建任务必须向共享状态面板传入真实后端记录",
+  );
+  assert.match(
+    workspace,
+    /<TaskStatusPanel[\s\S]*enabled=\{uploadOpen && hasVideo\}[\s\S]*task=\{null\}/,
+    "创建任务前的状态预览必须保持显式非真实边界",
   );
   assert.match(workspace, /preview === "ready"/);
 });

@@ -6,7 +6,7 @@
 
 当前媒体闭环已经实现：
 
-`真实视频 → FFmpeg 16 kHz 单声道 WAV → 本地 Whisper → 带毫秒时间戳逐字稿 → 语言检测 → 可替换翻译边界 → JobStore`
+`真实视频 → FFmpeg 16 kHz 单声道 WAV → 本地 Whisper → 带毫秒时间戳逐字稿 → 可选 SRT/VTT 中文译文时间对齐 → JobStore`
 
 ## 本地运行
 
@@ -82,12 +82,18 @@ python -m worker.runner \
 
 - 没有新增或下载真实翻译模型；
 - 没有把测试译文写成真实验收结果；
+- 教师可补充 UTF-8 的 SRT/VTT 中文译文字幕。远程 Worker 会使用独立、无服务令牌的
+  下载客户端读取该 `transcript` 资产，仍以视频生成的 ASR 原文为主，按时间重叠写入
+  `translation`；每个 ASR 片段至少需要一条译文覆盖其一半时长；
+- TXT/DOCX 没有可靠时间轴，不能用于修复双语门禁；SRT/VTT 缺中文、乱序、重叠或覆盖
+  不全时返回 `TRANSLATION_SCHEMA_INVALID`，不得静默跳过；
 - 远程 Worker 未配置真实 `TranslationAdapter` 时停在
   `transcribe / running / 1.0`，通过现有 `handoff-agent` 交给 Agent，不进入
-  `translate`；
+  `translate`；若任务携带合规 SRT/VTT，则进入真实 `translate` 对齐阶段；
 - 直接调用内部翻译阶段处理英文/中英混合逐字稿时仍然 fail closed，未配置适配器会返回
   `TRANSLATION_UNAVAILABLE`；
-- `translate`、`parse_courseware` 和 `build_evidence_index` 当前都是经过单元测试的
+- `translate` 的教师补充字幕路径已接入远程领取与 Agent 交接；真实对象存储和浏览器
+  人工复验仍待执行。`parse_courseware` 和 `build_evidence_index` 仍是经过单元测试的
   内部能力，尚未接入远程纵向链路。
 
 ## 课件与证据草稿
@@ -120,9 +126,9 @@ COURSEWARE 证据。它不会把音频转写伪装成 VIDEO/FRAME 视觉证据�
 - `transcribe` 租约过期后可由新 Worker 在同阶段恢复。本地重新下载视频和准备音频不会
   回写更早的数据库阶段；下载、媒体处理或清理失败也保持在 `transcribe` 并使用现有稳定
   错误码。
-- 待实现或待串联：真实本地翻译适配器、长音频切片，以及课件/画面/独立证据的后端
+- 待实现或待串联：自动本地翻译适配器、长音频切片，以及课件/画面/独立证据的后端
   持久化和 Agent 领取；基于逐字稿的基础 Agent 交接已经接通。
-- 第二段非预置视频的完整远程链路、真实翻译、课件/独立证据持久化和阶段化教师重试仍
+- 第二段非预置视频的完整远程链路、自动翻译、补充字幕浏览器人工复验、课件/独立证据持久化和阶段化教师重试仍
   未完成，不能以内部单元测试替代这些验收。
 - 独立指标 HTTP 端口、完整生产容器和高级退避指标属于 P1，本次常驻实现只有不含租户
   数据的进程内计数。

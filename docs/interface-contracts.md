@@ -121,7 +121,8 @@ parse_courseware → build_evidence_index → analyze`
 - 每次 `(stage, status)` 变更由**后端**追加一条 `TaskEvent`（含 `progress`、`message`、
   `trace_id`）。Worker 不直接写事件表。前端进度条读事件流，因此不需要模拟计时器。
 - `lease_expires_at` 到期任务可被重新领取，Worker 进程被杀不会让任务永久卡在 `running`。
-- Worker 完成逐字稿写入并把 `transcribe / running` 更新到 `progress=1.0` 后，必须调用
+- Worker 完成逐字稿写入，并把 `transcribe / running` 或补充译文对齐后的
+  `translate / running` 更新到 `progress=1.0` 后，必须调用
   `/internal/tasks/{id}/handoff-agent`。后端原子地把任务切为
   `analyze / queued`、释放 Worker 租约，再由 Agent 独立领取；不得让两个服务共享同一租约。
 - Agent 更新 `analyze / running` 时保留租约并继续心跳；仅在
@@ -271,6 +272,13 @@ Shell 历史、进程命令行、录屏或报错截图。
 
 视频二进制不经过 FastAPI、不进数据库；数据库只存 `object_key` 与归属。
 预签名 URL 属敏感数据：不写日志、不进前端持久化存储、不进仓库。
+
+双语契约选错后的补救仍复用同一上传链路。纯中文课堂可复用原资产创建
+`bilingual_required=false` 的新任务；英文或中英混合课堂可新增一个 `transcript` 资产，
+M1 只把 UTF-8 `SRT` / `VTT` 视为可用于补救的中文译文字幕。Worker 仍从原视频生成 ASR
+原文，再按时间重叠对齐译文；字幕缺少中文、时间片段重叠、格式无效或任一 ASR 片段覆盖
+不足一半时，任务在 `translate` 阶段 fail closed。`TXT` / `DOCX` 可作为一般辅助资料，
+但缺少可靠时间轴，不能宣称修复双语证据门禁。
 
 **对象存储侧必须配置 CORS，否则浏览器直传会被拦**——这是成员 1、2 上传功能的隐性前提。
 M1 使用 Backblaze B2，需在其 Bucket 上允许来自 `FRONTEND_ORIGIN` 的 `PUT`；本地 MinIO

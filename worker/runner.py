@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import signal
 import tempfile
 import threading
@@ -39,6 +40,7 @@ WORKER_CLAIM_STAGES = [
     TaskStage.UPLOADED,
     TaskStage.EXTRACT_AUDIO,
     TaskStage.TRANSCRIBE,
+    TaskStage.TRANSLATE,
 ]
 
 
@@ -181,6 +183,18 @@ def _claimed_video_asset(claim: InternalTaskClaim) -> InternalAssetRead:
     return video_assets[0]
 
 
+def _claimed_translation_asset(claim: InternalTaskClaim) -> InternalAssetRead | None:
+    if not claim.analysis_contract.bilingual_required:
+        return None
+    candidates = [
+        asset
+        for asset in claim.assets
+        if asset.kind is AssetKind.TRANSCRIPT
+        and Path(asset.filename).suffix.lower() in {".srt", ".vtt"}
+    ]
+    return candidates[-1] if candidates else None
+
+
 @contextmanager
 def _claimed_input_path(
     claim: InternalTaskClaim,
@@ -218,6 +232,79 @@ def _claimed_input_path(
     yield candidate
 
 
+@contextmanager
+def _claimed_translation_path(
+    claim: InternalTaskClaim,
+    store: HttpJobStore,
+    object_root: Path | None,
+) -> Iterator[Path | None]:
+    asset = _claimed_translation_asset(claim)
+    if asset is None:
+        yield None
+        return
+    suffix = Path(asset.filename).suffix.lower()
+    if object_root is None:
+        work_dir = Path(tempfile.mkdtemp(prefix=f"translation-download-{claim.task_id}-"))
+        candidate = work_dir / f"supplemental-translation{suffix}"
+        primary_failure: BaseException | None = None
+        try:
+            try:
+                store.download_asset(asset, candidate)
+            except WorkerError as exc:
+                if exc.code is WorkerErrorCode.OBJECT_DOWNLOAD_FAILED:
+                    raise WorkerError(
+                        WorkerErrorCode.SUPPLEMENTAL_TRANSLATION_DOWNLOAD_FAILED,
+                        "无法下载教师补充的译文字幕。",
+                        retryable=True,
+                    ) from None
+                raise
+            yield candidate
+        except BaseException as exc:
+            primary_failure = exc
+            raise
+        finally:
+            try:
+                cleanup_path(work_dir)
+            except WorkerError as cleanup_error:
+                if primary_failure is not None:
+                    primary_failure.add_note(f"{cleanup_error.code.value}: {cleanup_error}")
+                else:
+                    raise
+        return
+
+    root = object_root.resolve()
+    source = (root / asset.object_key).resolve()
+    if not source.is_relative_to(root):
+        raise WorkerError(
+            WorkerErrorCode.INPUT_NOT_FOUND,
+            "补充译文对象地址越出允许的媒体目录。",
+        )
+    work_dir = Path(tempfile.mkdtemp(prefix=f"translation-local-{claim.task_id}-"))
+    candidate = work_dir / f"supplemental-translation{suffix}"
+    primary_failure: BaseException | None = None
+    try:
+        try:
+            shutil.copyfile(source, candidate)
+        except OSError:
+            raise WorkerError(
+                WorkerErrorCode.SUPPLEMENTAL_TRANSLATION_DOWNLOAD_FAILED,
+                "无法读取教师补充的译文字幕。",
+                retryable=True,
+            ) from None
+        yield candidate
+    except BaseException as exc:
+        primary_failure = exc
+        raise
+    finally:
+        try:
+            cleanup_path(work_dir)
+        except WorkerError as cleanup_error:
+            if primary_failure is not None:
+                primary_failure.add_note(f"{cleanup_error.code.value}: {cleanup_error}")
+            else:
+                raise
+
+
 def _process_claimed_media(
     claim: InternalTaskClaim,
     stop: threading.Event,
@@ -229,8 +316,12 @@ def _process_claimed_media(
 ) -> PipelineResult:
     pipeline_started = False
     pipeline_completed = False
+    used_supplemental_translation = _claimed_translation_asset(claim) is not None
     try:
-        with _claimed_input_path(claim, store, object_root) as input_path:
+        with (
+            _claimed_input_path(claim, store, object_root) as input_path,
+            _claimed_translation_path(claim, store, object_root) as translation_path,
+        ):
             pipeline_started = True
             result = run_pipeline(
                 PipelineTask(
@@ -242,6 +333,7 @@ def _process_claimed_media(
                 store,
                 stop_event=stop,
                 translation_adapter=translation_adapter,
+                supplemental_translation_path=translation_path,
                 reported_stage_floor=claim.stage,
             )
             pipeline_completed = True
@@ -262,9 +354,11 @@ def _process_claimed_media(
         # run_pipeline 自己记录其内部失败。下载尚未进入 pipeline，或 pipeline
         # 成功后外层下载目录清理失败时，必须由 runner 补写真实失败状态。
         if not pipeline_started or pipeline_completed:
-            if claim.stage is TaskStage.TRANSCRIBE:
-                stage = TaskStage.TRANSCRIBE
-            elif pipeline_completed and translation_adapter is not None:
+            if claim.stage in {TaskStage.TRANSCRIBE, TaskStage.TRANSLATE}:
+                stage = claim.stage
+            elif pipeline_completed and (
+                translation_adapter is not None or used_supplemental_translation
+            ):
                 stage = TaskStage.TRANSLATE
             else:
                 stage = TaskStage.EXTRACT_AUDIO

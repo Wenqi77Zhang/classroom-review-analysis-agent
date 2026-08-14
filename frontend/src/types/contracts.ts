@@ -85,6 +85,7 @@ export type TaskRead = {
   stage: TaskStage;
   progress: number;
   privacy_mode: "local" | "cloud";
+  analysis_contract: AnalysisContract;
   retry_count: number;
   last_error_code?: string | null;
   last_error_message?: string | null;

@@ -195,10 +195,10 @@ async def handoff_task_to_agent(
     task = await get_internal_task(session, task_id)
     if (
         TaskStatus(task.status) is not TaskStatus.RUNNING
-        or TaskStage(task.stage) is not TaskStage.TRANSCRIBE
+        or TaskStage(task.stage) not in {TaskStage.TRANSCRIBE, TaskStage.TRANSLATE}
         or task.progress < 1.0
     ):
-        raise StateConflictError("只有已完成转写的运行中任务可以交给 Agent。")
+        raise StateConflictError("只有已完成转写或双语对齐的运行中任务可以交给 Agent。")
     if (
         task.claimed_by != worker_id
         or task.lease_expires_at is None

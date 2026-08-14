@@ -10,6 +10,7 @@ from backend.app.schemas.common import ErrorCode
 class WorkerErrorCode(StrEnum):
     INPUT_NOT_FOUND = "INPUT_NOT_FOUND"
     OBJECT_DOWNLOAD_FAILED = "OBJECT_DOWNLOAD_FAILED"
+    SUPPLEMENTAL_TRANSLATION_DOWNLOAD_FAILED = "SUPPLEMENTAL_TRANSLATION_DOWNLOAD_FAILED"
     FFMPEG_NOT_FOUND = "FFMPEG_NOT_FOUND"
     AUDIO_EXTRACTION_FAILED = "AUDIO_EXTRACTION_FAILED"
     AUDIO_EXTRACTION_TIMEOUT = "AUDIO_EXTRACTION_TIMEOUT"
@@ -34,6 +35,7 @@ class WorkerErrorCode(StrEnum):
 _PUBLIC_MESSAGES: dict[WorkerErrorCode, str] = {
     WorkerErrorCode.INPUT_NOT_FOUND: "未找到可处理的课堂视频。",
     WorkerErrorCode.OBJECT_DOWNLOAD_FAILED: "课堂视频下载失败或文件不完整。",
+    WorkerErrorCode.SUPPLEMENTAL_TRANSLATION_DOWNLOAD_FAILED: "补充译文下载失败或文件不完整。",
     WorkerErrorCode.FFMPEG_NOT_FOUND: "媒体处理服务缺少 FFmpeg。",
     WorkerErrorCode.AUDIO_EXTRACTION_FAILED: "课堂视频音频抽取失败。",
     WorkerErrorCode.AUDIO_EXTRACTION_TIMEOUT: "课堂视频音频抽取超时。",
@@ -92,6 +94,7 @@ class WorkerError(RuntimeError):
         if self.code in {
             WorkerErrorCode.FFMPEG_NOT_FOUND,
             WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
+            WorkerErrorCode.SUPPLEMENTAL_TRANSLATION_DOWNLOAD_FAILED,
             WorkerErrorCode.ASR_UNAVAILABLE,
             WorkerErrorCode.ASR_TIMEOUT,
             WorkerErrorCode.UPSTREAM_UNAVAILABLE,

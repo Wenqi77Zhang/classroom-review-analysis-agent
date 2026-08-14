@@ -868,16 +868,16 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert resumed_transcript.status_code == 201
 
-            completed_transcribe = await restarted_client.patch(
+            completed_translation = await restarted_client.patch(
                 f"/api/internal/tasks/{retry_task_id}/state",
                 json={
-                    "stage": "transcribe",
+                    "stage": "translate",
                     "status": "running",
                     "progress": 1.0,
                 },
                 headers=worker_headers,
             )
-            assert completed_transcribe.status_code == 200
+            assert completed_translation.status_code == 200
 
             resumed_handoff = await restarted_client.post(
                 f"/api/internal/tasks/{retry_task_id}/handoff-agent",

@@ -42,6 +42,7 @@ from worker.runner import (
     WORKER_CLAIM_STAGES,
     _build_parser,
     _claimed_input_path,
+    _claimed_translation_asset,
     _install_signal_handlers,
     _process_claimed_media,
     _run_remote,
@@ -155,6 +156,7 @@ def test_worker_error_codes_match_media_design() -> None:
     expected = {
         "INPUT_NOT_FOUND",
         "OBJECT_DOWNLOAD_FAILED",
+        "SUPPLEMENTAL_TRANSLATION_DOWNLOAD_FAILED",
         "FFMPEG_NOT_FOUND",
         "AUDIO_EXTRACTION_FAILED",
         "AUDIO_EXTRACTION_TIMEOUT",
@@ -271,6 +273,7 @@ def test_remote_runner_claims_newly_uploaded_tasks_without_object_root() -> None
         TaskStage.UPLOADED,
         TaskStage.EXTRACT_AUDIO,
         TaskStage.TRANSCRIBE,
+        TaskStage.TRANSLATE,
     ]
 
 
@@ -1006,12 +1009,14 @@ def _download_asset(
     size_bytes: int,
     url: str = "https://storage.example/object",
     verified_etag: str | None = "verified-etag",
+    kind: AssetKind = AssetKind.VIDEO,
+    filename: str = "authorized-test.mp4",
 ):
     return InternalAssetRead(
         id=uuid4(),
         classroom_id=uuid4(),
-        kind=AssetKind.VIDEO,
-        filename="authorized-test.mp4",
+        kind=kind,
+        filename=filename,
         content_type="video/mp4",
         size_bytes=size_bytes,
         upload_status=UploadStatus.UPLOADED,
@@ -1020,6 +1025,41 @@ def _download_asset(
         download_url=url,
         verified_etag=verified_etag,
     )
+
+
+def test_worker_selects_only_timed_transcript_for_confirmed_bilingual_task() -> None:
+    video = _download_asset(size_bytes=1)
+    plain_transcript = _download_asset(
+        size_bytes=1,
+        kind=AssetKind.TRANSCRIPT,
+        filename="notes.txt",
+    )
+    timed_translation = _download_asset(
+        size_bytes=1,
+        kind=AssetKind.TRANSCRIPT,
+        filename="teacher-translation.vtt",
+    )
+    claim = _claim().model_copy(
+        update={
+            "assets": [video, plain_transcript, timed_translation],
+            "analysis_contract": _claim().analysis_contract.model_copy(
+                update={"bilingual_required": True}
+            ),
+        },
+        deep=True,
+    )
+
+    assert _claimed_translation_asset(claim) == timed_translation
+    assert _claimed_translation_asset(
+        claim.model_copy(
+            update={
+                "analysis_contract": claim.analysis_contract.model_copy(
+                    update={"bilingual_required": False}
+                )
+            },
+            deep=True,
+        )
+    ) is None
 
 
 def test_http_job_store_downloads_without_forwarding_service_token(tmp_path: Path) -> None:

@@ -14,6 +14,7 @@ from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_message
 from worker.job_store import JobStore
 from worker.stages.extract_audio import extract_audio
+from worker.stages.import_translation import align_supplemental_translations
 from worker.stages.transcribe import transcribe_audio
 from worker.stages.translate import translate_transcript
 from worker.types import PipelineResult, PipelineTask
@@ -54,26 +55,34 @@ def run_pipeline(
     *,
     stop_event: Event | None = None,
     translation_adapter: TranslationAdapter | None = None,
+    supplemental_translation_path: Path | None = None,
     reported_stage_floor: TaskStage = TaskStage.EXTRACT_AUDIO,
 ) -> PipelineResult:
     if reported_stage_floor not in {
         TaskStage.UPLOADED,
         TaskStage.EXTRACT_AUDIO,
         TaskStage.TRANSCRIBE,
+        TaskStage.TRANSLATE,
     }:
         raise ValueError("reported_stage_floor must be a media input stage")
 
     work_dir = Path(tempfile.mkdtemp(prefix=f"classroom-worker-{task.task_id}-"))
     audio_path = work_dir / "audio.wav"
+    stage_order = {
+        TaskStage.UPLOADED: 0,
+        TaskStage.EXTRACT_AUDIO: 1,
+        TaskStage.TRANSCRIBE: 2,
+        TaskStage.TRANSLATE: 3,
+    }
     current_stage = (
-        TaskStage.TRANSCRIBE
-        if reported_stage_floor is TaskStage.TRANSCRIBE
+        reported_stage_floor
+        if stage_order[reported_stage_floor] > stage_order[TaskStage.EXTRACT_AUDIO]
         else TaskStage.EXTRACT_AUDIO
     )
     pipeline_failure: BaseException | None = None
     try:
         _raise_if_stopped(stop_event)
-        if current_stage is TaskStage.EXTRACT_AUDIO:
+        if stage_order[reported_stage_floor] <= stage_order[TaskStage.EXTRACT_AUDIO]:
             store.update_state(
                 task.task_id,
                 _state(
@@ -86,7 +95,7 @@ def run_pipeline(
             )
         extract_audio(task.input_path, audio_path)
         _raise_if_stopped(stop_event)
-        if current_stage is TaskStage.EXTRACT_AUDIO:
+        if stage_order[reported_stage_floor] <= stage_order[TaskStage.EXTRACT_AUDIO]:
             store.update_state(
                 task.task_id,
                 _state(
@@ -98,26 +107,38 @@ def run_pipeline(
                 ),
             )
 
-        current_stage = TaskStage.TRANSCRIBE
-        store.update_state(
-            task.task_id,
-            _state(current_stage, TaskStatus.RUNNING, 0.0, task.trace_id, message="正在识别语音"),
+        current_stage = (
+            reported_stage_floor
+            if stage_order[reported_stage_floor] > stage_order[TaskStage.TRANSCRIBE]
+            else TaskStage.TRANSCRIBE
         )
+        if stage_order[reported_stage_floor] <= stage_order[TaskStage.TRANSCRIBE]:
+            store.update_state(
+                task.task_id,
+                _state(
+                    TaskStage.TRANSCRIBE,
+                    TaskStatus.RUNNING,
+                    0.0,
+                    task.trace_id,
+                    message="正在识别语音",
+                ),
+            )
         transcript = transcribe_audio(audio_path, adapter, trace_id=task.trace_id)
         _raise_if_stopped(stop_event)
         store.save_transcript(task.task_id, transcript)
-        store.update_state(
-            task.task_id,
-            _state(
-                current_stage,
-                TaskStatus.RUNNING,
-                1.0,
-                task.trace_id,
-                message="逐字稿已生成，等待下一阶段",
-            ),
-        )
+        if stage_order[reported_stage_floor] <= stage_order[TaskStage.TRANSCRIBE]:
+            store.update_state(
+                task.task_id,
+                _state(
+                    TaskStage.TRANSCRIBE,
+                    TaskStatus.RUNNING,
+                    1.0,
+                    task.trace_id,
+                    message="逐字稿已生成，等待下一阶段",
+                ),
+            )
 
-        if translation_adapter is None:
+        if supplemental_translation_path is None and translation_adapter is None:
             return PipelineResult(
                 task_id=task.task_id,
                 transcript_segments=len(transcript.segments),
@@ -130,10 +151,14 @@ def run_pipeline(
             task.task_id,
             _state(current_stage, TaskStatus.RUNNING, 0.0, task.trace_id, message="正在逐句翻译"),
         )
-        translated = translate_transcript(
-            transcript,
-            translation_adapter,
-            stop_event=stop_event,
+        translated = (
+            align_supplemental_translations(transcript, supplemental_translation_path)
+            if supplemental_translation_path is not None
+            else translate_transcript(
+                transcript,
+                translation_adapter,
+                stop_event=stop_event,
+            )
         )
         _raise_if_stopped(stop_event)
         store.save_transcript(task.task_id, translated)
