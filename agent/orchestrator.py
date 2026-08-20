@@ -27,6 +27,7 @@ from agent.skills.common import get_common_skill
 from agent.state import AgentState, AgentWorkflow
 from agent.tools.retrieve_evidence import EvidenceNotFoundError, EvidenceRetriever
 from backend.app.schemas.analysis_report import (
+    ConclusionType,
     EvidenceSourceType,
     InternalConclusionBatchWrite,
     InternalConclusionWrite,
@@ -39,7 +40,12 @@ _GRAMMAR_SCHEMA_KEYS = frozenset(
 )
 
 
-def _model_grammar_schema() -> dict:
+def _model_grammar_schema(
+    *,
+    allowed_skills: Sequence[str] | None = None,
+    allowed_types: Sequence[str] | None = None,
+    allowed_evidence_ids: Sequence[str] | None = None,
+) -> dict:
     """把 Pydantic Schema 精简为本地 grammar 引擎稳定支持的结构子集。
 
     模型侧只负责约束 JSON 形状；完整的 UUID、长度、数量与枚举校验仍由下游
@@ -73,6 +79,49 @@ def _model_grammar_schema() -> dict:
     compacted = compact(root)
     if not isinstance(compacted, dict):
         raise TypeError("模型输出 Schema 精简失败。")
+    if allowed_skills is not None:
+        skill_names = list(dict.fromkeys(allowed_skills))
+        if not skill_names:
+            raise ValueError("模型输出 Schema 至少需要一个允许的 Skill。")
+        try:
+            skill_schema = compacted["properties"]["conclusions"]["items"][
+                "properties"
+            ]["skill"]
+        except (KeyError, TypeError) as exc:
+            raise TypeError("模型输出 Schema 缺少 conclusions[].skill。") from exc
+        if not isinstance(skill_schema, dict):
+            raise TypeError("模型输出 Schema 的 conclusions[].skill 不是对象。")
+        # 把本轮计划真正收紧进 grammar，减少小模型生成计划外 Skill 的机会。
+        # 下游仍保留独立白名单校验，不能仅依赖模型侧约束。
+        skill_schema["enum"] = skill_names
+    if allowed_types is not None:
+        conclusion_types = list(dict.fromkeys(allowed_types))
+        if not conclusion_types:
+            raise ValueError("模型输出 Schema 至少需要一个允许的结论类型。")
+        try:
+            type_schema = compacted["properties"]["conclusions"]["items"][
+                "properties"
+            ]["type"]
+        except (KeyError, TypeError) as exc:
+            raise TypeError("模型输出 Schema 缺少 conclusions[].type。") from exc
+        if not isinstance(type_schema, dict):
+            raise TypeError("模型输出 Schema 的 conclusions[].type 不是对象。")
+        type_schema["enum"] = conclusion_types
+    if allowed_evidence_ids is not None:
+        evidence_ids = list(dict.fromkeys(allowed_evidence_ids))
+        if not evidence_ids:
+            raise ValueError("模型输出 Schema 至少需要一个允许的证据 ID。")
+        try:
+            evidence_id_schema = compacted["properties"]["conclusions"]["items"][
+                "properties"
+            ]["evidence_ids"]["items"]
+        except (KeyError, TypeError) as exc:
+            raise TypeError("模型输出 Schema 缺少 conclusions[].evidence_ids[]。") from exc
+        if not isinstance(evidence_id_schema, dict):
+            raise TypeError("模型输出 Schema 的 evidence_ids[] 不是对象。")
+        # 让 grammar 只接受本次真正提供给模型的证据 ID。后端后续仍会校验
+        # task/owner/scope，枚举只是第一道约束而不是权限判断的替代品。
+        evidence_id_schema["enum"] = evidence_ids
     return compacted
 
 
@@ -83,6 +132,18 @@ class AgentRunError(RuntimeError):
 
 
 ConclusionValidator = Callable[[InternalConclusionWrite], None]
+
+
+def _validation_error_shape(error: ValidationError) -> list[dict[str, str]]:
+    """Return only schema locations and error types; never persist model content."""
+
+    return [
+        {
+            "location": ".".join(str(part) for part in item["loc"]),
+            "type": item["type"],
+        }
+        for item in error.errors(include_url=False, include_context=False, include_input=False)
+    ]
 
 
 class AgentOrchestrator:
@@ -152,11 +213,22 @@ class AgentOrchestrator:
             evidence = self._select_evidence(analysis_input)
             provided_evidence_ids = {item.id for item in evidence}
             provider = self._providers.select(analysis_input.contract.privacy_mode)
+            allowed_skills = [skill.name for skill in plan.skills]
+            allowed_evidence_ids = [str(item.id) for item in evidence]
+            response_schema = _model_grammar_schema(
+                allowed_skills=allowed_skills,
+                allowed_evidence_ids=allowed_evidence_ids,
+            )
             request = ModelRequest(
                 system_prompt=_PROMPT_PATH.read_text(encoding="utf-8"),
-                user_prompt=self._build_user_prompt(analysis_input, plan, evidence),
+                user_prompt=self._build_user_prompt(
+                    analysis_input,
+                    plan,
+                    evidence,
+                    response_schema=response_schema,
+                ),
                 trace_id=tracer.trace_id,
-                response_schema=_model_grammar_schema(),
+                response_schema=response_schema,
             )
 
             workflow.transition(AgentState.ANALYZING)
@@ -169,11 +241,95 @@ class AgentOrchestrator:
             )
 
             workflow.transition(AgentState.VALIDATING)
-            model_analysis = ModelAnalysis.model_validate(response.data)
-            allowed_skills = {skill.name for skill in plan.skills}
+            try:
+                model_analysis = ModelAnalysis.model_validate(response.data)
+            except ValidationError as validation_error:
+                tracer.event(
+                    "agent.model.schema_invalid",
+                    errors=_validation_error_shape(validation_error),
+                )
+                # 本地小模型偶尔会生成 JSON 形状正确、但 UUID/必填字段等完整契约
+                # 不合规的结果。只允许一次同约束重生，不把无效字段静默修补进系统。
+                schema_repair_request = ModelRequest(
+                    system_prompt=_PROMPT_PATH.read_text(encoding="utf-8"),
+                    user_prompt=self._build_user_prompt(
+                        analysis_input,
+                        plan,
+                        evidence,
+                        response_schema=response_schema,
+                        schema_repair=True,
+                    ),
+                    trace_id=tracer.trace_id,
+                    response_schema=response_schema,
+                )
+                response = await provider.generate_structured(schema_repair_request)
+                tracer.event(
+                    "agent.model.schema_repair_completed",
+                    model_name=response.model_name,
+                    latency_ms=response.latency_ms,
+                    usage=response.usage,
+                )
+                try:
+                    model_analysis = ModelAnalysis.model_validate(response.data)
+                except ValidationError as repair_error:
+                    tracer.event(
+                        "agent.model.schema_repair_invalid",
+                        errors=_validation_error_shape(repair_error),
+                    )
+                    raise
+            candidates = list(model_analysis.conclusions)
+            required_types = (
+                ConclusionType.FACT,
+                ConclusionType.JUDGMENT,
+                ConclusionType.SUGGESTION,
+            )
+            present_types = {candidate.type for candidate in candidates}
+            for missing_type in required_types:
+                if missing_type in present_types:
+                    continue
+                repair_schema = _model_grammar_schema(
+                    allowed_skills=allowed_skills,
+                    allowed_types=[missing_type.value],
+                    allowed_evidence_ids=allowed_evidence_ids,
+                )
+                repair_request = ModelRequest(
+                    system_prompt=_PROMPT_PATH.read_text(encoding="utf-8"),
+                    user_prompt=self._build_user_prompt(
+                        analysis_input,
+                        plan,
+                        evidence,
+                        response_schema=repair_schema,
+                        required_conclusion_types=[missing_type.value],
+                    ),
+                    trace_id=tracer.trace_id,
+                    response_schema=repair_schema,
+                )
+                repair_response = await provider.generate_structured(repair_request)
+                tracer.event(
+                    "agent.model.repair_completed",
+                    model_name=repair_response.model_name,
+                    required_type=missing_type.value,
+                    latency_ms=repair_response.latency_ms,
+                    usage=repair_response.usage,
+                )
+                repaired = ModelAnalysis.model_validate(repair_response.data)
+                matching = [
+                    candidate
+                    for candidate in repaired.conclusions
+                    if candidate.type is missing_type
+                ]
+                if not matching:
+                    raise AgentRunError(
+                        AgentErrorCode.SCHEMA_INVALID,
+                        f"模型修复输出仍缺少 {missing_type.value} 结论。",
+                    )
+                candidates.append(matching[0])
+                present_types.add(missing_type)
+
+            allowed_skill_set = set(allowed_skills)
             conclusions: list[InternalConclusionWrite] = []
-            for candidate in model_analysis.conclusions:
-                if candidate.skill not in allowed_skills:
+            for candidate in candidates:
+                if candidate.skill not in allowed_skill_set:
                     raise AgentRunError(
                         AgentErrorCode.SKILL_NOT_IN_PLAN,
                         "模型声明了本次计划未启用的 Skill。",
@@ -286,12 +442,25 @@ class AgentOrchestrator:
         analysis_input: AnalysisInput,
         plan: AnalysisPlan,
         evidence: Sequence[EvidenceItem],
+        *,
+        response_schema: Mapping[str, object],
+        required_conclusion_types: Sequence[str] | None = None,
+        schema_repair: bool = False,
     ) -> str:
         trusted_context = {
             "analysis_contract": analysis_input.contract.model_dump(mode="json"),
             "plan": plan.model_dump(mode="json"),
-            "required_output_schema": _model_grammar_schema(),
+            "required_output_schema": response_schema,
         }
+        if required_conclusion_types is not None:
+            trusted_context["required_conclusion_types"] = list(
+                required_conclusion_types
+            )
+        if schema_repair:
+            trusted_context["schema_repair"] = {
+                "required": True,
+                "instruction": "重新生成完整结果；不得沿用不合规字段或省略必填字段。",
+            }
         untrusted_evidence = {
             "encoding": "json-utf8",
             "items": [

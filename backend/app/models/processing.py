@@ -110,6 +110,7 @@ class ProcessingTask(Base):
     analysis_contract: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )
+    transcript_duration_ms: Mapped[int | None] = mapped_column(Integer)
     last_error_code: Mapped[ErrorCode | None] = mapped_column(String(64))
     last_error_message: Mapped[str | None] = mapped_column(Text)
     trace_id: Mapped[str | None] = mapped_column(String(128), index=True)
@@ -133,6 +134,10 @@ class ProcessingTask(Base):
     __table_args__ = (
         CheckConstraint("progress >= 0 AND progress <= 1", name="ck_tasks_progress_range"),
         CheckConstraint("retry_count >= 0", name="ck_tasks_retry_nonnegative"),
+        CheckConstraint(
+            "transcript_duration_ms IS NULL OR transcript_duration_ms >= 0",
+            name="ck_tasks_transcript_duration_nonnegative",
+        ),
         ForeignKeyConstraint(
             ["classroom_id", "owner_id"],
             ["classrooms.id", "classrooms.owner_id"],

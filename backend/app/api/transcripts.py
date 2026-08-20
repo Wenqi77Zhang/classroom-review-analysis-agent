@@ -40,22 +40,27 @@ WorkerWriter = Annotated[
 ]
 
 
-def _transcript_read(task_id: UUID, segments: list) -> TranscriptRead:
+def _transcript_read(task: ProcessingTask, segments: list) -> TranscriptRead:
     source_language = segments[0].source_language if segments else "und"
     return TranscriptRead(
-        task_id=task_id,
+        task_id=task.id,
         source_language=source_language,
         has_translation=any(item.translation is not None for item in segments),
         segment_count=len(segments),
-        duration_ms=max((item.end_ms for item in segments), default=0),
+        duration_ms=(
+            task.transcript_duration_ms
+            if task.transcript_duration_ms is not None
+            else max((item.end_ms for item in segments), default=0)
+        ),
         segments=[TranscriptSegment.model_validate(item) for item in segments],
     )
 
 
 @router.get("/tasks/{task_id}/transcript", response_model=TranscriptRead)
 async def get_transcript(task_id: UUID, session: Db, user: CurrentUser) -> TranscriptRead:
+    task = await get_owned_or_404(session, ProcessingTask, task_id, user.id)
     return _transcript_read(
-        task_id,
+        task,
         await get_transcript_segments(session, user.id, task_id),
     )
 
@@ -126,4 +131,4 @@ async def post_internal_transcript(
         },
         trace_id=task.trace_id,
     )
-    return _transcript_read(task.id, segments)
+    return _transcript_read(task, segments)

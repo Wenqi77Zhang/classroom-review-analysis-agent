@@ -75,6 +75,27 @@ class FakeProvider(ModelProvider):
         )
 
 
+class SequenceProvider(ModelProvider):
+    def __init__(self, responses: list[dict]) -> None:
+        self.responses = list(responses)
+        self.requests: list[ModelRequest] = []
+
+    @property
+    def model_name(self) -> str:
+        return "sequence-model"
+
+    async def generate_structured(self, request: ModelRequest) -> ModelResponse:
+        self.requests.append(request)
+        if not self.responses:
+            raise AssertionError("SequenceProvider 没有剩余响应。")
+        return ModelResponse(
+            data=self.responses.pop(0),
+            model_name=self.model_name,
+            latency_ms=9,
+            usage={"total_tokens": 30},
+        )
+
+
 class MemoryAgentStore:
     def __init__(self, claim: InternalAgentTaskClaim | None) -> None:
         self.claim_result = claim
@@ -165,7 +186,19 @@ def _model_data(evidence_id: UUID) -> dict:
                 "content": "教师提问后等待约三秒再邀请学生回答。",
                 "evidence_ids": [str(evidence_id)],
                 "skill": "common",
-            }
+            },
+            {
+                "type": "judgment",
+                "content": "该等待时间为学生组织回答提供了明确空间。",
+                "evidence_ids": [str(evidence_id)],
+                "skill": "common",
+            },
+            {
+                "type": "suggestion",
+                "content": "后续可继续保留明确等待，并在邀请回答前提示思考步骤。",
+                "evidence_ids": [str(evidence_id)],
+                "skill": "common",
+            },
         ]
     }
 
@@ -473,6 +506,152 @@ async def test_orchestrator_generates_frozen_backend_conclusion_contract() -> No
         grammar_schema["properties"]["conclusions"]["items"]["properties"]["type"]["enum"]
         == ["fact", "judgment", "suggestion"]
     )
+    assert (
+        grammar_schema["properties"]["conclusions"]["items"]["properties"]["skill"]["enum"]
+        == ["common"]
+    )
+    assert grammar_schema["properties"]["conclusions"]["items"]["properties"][
+        "evidence_ids"
+    ]["items"]["enum"] == [str(evidence_id)]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_limits_model_grammar_to_planned_domain_skills() -> None:
+    analysis_input = _input(domain=CourseDomain.COMPUTER_AI)
+    evidence_id = analysis_input.evidence[0].id
+    provider = FakeProvider(_model_data(evidence_id))
+    orchestrator = AgentOrchestrator(
+        providers=ProviderRouter(local=provider),
+        skill_registry=load_domain_skills(),
+    )
+
+    await orchestrator.analyze(analysis_input)
+
+    grammar_schema = provider.requests[0].response_schema
+    assert (
+        grammar_schema["properties"]["conclusions"]["items"]["properties"]["skill"]["enum"]
+        == ["common", "computer_ai"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_rejects_analysis_missing_required_conclusion_layers() -> None:
+    analysis_input = _input()
+    evidence_id = analysis_input.evidence[0].id
+    provider = FakeProvider(
+        {
+            "conclusions": [
+                {
+                    "type": "fact",
+                    "content": "教师提问后等待约三秒。",
+                    "evidence_ids": [str(evidence_id)],
+                    "skill": "common",
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(AgentRunError) as captured:
+        await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(
+            analysis_input
+        )
+
+    assert captured.value.code is AgentErrorCode.SCHEMA_INVALID
+    assert len(provider.requests) == 2
+    repair_schema = provider.requests[1].response_schema
+    assert (
+        repair_schema["properties"]["conclusions"]["items"]["properties"]["type"]["enum"]
+        == ["judgment"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_repairs_each_missing_conclusion_layer() -> None:
+    analysis_input = _input()
+    evidence_id = str(analysis_input.evidence[0].id)
+    provider = SequenceProvider(
+        [
+            {
+                "conclusions": [
+                    {
+                        "type": "fact",
+                        "content": "教师提问后等待约三秒。",
+                        "evidence_ids": [evidence_id],
+                        "skill": "common",
+                    }
+                ]
+            },
+            {
+                "conclusions": [
+                    {
+                        "type": "judgment",
+                        "content": "等待时间为学生组织回答提供了空间。",
+                        "evidence_ids": [evidence_id],
+                        "skill": "common",
+                    }
+                ]
+            },
+            {
+                "conclusions": [
+                    {
+                        "type": "suggestion",
+                        "content": "后续可保留等待并提示思考步骤。",
+                        "evidence_ids": [evidence_id],
+                        "skill": "common",
+                    }
+                ]
+            },
+        ]
+    )
+
+    result = await AgentOrchestrator(
+        providers=ProviderRouter(local=provider)
+    ).analyze(analysis_input)
+
+    assert [item.type.value for item in result.conclusions.conclusions] == [
+        "fact",
+        "judgment",
+        "suggestion",
+    ]
+    assert len(provider.requests) == 3
+    assert [
+        request.response_schema["properties"]["conclusions"]["items"]["properties"][
+            "type"
+        ]["enum"]
+        for request in provider.requests[1:]
+    ] == [["judgment"], ["suggestion"]]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_retries_invalid_model_contract_once() -> None:
+    analysis_input = _input()
+    provider = SequenceProvider(
+        [
+            {"conclusions": [{"type": "fact"}]},
+            _model_data(analysis_input.evidence[0].id),
+        ]
+    )
+    sink = InMemoryTraceSink()
+
+    result = await AgentOrchestrator(
+        providers=ProviderRouter(local=provider), trace_sink=sink
+    ).analyze(analysis_input)
+
+    assert len(result.conclusions.conclusions) == 3
+    assert len(provider.requests) == 2
+    assert "\"schema_repair\"" in provider.requests[1].user_prompt
+    assert [event.name for event in sink.events] == [
+        "agent.plan.created",
+        "agent.model.completed",
+        "agent.model.schema_invalid",
+        "agent.model.schema_repair_completed",
+        "agent.analysis.validated",
+    ]
+    assert sink.events[2].attributes["errors"] == [
+        {"location": "conclusions.0.content", "type": "missing"},
+        {"location": "conclusions.0.evidence_ids", "type": "missing"},
+        {"location": "conclusions.0.skill", "type": "missing"},
+    ]
 
 
 @pytest.mark.asyncio

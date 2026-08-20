@@ -34,6 +34,7 @@ async def replace_transcript(
     task: ProcessingTask,
     body: InternalTranscriptWrite,
 ) -> list[TranscriptSegment]:
+    task.transcript_duration_ms = body.duration_ms
     await session.execute(
         delete(TranscriptSegment).where(
             TranscriptSegment.task_id == task.id,

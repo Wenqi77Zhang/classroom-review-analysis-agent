@@ -368,6 +368,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 headers=worker_headers,
             )
             assert transcript.status_code == 201
+            assert transcript.json()["duration_ms"] == 2000
             segment_id = transcript.json()["segments"][0]["id"]
             repeated_transcript = await client.post(
                 f"/api/internal/tasks/{task_id}/transcript",
@@ -387,6 +388,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 headers=worker_headers,
             )
             assert repeated_transcript.status_code == 201
+            assert repeated_transcript.json()["duration_ms"] == 2000
             segment_id = repeated_transcript.json()["segments"][0]["id"]
 
             transcribed = await client.patch(
