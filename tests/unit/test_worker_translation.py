@@ -162,6 +162,16 @@ def test_translation_rejects_missing_or_blank_output(output: tuple[str, ...]) ->
     assert raised.value.retryable is False
 
 
+def test_translation_rejects_english_echo_instead_of_chinese() -> None:
+    with pytest.raises(WorkerError) as raised:
+        translate_transcript(
+            _transcript("Explain AI.", source_language="en"),
+            FixedOutputAdapter(("Explain AI.",)),
+        )
+
+    assert raised.value.code is WorkerErrorCode.TRANSLATION_SCHEMA_INVALID
+
+
 def test_translation_rejects_unsupported_segment_in_bilingual_transcript() -> None:
     with pytest.raises(WorkerError) as raised:
         translate_transcript(

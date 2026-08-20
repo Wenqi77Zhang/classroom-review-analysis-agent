@@ -28,6 +28,7 @@ from backend.app.schemas.task import (
     TaskStatus,
 )
 from worker.adapters.asr import AsrAdapter, LocalWhisperAdapter
+from worker.adapters.local_translation import LocalModelTranslationAdapter
 from worker.adapters.translation import TranslationAdapter
 from worker.cleanup import cleanup_path
 from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_message
@@ -42,6 +43,33 @@ WORKER_CLAIM_STAGES = [
     TaskStage.TRANSCRIBE,
     TaskStage.TRANSLATE,
 ]
+
+
+def build_translation_adapter_from_env() -> TranslationAdapter | None:
+    """Build a loopback-only automatic translator; teacher VTT still takes priority."""
+
+    provider = os.getenv("TRANSLATION_PROVIDER", "local_model").strip().lower()
+    if provider in {"", "none", "disabled"}:
+        return None
+    if provider != "local_model":
+        raise ValueError("TRANSLATION_PROVIDER 当前只支持 local_model、none 或 disabled。")
+    endpoint = (
+        os.getenv("TRANSLATION_MODEL_CHAT_COMPLETIONS_URL", "").strip()
+        or os.getenv(
+            "LOCAL_MODEL_CHAT_COMPLETIONS_URL",
+            "http://127.0.0.1:11434/v1/chat/completions",
+        ).strip()
+    )
+    model = (
+        os.getenv("TRANSLATION_MODEL_NAME", "").strip()
+        or os.getenv("LOCAL_MODEL_NAME", "qwen3.5:4b").strip()
+    )
+    return LocalModelTranslationAdapter(
+        endpoint=endpoint,
+        model=model,
+        timeout_seconds=float(os.getenv("TRANSLATION_TIMEOUT_SECONDS", "120")),
+        batch_size=int(os.getenv("TRANSLATION_BATCH_SIZE", "8")),
+    )
 
 
 class _LeaseStopEvent(threading.Event):
@@ -401,6 +429,7 @@ def _run_remote(
         )
 
     adapter = LocalWhisperAdapter(args.model, language=args.language)
+    translation_adapter = build_translation_adapter_from_env()
     store = HttpJobStore(args.api_base_url, service_token)
     request = InternalTaskClaimRequest(
         worker_id=args.worker_id,
@@ -419,6 +448,7 @@ def _run_remote(
                 adapter,
                 args.object_root,
                 args.worker_id,
+                translation_adapter,
             ),
             process_stop_event=stop_event,
         )

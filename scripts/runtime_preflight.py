@@ -7,6 +7,7 @@ import os
 from agent.runner import build_provider_router_from_env, build_trace_sink_from_env
 from backend.app.config import Settings
 from backend.app.schemas.task import PrivacyMode
+from worker.runner import build_translation_adapter_from_env
 
 
 def main() -> int:
@@ -14,6 +15,7 @@ def main() -> int:
     privacy_mode = PrivacyMode(os.getenv("MODEL_PRIVACY_MODE", "local").strip())
     build_provider_router_from_env().select(privacy_mode)
     build_trace_sink_from_env()
+    build_translation_adapter_from_env()
     print("运行配置校验通过（敏感值未输出）。")
     return 0
 
