@@ -9,7 +9,7 @@ description = "Evidence-grounded classroom review and teaching analysis agent."
 requires-python = ">=3.13,<3.14"
 # 版本策略：给下界与主版本上界，不做精确锁定。四天集中开发期需要
 # 三个成员各自追加依赖，精确锁定会频繁互相冲突；主版本上界足以拦住
-# 破坏性升级。已解析并验证过的版本记录在 backend/backend-module-guide.md。
+# 破坏性升级。已解析并验证过的版本记录在 docs/product-and-technology-handbook.md。
 dependencies = [
   # 平台后端（成员 3）
   "fastapi>=0.140,<1.0",

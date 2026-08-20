@@ -291,7 +291,7 @@ def test_weak_jwt_secret_is_rejected() -> None:
 
 @pytest.mark.parametrize("seconds", [10, 7200])
 def test_presign_expiry_must_stay_within_bounds(seconds: int) -> None:
-    """限时是 docs/data-security.md 的强制要求：过长的签名等同于长期公开对象。"""
+    """限时是 ../../docs/product-and-technology-handbook.md 的强制要求：过长的签名等同于长期公开对象。"""
     with pytest.raises(ValidationError):
         make_settings(object_storage_presigned_url_ttl_seconds=seconds)
 

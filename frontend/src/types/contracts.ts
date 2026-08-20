@@ -1,4 +1,4 @@
-// 与 backend/app/schemas/ 和 docs/interface-contracts.md 对齐。
+// 与 backend/app/schemas/ 和 ../../../docs/product-and-technology-handbook.md 对齐。
 export type AssetKind = "video" | "courseware" | "transcript";
 export type ReviewStatus = "pending" | "accepted" | "modified" | "rejected";
 export type ConclusionType = "fact" | "judgment" | "suggestion";

@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-截至 2026-08-10 的已合并基线为 `main@5b4a95b`。前端已通过同源 BFF 接通演示会话、
+截至 2026-08-20 的已合并基线为 `main@6ee9421`。前端已通过同源 BFF 接通演示会话、
 课程/课堂、真实上传、任务、证据工作台、教师复核和服务端报告；后端已具备账号隔离、
 私有对象存储、任务租约、逐字稿、证据结论、复核历史和三格式导出。短期 JWT 只保存在
 HttpOnly Cookie，长期对象存储密钥不进入浏览器。
@@ -16,7 +16,7 @@ HttpOnly Cookie，长期对象存储密钥不进入浏览器。
 Ollama qwen3.5:4b → 事实/判断/建议 → 接受/修改/驳回 → Markdown/HTML/PDF` 技术 E2E。
 该结果不等于第二输入、真实翻译、课件证据、非开发教师浏览器试用或完整 M1 已通过；
 这些缺口仍保留。逐项状态、证据与阻塞统一记录在
-[`docs/current-progress.md`](docs/current-progress.md)。
+[`docs/product-and-technology-handbook.md`](docs/product-and-technology-handbook.md)。
 
 ## 里程碑
 
@@ -46,16 +46,17 @@ ollama pull qwen3.5:4b
 ```
 
 `start.ps1` / `start.sh` 会读取本机 `.env`，启动前端、FastAPI、Worker 轮询和 Agent
-轮询，并把运行日志写入已忽略的 `logs/`。脚本会先检查 `.venv`、`.env`、npm、必需
-变量和 Worker/Agent 令牌隔离；缺失配置时 fail-closed。当前已完成语法、静态安全和
-缺配置失败测试，仍需在具备 PostgreSQL、对象存储和真实任务的机器上完成整套启动验收。
+轮询，并把运行日志写入已忽略的 `logs/runtime/`。脚本会先检查 `.venv`、`.env`、npm、
+必需变量、端口和 Worker/Agent 令牌隔离；缺失配置时 fail-closed。成员 1 的 Windows
+环境已经完成真实单输入启动与技术 E2E，仍需在干净机器和其他成员环境复现。
 
-阶段 0 的安装脚本只创建项目内 `.venv` 并安装当前已声明依赖；后续依赖由责任成员在实现时补充并锁定。脚本不会写入真实密钥。
+安装脚本在项目内创建 `.venv`，安装当前声明并锁定的 Python/前端依赖，并在缺少时复制
+`.env.example`。脚本不会生成或写入真实密钥。
 
 ### 临时团队联调入口（非最终部署）
 
 当成员不在同一电脑或局域网时，可由入口负责人按
-[`docs/local-development-setup.md`](docs/local-development-setup.md) 第 6 节启动
+[`docs/product-and-technology-handbook.md`](docs/product-and-technology-handbook.md) 第 10.6 节启动
 Cloudflare Quick Tunnel。组员无需安装项目环境，使用浏览器打开负责人私聊发送的地址，
 再输入本次访问码。
 
@@ -83,22 +84,13 @@ Cloudflare Quick Tunnel。组员无需安装项目环境，使用浏览器打开
 
 本文件是仓库唯一使用通用名称 `README.md` 的总入口。子目录说明均使用能直接表达用途的唯一文件名，避免出现多个同名 README。
 
-- 正式需求、产品、架构、安全与验收文档：`docs/documentation-index.md`
-- 当前已合并进度、进行中任务与集成阻塞：`docs/current-progress.md`
-- 全体成员本地软件、环境变量、分服务启动与排错：`docs/local-development-setup.md`
-- 跨网络临时联调入口：`scripts/start-team-tunnel.ps1`（非最终部署，使用前阅读统一环境指南第 6 节）
-- 完整四天五人规划与目标骨架：`docs/project-plan-v5.md`
-- 文件和模块责任：`OWNERSHIP.md`
-- 前端模块：`frontend/frontend-module-guide.md`（含成员 2 交接）
-- 第一版界面基准：`docs/ui-baseline-v1.md`
-- 后端模块：`backend/backend-module-guide.md`
-- 媒体处理 Worker：`worker/media-worker-guide.md`
-- Agent 模块：`agent/agent-module-guide.md`
-- 测试策略与执行：`tests/testing-guide.md`
-- 报告编写与证据：`reports/reporting-guide.md`
-- 辅助脚本：`scripts/script-guide.md`
+- 产品、需求、UI、架构、接口、安全、运行、进度与项目治理：`docs/product-and-technology-handbook.md`
+- 测试方法、测试数据、失败重试、阶段验收与可用性记录：`tests/test-and-acceptance-record.md`
+- 小组报告、证据索引、贡献审计及成员 1–5 实际贡献：`reports/group-report.md`
+- 跨网络临时联调入口：`scripts/start-team-tunnel.ps1`（非最终部署，使用前阅读手册第 10.6 节）
+- 目录职责、模块边界、接口约定和运行指南均已并入产品与技术手册。
 
-正式项目文档的推荐阅读顺序和维护规则统一记录在 `docs/documentation-index.md`。
+旧拆分文档可通过 Git 历史追溯；当前信息只维护在以上三个主文档中，避免重复和状态冲突。
 
 ## 安全提醒
 

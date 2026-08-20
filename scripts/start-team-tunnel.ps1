@@ -65,10 +65,10 @@ function Resolve-Cloudflared {
 try {
     $npm = Assert-CommandAvailable `
         -Name "npm.cmd" `
-        -InstallHint "请先按 docs/local-development-setup.md 安装项目指定 Node.js。"
+        -InstallHint "请先按 ../docs/product-and-technology-handbook.md 安装项目指定 Node.js。"
     $node = Assert-CommandAvailable `
         -Name "node.exe" `
-        -InstallHint "请先按 docs/local-development-setup.md 安装项目指定 Node.js。"
+        -InstallHint "请先按 ../docs/product-and-technology-handbook.md 安装项目指定 Node.js。"
     $cloudflaredPath = Resolve-Cloudflared
 
     try {

@@ -6,19 +6,12 @@ foreach ($path in @(
     ".env.example",
     "pyproject.toml",
     "README.md",
-    "docs\documentation-index.md",
-    "docs\requirements-baseline.md",
+    "docs\product-and-technology-handbook.md",
     "frontend\package.json",
     "frontend\package-lock.json",
-    "frontend\frontend-module-guide.md",
-    "backend\backend-module-guide.md",
-    "worker\media-worker-guide.md",
-    "agent\agent-module-guide.md",
-    "tests\testing-guide.md",
-    "tests\fixtures\fixture-catalog.md",
-    "reports\reporting-guide.md",
-    "reports\evidence\evidence-index.md",
-    "scripts\script-guide.md"
+    "tests\test-and-acceptance-record.md",
+    "reports\group-report.md",
+    "AGENTS.md"
 )) {
     if (-not (Test-Path -LiteralPath $path)) { $missing += $path }
 }

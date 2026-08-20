@@ -110,7 +110,7 @@ class Settings(BaseSettings):
         default=900,
         ge=60,
         le=3600,
-        description="预签名 URL 有效期。上限 1 小时：限时是 data-security.md 的强制要求，"
+        description="预签名 URL 有效期。上限 1 小时：限时是 ../../docs/product-and-technology-handbook.md 的强制要求，"
         "过长的签名等同于把对象长期公开。",
     )
     object_storage_retention_days: int = Field(

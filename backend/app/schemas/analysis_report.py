@@ -2,7 +2,7 @@
 
 负责人：成员 3；协作：成员 1（报告页面）、成员 5（Agent 结构化输出与报告组合）。
 
-`docs/interface-contracts.md` 把 `AnalysisConclusion` 的强制字段写死为
+`../../../docs/product-and-technology-handbook.md` 把 `AnalysisConclusion` 的强制字段写死为
 id / type / content / evidence_refs / review_status / created_at / trace_id，
 成员 2 的 `contracts.ts` 与成员 5 的 `agent/contracts.py` 都以此对齐。
 
@@ -10,7 +10,7 @@ id / type / content / evidence_refs / review_status / created_at / trace_id，
 
 1. 每条结论至少一条证据引用（需求基线第 7 条、发布门禁"结论没有证据"）。
 2. 视频/原文证据必须有时间范围，课件证据必须有页码或画面引用
-   （`docs/interface-contracts.md`）。
+   （`../../../docs/product-and-technology-handbook.md`）。
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ class EvidenceReference(OrmModel):
 
 
 class AnalysisConclusion(OrmModel):
-    """一条教学分析结论。字段集受 `docs/interface-contracts.md` 约束，不可随意增删。"""
+    """一条教学分析结论。字段集受 `../../../docs/product-and-technology-handbook.md` 约束，不可随意增删。"""
 
     id: ResourceId
     classroom_id: ResourceId
@@ -246,7 +246,7 @@ class InternalConclusionWrite(ApiModel):
     """Agent 写入一条结论。
 
     没有 `review_status` 字段：新结论一律 pending，Agent 不得直接改教师确认状态
-    （`docs/project-plan-v5.md` §2.2："Agent 不得绕过证据门禁，也不得直接修改教师确认状态"）。
+    （`../../../docs/product-and-technology-handbook.md` §2.2："Agent 不得绕过证据门禁，也不得直接修改教师确认状态"）。
     """
 
     type: ConclusionType
