@@ -106,6 +106,7 @@ def translate_transcript(
         len(batch.translations) != len(texts)
         or not batch.model_name.strip()
         or any(not translation.strip() for translation in batch.translations)
+        or any(_CJK_PATTERN.search(translation) is None for translation in batch.translations)
     ):
         raise WorkerError(
             WorkerErrorCode.TRANSLATION_SCHEMA_INVALID,

@@ -78,12 +78,15 @@
 ```text
 B2 私有对象上传 → 后端 HEAD 核验 → Worker 限时下载
 → FFmpeg 音频抽取 → Whisper 语音识别 → PostgreSQL 时间戳逐字稿
+→ 英文/混合片段由本地 Ollama 逐句翻译（教师 SRT/VTT 可优先覆盖）
 → Ollama qwen3.5:4b 结构化分析 → 事实/判断/建议
 → 教师接受/修改/驳回 → Markdown/HTML/PDF 导出
 ```
 
 浏览器还验证了“视频 + 教师提供 UTF-8 VTT”同时上传：Worker 仍从原视频生成 ASR 原文，
-再按时间覆盖对齐教师译文。该路径证明人工补充译文可恢复双语契约，**不代表自动翻译 Provider 已实现**。
+再按时间覆盖对齐教师译文。除此之外，Worker 已接通 loopback-only 的 Ollama 自动翻译 Provider；
+教师译文存在时仍优先使用教师输入。自动路径已用真实 `qwen3.5:4b` 验证英文、混合文本和提示
+注入式文本的逐句中文输出，但尚未完成一段真实英文课堂的浏览器全链路验收。
 
 ### 3.3 验收状态
 
@@ -93,11 +96,11 @@ B2 私有对象上传 → 后端 HEAD 核验 → Worker 限时下载
 | 两段不同真实视频到三格式报告 | 技术 E2E 已通过 | 两门课程均经过 B2、Worker、Agent、复核和真实导出 |
 | 接受、修改、驳回及历史 | 技术链路通过 | 公开业务 API 与浏览器工作台均已验证 |
 | 报告只含接受/修改内容 | 技术链路通过 | 排除待复核和驳回结论 |
-| 视频与教师 VTT 同时上传 | 技术链路通过 | 4/4 片段具有译文；不等于自动翻译 |
+| 视频与教师 VTT 同时上传 | 技术链路通过 | 4/4 片段具有译文；教师输入优先于自动翻译 |
 | 两账号隔离 | 自动化通过 | PostgreSQL 集成测试覆盖跨账号访问 |
 | 第二段不同远程视频 | 技术 E2E 已通过 | 人文课产生 113 段逐字稿和 7 条结论，与 AI 课结果不同 |
 | 两段媒体来源与复用授权 | 未完成 | 本地清单已有哈希、时长和用途边界；仍缺来源 URL/授权记录 |
-| 自动翻译 Provider | 未完成 | 当前只有可替换阶段与人工 VTT 补救路径 |
+| 自动翻译 Provider | 技术链路通过 | Worker 已真实调用本机 `qwen3.5:4b`，校验顺序、数量、中文覆盖和提示注入边界；真实英文课堂 E2E 仍缺 |
 | 真实课件证据写回与页面联动 | 未完成 | 解析和草稿存在，纵向写回/展示未闭环 |
 | 同任务修改后复测 | 未完成 | 已有失败恢复，新输入同任务复测仍缺 |
 | 非开发教师独立试用 | 未完成 | 不得把开发者操作当作用户验收 |
@@ -108,7 +111,7 @@ B2 私有对象上传 → 后端 HEAD 核验 → Worker 限时下载
 ### 3.4 下一优先级
 
 1. 补齐两段媒体来源 URL 与复用授权记录；
-2. 自动翻译或明确冻结为人工译文方案；
+2. 使用一段真实英文或中英混合课堂完成自动翻译浏览器 E2E；
 3. 真实课件证据写回、定位与展示；
 4. 非开发教师浏览器独立试用及问题复测；
 5. 干净环境部署复现与公开可访问地址。
@@ -340,6 +343,13 @@ git pull --ff-only
 ollama pull qwen3.5:4b
 ```
 
+模型启动后，可用不含真实课堂内容的合成输入分别验证 Agent 和自动翻译：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\verify_local_model.py
+.\.venv\Scripts\python.exe .\scripts\verify_local_translation.py
+```
+
 macOS/Linux：
 
 ```bash
@@ -347,6 +357,11 @@ git pull --ff-only
 chmod +x setup.sh start.sh verify.sh
 ./setup.sh
 ollama pull qwen3.5:4b
+```
+
+```bash
+./.venv/bin/python ./scripts/verify_local_model.py
+./.venv/bin/python ./scripts/verify_local_translation.py
 ```
 
 脚本在项目内创建 `.venv`、安装声明并锁定的依赖，并在缺少时复制 `.env.example` 为 `.env`。

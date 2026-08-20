@@ -15,8 +15,10 @@ HttpOnly Cookie，长期对象存储密钥不进入浏览器。
 `B2 上传 → HEAD 核验 → Worker → FFmpeg → Whisper → PostgreSQL 时间戳逐字稿 →
 Ollama qwen3.5:4b → 事实/判断/建议 → 接受/修改/驳回 → Markdown/HTML/PDF` 技术 E2E。
 两份当前 ASR 与配套原始 ASR 的规范化文本相似度均为 1.0，但配套文件未经人工校订，不能当作
-准确率或地面真值。两段媒体的来源 URL 与复用授权记录仍待补齐，因此该结果也不等于真实翻译、
-课件证据、非开发教师浏览器试用或完整 M1 已通过。逐项状态、证据与阻塞统一记录在
+准确率或地面真值。Worker 已接通 loopback-only 的 Ollama 自动逐句翻译，并以真实
+`qwen3.5:4b` 验证结构、顺序、中文覆盖与提示注入边界；但尚未完成一段真实英文课堂的浏览器
+全链路验收。两段媒体的来源 URL 与复用授权记录仍待补齐，因此当前结果也不等于课件证据、
+非开发教师浏览器试用或完整 M1 已通过。逐项状态、证据与阻塞统一记录在
 [`docs/product-and-technology-handbook.md`](docs/product-and-technology-handbook.md)。
 
 ## 里程碑

@@ -318,6 +318,7 @@ def test_once_mode_claims_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *args, **kwargs: calls.append("claim"),
     )
     monkeypatch.setattr("worker.runner.LocalWhisperAdapter", lambda *args, **kwargs: object())
+    monkeypatch.setattr("worker.runner.build_translation_adapter_from_env", lambda: object())
     monkeypatch.setattr("worker.runner.HttpJobStore", lambda *args, **kwargs: fake_store)
 
     assert _run_remote(_remote_args(once=True), threading.Event()) is None
