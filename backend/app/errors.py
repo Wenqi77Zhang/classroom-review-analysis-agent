@@ -2,10 +2,10 @@
 
 负责人：成员 3。
 
-**这是相对 `docs/project-plan-v5.md` §2.2 文件清单的新增文件**，原因是异常类不能放在
+**这是相对 `../../docs/product-and-technology-handbook.md` §2.2 文件清单的新增文件**，原因是异常类不能放在
 `main.py`：`services/` 与 `repositories/` 需要抛这些异常，而 `main.py` 要 import 它们，
 放一起会形成循环 import。属 `backend/` 内部结构、不改跨模块契约，已记录在
-`backend/backend-module-guide.md`，待成员 1 确认文件清单。
+`../../docs/product-and-technology-handbook.md` 的后端模块部分，待成员 1 确认文件清单。
 
 设计要点：业务代码只抛语义异常（"这个资源不属于你"），不关心 HTTP 状态码和响应格式；
 状态码与 `{"error": {...}}` 外层由 `main.py` 的处理器统一生成。这样错误格式只有一处
@@ -54,7 +54,7 @@ class PermissionDeniedError(AppError):
     """资源确实属于当前账号，但当前状态不允许该操作。
 
     注意：跨账号访问**不要**用这个异常，用 `NotFoundError`——否则 403 会泄漏
-    "这个 ID 存在"。见 `docs/interface-contracts.md` 的安全取舍。
+    "这个 ID 存在"。见 `../../docs/product-and-technology-handbook.md` 的安全取舍。
     """
 
     code = ErrorCode.PERMISSION_DENIED

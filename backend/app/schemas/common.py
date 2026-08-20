@@ -2,7 +2,7 @@
 
 负责人：成员 3。本文件是跨模块契约的根：成员 2 的 `frontend/src/types/contracts.ts`、
 成员 4 的 Worker 回写、成员 5 的 Agent 结构化输出都以此处的错误结构、分页结构和
-枚举命名为准。修改前必须先更新 `docs/interface-contracts.md`（`AGENTS.md` 第 7 条）。
+枚举命名为准。修改前必须先更新 `../../../docs/product-and-technology-handbook.md`（`AGENTS.md` 第 7 条）。
 """
 
 from __future__ import annotations
