@@ -7,24 +7,65 @@ import { useLayoutEffect, type ReactNode } from "react";
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   useLayoutEffect(() => {
-    const items = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    // Route transitions can retain the previous page's scroll offset. Reset it
+    // before measuring reveal targets so the next page starts with its primary
+    // controls in view instead of leaving them above the observer viewport.
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
     const revealEnabled =
       "IntersectionObserver" in window &&
       !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const registeredItems = new Set<HTMLElement>();
     const observer = revealEnabled
       ? new IntersectionObserver(
           (entries) =>
-            entries.forEach(
-              (entry) =>
-                entry.isIntersecting &&
-                entry.target.classList.add("is-visible"),
-            ),
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              entry.target.classList.add("is-visible");
+              observer?.unobserve(entry.target);
+            }),
           { threshold: 0.12 },
         )
       : null;
+    const registerRevealItem = (item: HTMLElement) => {
+      if (registeredItems.has(item)) return;
+      registeredItems.add(item);
+      if (item.getBoundingClientRect().top <= window.innerHeight) {
+        item.classList.add("is-visible");
+      }
+      observer?.observe(item);
+    };
+    const registerRevealTree = (node: Node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.matches("[data-reveal]")) registerRevealItem(node);
+      node
+        .querySelectorAll<HTMLElement>("[data-reveal]")
+        .forEach(registerRevealItem);
+    };
+    const mutationObserver = revealEnabled
+      ? new MutationObserver((records) => {
+          records.forEach((record) =>
+            record.addedNodes.forEach(registerRevealTree),
+          );
+        })
+      : null;
+    let revealFallback: number | undefined;
     if (observer) {
       document.documentElement.classList.add("reveal-enabled");
-      items.forEach((item) => observer.observe(item));
+      document
+        .querySelectorAll<HTMLElement>("[data-reveal]")
+        .forEach(registerRevealItem);
+      // Task pages replace their loading state with real controls after the
+      // task lookup finishes. Observe those later insertions as well as the
+      // elements that existed during the first layout pass.
+      mutationObserver?.observe(document.body, { childList: true, subtree: true });
+      // Motion is decorative. If the browser throttles or drops observer
+      // callbacks, reveal every control instead of blocking the workflow.
+      revealFallback = window.setTimeout(() => {
+        document
+          .querySelectorAll<HTMLElement>("[data-reveal]")
+          .forEach((item) => item.classList.add("is-visible"));
+      }, 1_200);
     }
     const onScroll = () => {
       const max = document.documentElement.scrollHeight - innerHeight;
@@ -35,6 +76,8 @@ export function SiteChrome({ children }: { children: ReactNode }) {
     addEventListener("scroll", onScroll, { passive: true });
     return () => {
       observer?.disconnect();
+      mutationObserver?.disconnect();
+      if (revealFallback !== undefined) window.clearTimeout(revealFallback);
       document.documentElement.classList.remove("reveal-enabled");
       removeEventListener("scroll", onScroll);
     };

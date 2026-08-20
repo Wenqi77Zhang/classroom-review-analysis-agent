@@ -92,6 +92,12 @@ export function ReviewTaskBaseline({ resourceId }: { resourceId: string }) {
   const [correctingContract, setCorrectingContract] = useState(false);
   const [contractCorrectionError, setContractCorrectionError] = useState("");
   const realClassroomId = realTask?.classroom_id ?? (UUID_PATTERN.test(resourceId) ? resourceId : "");
+  const needsBilingualRecovery =
+    realTask?.status === "failed" &&
+    realTask.analysis_contract.bilingual_required &&
+    ["BILINGUAL_EVIDENCE_INCOMPLETE", "TRANSLATION_SCHEMA_INVALID"].includes(
+      realTask.last_error_code ?? "",
+    );
 
   useEffect(() => setClassroom(sessionStorage.getItem("classroomName") || "演示课堂 · 尚未保存到后端"), []);
   const applyTask = useCallback((task: TaskRead) => {
@@ -259,7 +265,7 @@ export function ReviewTaskBaseline({ resourceId }: { resourceId: string }) {
               onStateChange={setPreview}
               task={realTask}
             />
-            {realTask.analysis_contract.bilingual_required && (
+            {needsBilingualRecovery && (
               <section className="contract-correction-card" role="note" aria-labelledby="bilingual-correction-title">
                 <div>
                   <span className="eyebrow">BILINGUAL EVIDENCE · 契约提醒</span>

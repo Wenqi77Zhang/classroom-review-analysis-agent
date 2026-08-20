@@ -43,6 +43,28 @@ const reviewLabels = {
   rejected: "教师已驳回",
 } as const;
 
+type ConclusionFilter = "all" | AnalysisConclusion["review_status"];
+type ConclusionTrackToken = number | "ellipsis-start" | "ellipsis-end";
+
+function buildConclusionTrack(
+  total: number,
+  activeIndex: number,
+): ConclusionTrackToken[] {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index);
+
+  let start = Math.max(1, activeIndex - 2);
+  let end = Math.min(total - 2, activeIndex + 2);
+  while (end - start + 1 < 5 && start > 1) start -= 1;
+  while (end - start + 1 < 5 && end < total - 2) end += 1;
+
+  const tokens: ConclusionTrackToken[] = [0];
+  if (start > 1) tokens.push("ellipsis-start");
+  for (let index = start; index <= end; index += 1) tokens.push(index);
+  if (end < total - 2) tokens.push("ellipsis-end");
+  tokens.push(total - 1);
+  return tokens;
+}
+
 function normalizeError(error: unknown): {
   message: string;
   traceId?: string;
@@ -81,6 +103,10 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
   const [currentVideoTimeMs, setCurrentVideoTimeMs] = useState(0);
   const [seekToMs, setSeekToMs] = useState(0);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [activeConclusionIndex, setActiveConclusionIndex] = useState(0);
+  const [queueFeedback, setQueueFeedback] = useState("");
+  const [queueExpanded, setQueueExpanded] = useState(false);
+  const [queueFilter, setQueueFilter] = useState<ConclusionFilter>("all");
 
   const loadWorkbench = useCallback(async () => {
     setLoading(true);
@@ -100,6 +126,7 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
           (conclusion) => conclusion.task_id === task.id,
         ),
       });
+      setQueueFeedback("");
       setSelectedSegmentId((current) =>
         transcript.segments.some((segment) => segment.id === current)
           ? current
@@ -143,6 +170,44 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
   const selectedSegment = data?.transcript.segments.find(
     (segment) => segment.id === selectedSegmentId,
   );
+  const reviewedConclusionCount =
+    data?.conclusions.filter((item) => item.review_status !== "pending").length ?? 0;
+  const allConclusionsReviewed =
+    (data?.conclusions.length ?? 0) > 0 &&
+    reviewedConclusionCount === data?.conclusions.length;
+  const hasReportableConclusion =
+    data?.conclusions.some((item) =>
+      ["accepted", "modified"].includes(item.review_status),
+    ) ?? false;
+  const conclusionTrack = useMemo(
+    () => buildConclusionTrack(data?.conclusions.length ?? 0, activeConclusionIndex),
+    [activeConclusionIndex, data?.conclusions.length],
+  );
+  const nextPendingConclusionIndex = useMemo(() => {
+    const conclusions = data?.conclusions ?? [];
+    const afterCurrent = conclusions.findIndex(
+      (item, index) => index > activeConclusionIndex && item.review_status === "pending",
+    );
+    if (afterCurrent >= 0) return afterCurrent;
+    return conclusions.findIndex(
+      (item, index) => index !== activeConclusionIndex && item.review_status === "pending",
+    );
+  }, [activeConclusionIndex, data?.conclusions]);
+  const filteredConclusions = useMemo(
+    () =>
+      (data?.conclusions ?? [])
+        .map((conclusion, index) => ({ conclusion, index }))
+        .filter(({ conclusion }) =>
+          queueFilter === "all" ? true : conclusion.review_status === queueFilter,
+        ),
+    [data?.conclusions, queueFilter],
+  );
+
+  useEffect(() => {
+    setActiveConclusionIndex((current) =>
+      Math.min(current, Math.max((data?.conclusions.length ?? 1) - 1, 0)),
+    );
+  }, [data?.conclusions.length]);
 
   async function saveSegment(
     segmentId: string,
@@ -174,20 +239,46 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
     editedContent: string,
     note: string,
   ) {
+    setQueueFeedback("");
     await reviewConclusion(conclusion.id, {
       action,
       editedContent: action === "modify" ? editedContent : null,
       note: note || null,
     });
     const refreshed = await getConclusions(task.classroom_id);
+    const taskConclusions = refreshed.filter((item) => item.task_id === task.id);
     setData((current) =>
       current
         ? {
             ...current,
-            conclusions: refreshed.filter((item) => item.task_id === task.id),
+            conclusions: taskConclusions,
           }
         : current,
     );
+    const reviewedIndex = taskConclusions.findIndex((item) => item.id === conclusion.id);
+    const nextPendingAfter = taskConclusions.findIndex(
+      (item, index) => index > reviewedIndex && item.review_status === "pending",
+    );
+    const firstPending = taskConclusions.findIndex(
+      (item) => item.review_status === "pending",
+    );
+    const nextPendingIndex = nextPendingAfter >= 0 ? nextPendingAfter : firstPending;
+    if (nextPendingIndex >= 0) {
+      setActiveConclusionIndex(nextPendingIndex);
+      setQueueFeedback(
+        `第 ${reviewedIndex + 1} 条已保存，已进入第 ${nextPendingIndex + 1} 条。`,
+      );
+    } else {
+      const hasReportable = taskConclusions.some((item) =>
+        ["accepted", "modified"].includes(item.review_status),
+      );
+      setActiveConclusionIndex(Math.max(reviewedIndex, 0));
+      setQueueFeedback(
+        hasReportable
+          ? `第 ${reviewedIndex + 1} 条已保存，全部结论已审核完成，可以进入报告编辑与导出。`
+          : `第 ${reviewedIndex + 1} 条已保存，全部结论均已驳回；至少保留一条结论后才能进入报告。`,
+      );
+    }
   }
 
   if (loading) {
@@ -267,29 +358,149 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
               <p>请检查 Agent 运行记录；系统不会用固定样例冒充真实分析。</p>
             </div>
           ) : (
-            data.conclusions.map((conclusion) => (
-              <ConclusionReviewCard
-                key={conclusion.id}
-                conclusion={conclusion}
-                onSeek={(timeMs, segmentId) => {
-                  if (timeMs != null) {
-                    setSeekToMs(timeMs);
-                    setCurrentVideoTimeMs(timeMs);
-                  }
-                  if (segmentId) setSelectedSegmentId(segmentId);
-                }}
-                onReview={persistReview}
-              />
-            ))
+            <section className="conclusion-review-carousel" aria-label="分析结论逐条审核">
+              <header className="conclusion-review-queue">
+                <div className="conclusion-review-queue-topline">
+                  <div className="conclusion-review-queue-copy">
+                    <span>REVIEW QUEUE · 逐条审核</span>
+                    <strong>第 {activeConclusionIndex + 1} 条，共 {data.conclusions.length} 条</strong>
+                    <small>
+                      已完成 {reviewedConclusionCount} / {data.conclusions.length} · 待审核 {data.conclusions.length - reviewedConclusionCount}
+                    </small>
+                  </div>
+                  <div className="conclusion-queue-actions">
+                    <button
+                      type="button"
+                      disabled={nextPendingConclusionIndex < 0}
+                      onClick={() => {
+                        if (nextPendingConclusionIndex < 0) return;
+                        setActiveConclusionIndex(nextPendingConclusionIndex);
+                        setQueueFeedback("");
+                      }}
+                    >
+                      {nextPendingConclusionIndex < 0 ? "没有遗漏的待审核项" : "下一条待审核"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-expanded={queueExpanded}
+                      onClick={() => setQueueExpanded((current) => !current)}
+                    >
+                      {queueExpanded ? "收起完整清单" : "查看完整清单"}
+                    </button>
+                  </div>
+                </div>
+                <nav className="conclusion-progress-track" aria-label="选择要审核的分析结论">
+                  {conclusionTrack.map((token) =>
+                    typeof token === "number" ? (
+                      <button
+                        key={data.conclusions[token].id}
+                        className={`${data.conclusions[token].review_status} ${token === activeConclusionIndex ? "active" : ""}`}
+                        type="button"
+                        aria-label={`第 ${token + 1} 条：${reviewLabels[data.conclusions[token].review_status]}`}
+                        aria-current={token === activeConclusionIndex ? "step" : undefined}
+                        onClick={() => {
+                          setActiveConclusionIndex(token);
+                          setQueueFeedback("");
+                        }}
+                      >
+                        <span>{token + 1}</span>
+                      </button>
+                    ) : (
+                      <span className="conclusion-track-ellipsis" aria-hidden key={token}>…</span>
+                    ),
+                  )}
+                </nav>
+                {queueExpanded && (
+                  <section className="conclusion-queue-directory" aria-label="全部分析结论清单">
+                    <div className="conclusion-queue-filters" role="group" aria-label="按审核状态筛选">
+                      {(
+                        [
+                          ["all", "全部"],
+                          ["pending", "待审核"],
+                          ["accepted", "已接受"],
+                          ["modified", "已修改"],
+                          ["rejected", "已驳回"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          type="button"
+                          className={queueFilter === value ? "active" : ""}
+                          aria-pressed={queueFilter === value}
+                          key={value}
+                          onClick={() => setQueueFilter(value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="conclusion-queue-directory-list">
+                      {filteredConclusions.length > 0 ? (
+                        filteredConclusions.map(({ conclusion, index }) => (
+                          <button
+                            type="button"
+                            key={conclusion.id}
+                            className={index === activeConclusionIndex ? "active" : ""}
+                            onClick={() => {
+                              setActiveConclusionIndex(index);
+                              setQueueExpanded(false);
+                              setQueueFeedback("");
+                            }}
+                          >
+                            <span>{index + 1}</span>
+                            <strong>{conclusionLabels[conclusion.type]}</strong>
+                            <small>{reviewLabels[conclusion.review_status]}</small>
+                          </button>
+                        ))
+                      ) : (
+                        <p>当前筛选条件下没有结论。</p>
+                      )}
+                    </div>
+                  </section>
+                )}
+              </header>
+              {queueFeedback && (
+                <p className="conclusion-queue-feedback" role="status" aria-live="polite">
+                  {queueFeedback}
+                </p>
+              )}
+              <div className="conclusion-carousel-viewport">
+                {data.conclusions.map((conclusion, index) => (
+                  <div key={conclusion.id} hidden={index !== activeConclusionIndex}>
+                    <ConclusionReviewCard
+                      conclusion={conclusion}
+                      onSeek={(timeMs, segmentId) => {
+                        if (timeMs != null) {
+                          setSeekToMs(timeMs);
+                          setCurrentVideoTimeMs(timeMs);
+                        }
+                        if (segmentId) setSelectedSegmentId(segmentId);
+                      }}
+                      onReview={persistReview}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
-          {data.conclusions.some((item) =>
-            ["accepted", "modified"].includes(item.review_status),
-          ) && (
+          {data.conclusions.length > 0 && (
             <div className="real-report-boundary">
-              <Link className="button primary wide" href={`/reports/${task.classroom_id}`}>
-                进入真实报告编辑与导出
-              </Link>
-              <p>报告只组合教师已接受或修改确认的结论，待复核与已驳回内容会被排除。</p>
+              {allConclusionsReviewed && hasReportableConclusion ? (
+                <Link className="button primary wide" href={`/reports/${task.classroom_id}`}>
+                  进入真实报告编辑与导出
+                </Link>
+              ) : (
+                <button className="button primary wide" type="button" disabled>
+                  {allConclusionsReviewed ? "至少保留一条结论后进入报告" : "完成全部结论审核后进入报告"}
+                </button>
+              )}
+              <p>
+                已审核 {reviewedConclusionCount} / {data.conclusions.length}；
+                {allConclusionsReviewed
+                  ? hasReportableConclusion
+                    ? "报告将只组合教师接受或修改确认的结论。"
+                    : "当前结论均已驳回，暂无内容可进入报告。"
+                  : "请通过左右箭头逐条处理，待复核内容不会进入报告。"}
+              </p>
             </div>
           )}
         </div>
@@ -456,9 +667,15 @@ function ConclusionReviewCard({
         <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
       </label>
       <div className="real-review-actions">
-        <button type="button" disabled={saving} onClick={() => void submit("accept")}>接受原结论</button>
-        <button type="button" disabled={saving} onClick={() => void submit("modify")}>修改后确认</button>
-        <button type="button" disabled={saving} onClick={() => void submit("reject")}>驳回</button>
+        <button className="accept-review" type="button" disabled={saving} onClick={() => void submit("accept")}>
+          <span>接受并继续</span><span aria-hidden>→</span>
+        </button>
+        <button className="modify-review" type="button" disabled={saving} onClick={() => void submit("modify")}>
+          <span>修改确认并继续</span><span aria-hidden>→</span>
+        </button>
+        <button className="reject-review" type="button" disabled={saving} onClick={() => void submit("reject")}>
+          <span>驳回并继续</span><span aria-hidden>→</span>
+        </button>
       </div>
       {feedback && <p className="real-review-feedback" role="status">{feedback}</p>}
       <footer>
