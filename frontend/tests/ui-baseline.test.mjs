@@ -30,4 +30,21 @@ assert.match(chrome, /部分真实链路/, "页面必须准确区分真实链路
 assert.match(chrome, /证据与报告仍含明确标记的演示数据/, "未完成能力必须继续诚实标注");
 assert.match(chrome, /prefers-reduced-motion:\s*reduce/, "应尊重用户的减少动态效果设置");
 assert.match(chrome, /classList\.add\("reveal-enabled"\)/, "动画能力确认后才启用显现效果");
+assert.match(chrome, /window\.scrollTo\(\{ top: 0/, "页面切换后应回到顶部，避免继承旧页面滚动位置");
+assert.match(
+  chrome,
+  /getBoundingClientRect\(\)\.top <= window\.innerHeight/,
+  "首屏和已经越过视口的核心内容必须立即可见",
+);
+assert.match(
+  chrome,
+  /window\.setTimeout\([\s\S]*classList\.add\("is-visible"\)/,
+  "显现动画必须提供自动解除隐藏的降级保护",
+);
+assert.match(chrome, /new MutationObserver/, "异步插入的任务操作区也必须注册显现效果");
+assert.match(
+  chrome,
+  /mutationObserver\?\.observe\(document\.body, \{ childList: true, subtree: true \}\)/,
+  "显现逻辑必须持续观察任务状态切换后新增的核心控件",
+);
 console.log("UI_BASELINE_V1_OK");

@@ -15,6 +15,11 @@ def test_windows_start_entry_covers_all_services_without_cli_secrets() -> None:
     assert '"agent"' in script
     assert "--service-token" not in script
     assert "-WindowStyle Hidden" in script
+    assert "ClassroomReviewAnalysisAgent.Runtime" in script
+    assert "AbandonedMutexException" in script
+    assert "runtime-processes.json" in script
+    assert "startTimeUtcTicks" in script
+    assert "PID 与启动时刻同时匹配" in script
 
 
 def test_unix_start_entry_covers_all_services_and_cleans_up() -> None:
