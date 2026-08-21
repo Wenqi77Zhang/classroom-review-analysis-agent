@@ -40,6 +40,25 @@ def _model_response(items: list[dict[str, object]]) -> bytes:
     ).encode()
 
 
+def _single_model_response(translation: str) -> bytes:
+    return json.dumps(
+        {
+            "model": "qwen3.5:4b",
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"translation": translation},
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ],
+        },
+        ensure_ascii=False,
+    ).encode()
+
+
 def test_local_translation_is_loopback_only() -> None:
     with pytest.raises(ValueError, match="loopback"):
         LocalModelTranslationAdapter(
@@ -111,6 +130,146 @@ def test_local_translation_rejects_misaligned_model_output(
 
     assert raised.value.code is WorkerErrorCode.TRANSLATION_SCHEMA_INVALID
     assert "private lesson" not in str(raised.value)
+
+
+def test_local_translation_recovers_omitted_rows_by_splitting_failed_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested_sizes: list[int] = []
+
+    def omit_large_batch(request: Request, *, timeout: float) -> _Response:
+        assert timeout == 30
+        payload = json.loads(request.data or b"{}")
+        source_items = json.loads(payload["messages"][1]["content"])["items"]
+        requested_sizes.append(len(source_items))
+        response_items = [
+            {"id": item["id"], "text": f"译文{item['id']}"}
+            for item in source_items
+        ]
+        if len(source_items) == 6:
+            response_items = response_items[:4]
+        return _Response(_model_response(response_items))
+
+    monkeypatch.setattr("worker.adapters.local_translation._open_local", omit_large_batch)
+    adapter = LocalModelTranslationAdapter(
+        endpoint="http://127.0.0.1:11434/v1/chat/completions",
+        model="qwen3.5:4b",
+        timeout_seconds=30,
+        batch_size=8,
+    )
+
+    result = adapter.translate_batch(
+        tuple(f"segment-{index}" for index in range(6)),
+        source_language="en",
+        target_language="zh",
+    )
+
+    assert result.translations == (
+        "译文0",
+        "译文1",
+        "译文2",
+        "译文0",
+        "译文1",
+        "译文2",
+    )
+    assert requested_sizes == [6, 3, 3]
+
+
+def test_local_translation_does_not_retry_non_schema_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_count = 0
+
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        nonlocal call_count
+        call_count += 1
+        raise URLError("local model offline")
+
+    monkeypatch.setattr("worker.adapters.local_translation._open_local", unavailable)
+    adapter = LocalModelTranslationAdapter(
+        endpoint="http://127.0.0.1:11434/v1/chat/completions",
+        model="qwen3.5:4b",
+    )
+
+    with pytest.raises(WorkerError) as raised:
+        adapter.translate_batch(
+            ("first", "second"),
+            source_language="en",
+            target_language="zh",
+        )
+
+    assert raised.value.code is WorkerErrorCode.TRANSLATION_UNAVAILABLE
+    assert call_count == 1
+
+
+def test_local_translation_retries_malformed_singleton_with_strict_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_count = 0
+
+    def malformed_then_valid(*_args: object, **_kwargs: object) -> _Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _Response(_model_response([]))
+        return _Response(_model_response([{"id": 0, "text": "有效译文"}]))
+
+    monkeypatch.setattr(
+        "worker.adapters.local_translation._open_local",
+        malformed_then_valid,
+    )
+    adapter = LocalModelTranslationAdapter(
+        endpoint="http://127.0.0.1:11434/v1/chat/completions",
+        model="qwen3.5:4b",
+    )
+
+    result = adapter.translate_batch(
+        ("one segment",),
+        source_language="en",
+        target_language="zh",
+    )
+
+    assert result.translations == ("有效译文",)
+    assert call_count == 2
+
+
+def test_local_translation_splits_long_singleton_after_bounded_schema_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested_lengths: list[int] = []
+
+    def reject_long_source(request: Request, **_kwargs: object) -> _Response:
+        payload = json.loads(request.data or b"{}")
+        user_data = json.loads(payload["messages"][1]["content"])
+        if "items" in user_data:
+            source = user_data["items"][0]["text"]
+            requested_lengths.append(len(source))
+            items = [] if len(source) > 300 else [{"id": 0, "text": "分段译文"}]
+            return _Response(_model_response(items))
+        source = user_data["data"]["text"]
+        requested_lengths.append(len(source))
+        translation = "" if len(source) > 300 else "分段译文"
+        return _Response(_single_model_response(translation))
+
+    monkeypatch.setattr(
+        "worker.adapters.local_translation._open_local",
+        reject_long_source,
+    )
+    adapter = LocalModelTranslationAdapter(
+        endpoint="http://127.0.0.1:11434/v1/chat/completions",
+        model="qwen3.5:4b",
+    )
+
+    result = adapter.translate_batch(
+        (("classroom evidence " * 27).strip(),),
+        source_language="en",
+        target_language="zh",
+    )
+
+    assert result.translations == ("分段译文 分段译文",)
+    assert requested_lengths[:4] == [512, 512, 512, 512]
+    assert len(requested_lengths) == 6
+    assert max(requested_lengths[4:]) <= 300
 
 
 def test_local_translation_hides_source_on_connection_failure(
