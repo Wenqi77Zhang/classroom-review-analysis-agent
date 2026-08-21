@@ -71,14 +71,28 @@ try {
         -InstallHint "请先按 ../docs/product-and-technology-handbook.md 安装项目指定 Node.js。"
     $cloudflaredPath = Resolve-Cloudflared
 
+    $backendPort = 8100
+    $envFile = Join-Path $repositoryRoot ".env"
+    if (Test-Path -LiteralPath $envFile) {
+        $portLine = Get-Content -LiteralPath $envFile -Encoding UTF8 |
+            Where-Object { $_ -match '^\s*BACKEND_PORT\s*=' } |
+            Select-Object -Last 1
+        if ($portLine) {
+            $candidate = ($portLine -split '=', 2)[1].Trim()
+            $parsedPort = 0
+            if ([int]::TryParse($candidate, [ref]$parsedPort)) {
+                $backendPort = $parsedPort
+            }
+        }
+    }
     try {
         $ready = Invoke-RestMethod `
-            -Uri "http://127.0.0.1:8000/health/ready" `
+            -Uri "http://127.0.0.1:$backendPort/health/ready" `
             -Method Get `
             -TimeoutSec 5
     }
     catch {
-        throw "本地后端未就绪。请先启动 PostgreSQL、执行迁移并启动 8000 端口后端。"
+        throw "本地后端未就绪。请先启动 PostgreSQL、执行迁移并启动 $backendPort 端口后端。"
     }
     if ($ready.status -ne "ready") {
         throw "后端 /health/ready 未返回 ready，不能创建团队联调入口。"

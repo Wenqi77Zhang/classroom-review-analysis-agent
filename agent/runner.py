@@ -213,7 +213,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="运行一次课堂复盘 Agent 任务。")
     parser.add_argument(
         "--backend-url",
-        default=os.getenv("BACKEND_URL", "http://127.0.0.1:8000"),
+        default=os.getenv("BACKEND_URL", "http://127.0.0.1:8100"),
     )
     parser.add_argument(
         "--agent-id",

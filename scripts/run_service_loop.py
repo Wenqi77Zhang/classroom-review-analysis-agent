@@ -12,7 +12,7 @@ from collections.abc import Sequence
 
 
 def service_command(service: str) -> list[str]:
-    backend_url = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
+    backend_url = os.getenv("BACKEND_URL", "http://127.0.0.1:8100").rstrip("/")
     if service == "worker":
         return [
             sys.executable,

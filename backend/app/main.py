@@ -322,6 +322,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 # 刻意不提供模块级 `app` 实例。启动方式：
-#   uvicorn --factory backend.app.main:create_app --port 8000
+#   uvicorn --factory backend.app.main:create_app --port 8100
 # 用工厂而非模块级实例，是为了让配置缺失在启动命令处明确报错，而不是在 import
 # 阶段抛出——后者的堆栈看不出到底缺哪个环境变量。测试也可以注入自己的 Settings。
