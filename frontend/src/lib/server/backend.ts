@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 
 export const AUTH_COOKIE_NAME = "classroom_review_access_token";
 
-const DEFAULT_BACKEND_URL = "http://localhost:8000";
+const DEFAULT_BACKEND_URL = "http://127.0.0.1:8100";
 
 function backendUrl(path: string) {
   const base = (process.env.BACKEND_URL ?? DEFAULT_BACKEND_URL).replace(

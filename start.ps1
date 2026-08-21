@@ -14,6 +14,10 @@ if (-not (Test-Path -LiteralPath (Join-Path $frontend "node_modules"))) {
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
     throw "未找到 npm.cmd，请安装 README 指定的 Node.js 版本。"
 }
+$node = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $node) {
+    throw "未找到 node.exe，请安装 README 指定的 Node.js 版本。"
+}
 if (-not (Test-Path -LiteralPath $envFile)) {
     throw "缺少 .env，请从 .env.example 复制并填写真实本地配置。"
 }
@@ -41,6 +45,28 @@ if ($missing) {
 if ($env:WORKER_SERVICE_TOKEN -eq $env:AGENT_SERVICE_TOKEN) {
     throw "WORKER_SERVICE_TOKEN 与 AGENT_SERVICE_TOKEN 必须不同。"
 }
+
+function Resolve-RuntimePort {
+    param([string]$Name, [int]$Default)
+    $raw = [Environment]::GetEnvironmentVariable($Name, "Process")
+    if (-not $raw) { return $Default }
+    $parsed = 0
+    if (-not [int]::TryParse($raw, [ref]$parsed) -or $parsed -lt 1 -or $parsed -gt 65535) {
+        throw "$Name 必须是 1 到 65535 之间的端口号。"
+    }
+    return $parsed
+}
+
+$backendPort = Resolve-RuntimePort -Name "BACKEND_PORT" -Default 8100
+$frontendPort = Resolve-RuntimePort -Name "FRONTEND_PORT" -Default 3000
+if ($backendPort -eq $frontendPort) {
+    throw "BACKEND_PORT 与 FRONTEND_PORT 不能相同。"
+}
+# 本地统一启动必须让前端 BFF、Worker 与 Agent 指向同一个本机后端，不能沿用
+# 当前 PowerShell 中可能残留的其他项目地址。
+$env:BACKEND_PORT = [string]$backendPort
+$env:FRONTEND_PORT = [string]$frontendPort
+$env:BACKEND_URL = "http://127.0.0.1:$backendPort"
 
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
 & $python "scripts/runtime_preflight.py"
@@ -111,6 +137,20 @@ function Write-RuntimeManifest {
         Set-Content -LiteralPath $runtimeManifest -Encoding UTF8
 }
 
+function Assert-TcpPortAvailable {
+    param([string]$ServiceName, [int]$Port)
+    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
+    try {
+        $listener.Start()
+    }
+    catch {
+        throw "$ServiceName 端口 $Port 已被其他进程占用；未启动任何课堂项目服务。"
+    }
+    finally {
+        $listener.Stop()
+    }
+}
+
 function Start-LoggedProcess {
     param(
         [string]$Name,
@@ -122,28 +162,78 @@ function Start-LoggedProcess {
         -WorkingDirectory $WorkingDirectory -WindowStyle Hidden `
         -RedirectStandardOutput (Join-Path $logs "$Name.log") `
         -RedirectStandardError (Join-Path $logs "$Name.err.log") -PassThru
-    Write-Host "$Name 已启动，PID=$($process.Id)"
+    Write-Host "$Name 正在启动，PID=$($process.Id)"
     return [pscustomobject]@{
         ServiceName = $Name
         Process = $process
     }
 }
 
+function Wait-BackendReady {
+    param($Entry)
+    foreach ($attempt in 1..30) {
+        $Entry.Process.Refresh()
+        if ($Entry.Process.HasExited) {
+            throw "backend 启动失败并已退出；请查看 logs/backend.err.log。"
+        }
+        try {
+            $health = Invoke-RestMethod -Uri "$($env:BACKEND_URL)/health" -TimeoutSec 2
+            if ($health.status -eq "ok" -and $health.app_env) { return }
+        }
+        catch { }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "backend 在 15 秒内未就绪；请查看 logs/backend.err.log。"
+}
+
+function Wait-FrontendReady {
+    param($Entry)
+    foreach ($attempt in 1..40) {
+        $Entry.Process.Refresh()
+        if ($Entry.Process.HasExited) {
+            throw "frontend 启动失败并已退出；请查看 logs/frontend.err.log。"
+        }
+        try {
+            $response = Invoke-RestMethod `
+                -Uri "http://127.0.0.1:$frontendPort/api/backend-health" `
+                -TimeoutSec 2
+            if ($response.reachable -eq $true -and $response.status -eq "ok") { return }
+        }
+        catch { }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "frontend 在 20 秒内未能连接课堂后端；请查看 logs/frontend.err.log。"
+}
+
 try {
     Stop-StaleRuntimeProcesses
+    Assert-TcpPortAvailable -ServiceName "backend" -Port $backendPort
+    Assert-TcpPortAvailable -ServiceName "frontend" -Port $frontendPort
     $processes += Start-LoggedProcess "backend" $python `
-        @("-m", "uvicorn", "--factory", "backend.app.main:create_app", "--host", "127.0.0.1", "--port", "8000") $root
+        @("-m", "uvicorn", "--factory", "backend.app.main:create_app", "--host", "127.0.0.1", "--port", $backendPort) $root
     Write-RuntimeManifest
-    $processes += Start-LoggedProcess "frontend" "npm.cmd" `
-        @("run", "dev", "--", "--hostname", "127.0.0.1") $frontend
+    Wait-BackendReady -Entry $processes[-1]
+    Write-Host "backend 已就绪：http://127.0.0.1:$backendPort"
+    $nextCli = Join-Path $frontend "node_modules\next\dist\bin\next"
+    $processes += Start-LoggedProcess "frontend" $node.Source `
+        @($nextCli, "dev", "--hostname", "127.0.0.1", "--port", $frontendPort) $frontend
     Write-RuntimeManifest
+    Wait-FrontendReady -Entry $processes[-1]
+    Write-Host "frontend 已就绪：http://127.0.0.1:$frontendPort"
     $processes += Start-LoggedProcess "worker" $python `
         @("scripts/run_service_loop.py", "worker") $root
     Write-RuntimeManifest
     $processes += Start-LoggedProcess "agent" $python `
         @("scripts/run_service_loop.py", "agent") $root
     Write-RuntimeManifest
-    Write-Host "前端、后端、Worker 与 Agent 已启动。日志位于 logs/；按 Ctrl+C 停止。"
+    Start-Sleep -Milliseconds 750
+    foreach ($entry in $processes) {
+        $entry.Process.Refresh()
+        if ($entry.Process.HasExited) {
+            throw "$($entry.ServiceName) 启动后提前退出；请查看对应的 logs/*.err.log。"
+        }
+    }
+    Write-Host "前端、后端、Worker 与 Agent 已真实就绪。日志位于 logs/；按 Ctrl+C 停止。"
     Wait-Process -Id ($processes | ForEach-Object { $_.Process.Id })
 }
 finally {

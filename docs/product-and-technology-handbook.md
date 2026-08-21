@@ -400,13 +400,16 @@ macOS/Linux：
 ```
 
 启动脚本读取本机 `.env`，启动 Next.js、FastAPI、Worker 和 Agent，并把日志写入已忽略的
-`logs/runtime/`。它会检查环境、必需变量、端口、服务令牌隔离和重复进程；配置不足时失败关闭。
+`logs/runtime/`。它会检查环境、必需变量、端口、服务令牌隔离和重复进程；配置不足或端口冲突时
+失败关闭。默认前端端口为 `3000`，课堂后端端口为 `8100`；脚本会强制前端 BFF、Worker 与
+Agent 使用同一个课堂后端地址，并验证 `/health` 返回本项目特有的 `app_env` 后才继续启动，
+避免误连另一个 Codex 项目。端口可以通过本机 `.env` 的 `FRONTEND_PORT`、`BACKEND_PORT` 调整。
 PostgreSQL、对象存储和 Ollama 属于外部基础设施，必须先启动或配置。
 
 分窗口调试后端：
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn --factory backend.app.main:create_app --port 8000 --reload
+.\.venv\Scripts\python.exe -m uvicorn --factory backend.app.main:create_app --port 8100 --reload
 ```
 
 前端调试：
@@ -436,13 +439,13 @@ Cloudflare Quick Tunnel 只用于短时组员联调，不是正式部署。负�
 
 | 现象 | 优先检查 |
 |---|---|
-| 前端提示后端不可用 | FastAPI 窗口、`BACKEND_URL`、`/health` |
+| 前端提示后端不可用 | FastAPI 窗口、`BACKEND_URL`、`BACKEND_PORT`、`/health` |
 | `/health` 成功但 `/health/ready` 失败 | PostgreSQL、密码、`DATABASE_URL`、Alembic |
 | B2/MinIO CORS 错误 | 当前页面来源是否与 Bucket CORS 精确一致 |
 | 上传成功但任务不继续 | Worker 是否启动、令牌与后端地址是否一致 |
 | Agent 无法写回 | Agent 进程、专属令牌、证据和双语门禁 |
 | 报告无法进入 | 是否仍有 `pending` 结论、浏览器会话是否过期 |
-| `EADDRINUSE` | 是否已有本项目服务，避免重复启动 |
+| 端口冲突或 `EADDRINUSE` | 关闭占用 3000/8100 的旧服务，或在 `.env` 调整两个端口；不要让前端改连其他项目 |
 
 排错截图可保留页面状态和 `trace_id`，但必须遮住 Cookie、Authorization、密码、服务令牌、
 Application Key、连接串和预签名 URL。

@@ -50,7 +50,10 @@ ollama pull qwen3.5:4b
 
 `start.ps1` / `start.sh` 会读取本机 `.env`，启动前端、FastAPI、Worker 轮询和 Agent
 轮询，并把运行日志写入已忽略的 `logs/runtime/`。脚本会先检查 `.venv`、`.env`、npm、
-必需变量、端口和 Worker/Agent 令牌隔离；缺失配置时 fail-closed。成员 1 的 Windows
+必需变量、端口和 Worker/Agent 令牌隔离；缺失配置或端口冲突时 fail-closed。默认访问
+`http://localhost:3000`，课堂后端使用 `http://127.0.0.1:8100`，避免与其他常用本地项目的
+8000 端口串线。只有后端健康检查和前端代理均确认连接到本项目后，Worker 与 Agent 才会启动。
+成员 1 的 Windows
 环境已经完成真实双输入启动与技术 E2E，仍需在干净机器和其他成员环境复现。
 
 安装脚本在项目内创建 `.venv`，安装当前声明并锁定的 Python/前端依赖，并在缺少时复制

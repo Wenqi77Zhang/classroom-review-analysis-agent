@@ -34,6 +34,14 @@ def test_agent_loop_reuses_existing_cli_without_service_token(monkeypatch) -> No
     assert "must-not-enter-argv" not in command
 
 
+def test_service_loop_defaults_to_isolated_classroom_backend(monkeypatch) -> None:
+    monkeypatch.delenv("BACKEND_URL", raising=False)
+
+    command = service_command("worker")
+
+    assert command[-1] == "http://127.0.0.1:8100"
+
+
 def test_unknown_loop_service_is_rejected() -> None:
     with pytest.raises(ValueError, match="未知服务"):
         service_command("browser")

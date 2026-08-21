@@ -2,7 +2,7 @@ import type { BackendHealthResponse } from "@/types/contracts";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_BACKEND_URL = "http://localhost:8000";
+const DEFAULT_BACKEND_URL = "http://127.0.0.1:8100";
 const HEALTH_TIMEOUT_MS = 2000;
 
 export async function GET() {

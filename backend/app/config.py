@@ -67,7 +67,7 @@ class Settings(BaseSettings):
         default="http://localhost:3000",
         description="CORS 允许来源。不使用通配符：带凭据的跨域请求下 * 无效，也放大攻击面。",
     )
-    backend_url: str = "http://localhost:8000"
+    backend_url: str = "http://127.0.0.1:8100"
 
     # ---------------- Database ----------------
     database_url: SecretStr = Field(
