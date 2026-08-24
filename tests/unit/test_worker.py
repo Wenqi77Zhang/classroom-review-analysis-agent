@@ -472,6 +472,52 @@ def test_local_whisper_disables_nondeterministic_temperature_fallback(
     ]
 
 
+def test_local_whisper_filters_only_pathological_repetitive_hallucination(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    audio = tmp_path / "audio.wav"
+    _silent_wav(audio, seconds=10)
+
+    class FakeWhisperModel:
+        def transcribe(self, _: str, **_options: object) -> dict[str, object]:
+            return {
+                "language": "en",
+                "segments": [
+                    {"start": 0.0, "end": 1.0, "text": "Explain attention."},
+                    {"start": 1.0, "end": 9.0, "text": "ab" * 220},
+                ],
+            }
+
+    adapter = LocalWhisperAdapter()
+    adapter._model = FakeWhisperModel()
+
+    result = adapter.transcribe(audio)
+
+    assert [segment.text for segment in result.segments] == ["Explain attention."]
+    assert "排除 1 个" in capsys.readouterr().err
+
+
+def test_local_whisper_keeps_fast_but_nonrepetitive_technical_text(tmp_path: Path) -> None:
+    audio = tmp_path / "audio.wav"
+    _silent_wav(audio, seconds=10)
+    technical_text = "".join(chr(ord("a") + index % 26) for index in range(180))
+
+    class FakeWhisperModel:
+        def transcribe(self, _: str, **_options: object) -> dict[str, object]:
+            return {
+                "language": "en",
+                "segments": [{"start": 0.0, "end": 5.0, "text": technical_text}],
+            }
+
+    adapter = LocalWhisperAdapter()
+    adapter._model = FakeWhisperModel()
+
+    result = adapter.transcribe(audio)
+
+    assert result.segments[0].text == technical_text
+
+
 def test_pipeline_persists_transcript_and_real_states(tmp_path: Path) -> None:
     if shutil.which("ffmpeg") is None:
         pytest.skip("FFmpeg is required")

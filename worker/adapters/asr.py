@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import sys
 from pathlib import Path
 from typing import Protocol
 
@@ -11,6 +13,25 @@ from worker.types import AsrResult, AsrSegment
 
 class AsrAdapter(Protocol):
     def transcribe(self, audio_path: Path) -> AsrResult: ...
+
+
+def _is_repetitive_hallucination(item: object) -> bool:
+    if not isinstance(item, dict):
+        return False
+    text = str(item.get("text", "")).strip()
+    try:
+        duration = float(item["end"]) - float(item["start"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if duration <= 0 or len(text) / duration < 25:
+        return False
+    tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
+    longest = max(tokens, key=len, default="")
+    if len(longest) < 128 or len(set(longest)) / len(longest) > 0.1:
+        return False
+    trigrams = [longest[index : index + 3] for index in range(len(longest) - 2)]
+    repeated_ratio = 1 - (len(set(trigrams)) / len(trigrams)) if trigrams else 0
+    return repeated_ratio >= 0.9
 
 
 class LocalWhisperAdapter:
@@ -65,13 +86,28 @@ class LocalWhisperAdapter:
                 retryable=True,
             ) from exc
 
-        segments = tuple(
-            AsrSegment(
-                start_seconds=float(item["start"]),
-                end_seconds=float(item["end"]),
-                text=str(item["text"]).strip(),
+        segments: list[AsrSegment] = []
+        filtered_segments = 0
+        for item in raw.get("segments", []):
+            if not isinstance(item, dict) or not str(item.get("text", "")).strip():
+                continue
+            if _is_repetitive_hallucination(item):
+                filtered_segments += 1
+                continue
+            segments.append(
+                AsrSegment(
+                    start_seconds=float(item["start"]),
+                    end_seconds=float(item["end"]),
+                    text=str(item["text"]).strip(),
+                )
             )
-            for item in raw.get("segments", [])
-            if str(item.get("text", "")).strip()
+        if filtered_segments:
+            print(
+                f"Whisper 质量门禁已排除 {filtered_segments} 个高度重复的疑似幻觉片段。",
+                file=sys.stderr,
+                flush=True,
+            )
+        return AsrResult(
+            language=str(raw.get("language") or self.language or "und"),
+            segments=tuple(segments),
         )
-        return AsrResult(language=str(raw.get("language") or self.language or "und"), segments=segments)
