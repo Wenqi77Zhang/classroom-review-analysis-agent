@@ -6,6 +6,10 @@ import {
   TEAM_ACCESS_COOKIE_NAME,
   TEAM_ACCESS_MAX_AGE_SECONDS,
 } from "@/lib/server/team-access";
+import {
+  consumeAttempt,
+  requestCameFromSameOrigin,
+} from "@/lib/server/request-guard";
 
 const MAXIMUM_ACCESS_CODE_LENGTH = 256;
 
@@ -27,24 +31,6 @@ export function GET() {
   );
 }
 
-function requestCameFromSameOrigin(request: NextRequest): boolean {
-  const origin = request.headers.get("origin");
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if (fetchSite === "cross-site") {
-    return false;
-  }
-  if (!origin) {
-    return true;
-  }
-  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const requestHost = forwardedHost || request.headers.get("host");
-  try {
-    return Boolean(requestHost) && new URL(origin).host === requestHost;
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(request: NextRequest) {
   if (!requestCameFromSameOrigin(request)) {
     return NextResponse.json({ detail: "请求来源无效。" }, { status: 403 });
@@ -55,6 +41,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { detail: "当前没有启用团队联调门禁。" },
       { status: 404 },
+    );
+  }
+
+  const rateLimit = consumeAttempt(request, "team-access", 8, 10 * 60 * 1000);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { detail: "尝试次数过多，请稍后再试。" },
+      {
+        status: 429,
+        headers: {
+          "Cache-Control": "no-store",
+          "Retry-After": String(rateLimit.retryAfterSeconds),
+        },
+      },
     );
   }
 

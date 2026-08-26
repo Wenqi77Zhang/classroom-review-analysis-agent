@@ -1,0 +1,126 @@
+name: classroom-review-agent
+
+x-python-service: &python-service
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile.python
+    target: runtime
+  env_file:
+    - ../.env.production
+  environment:
+    APP_ENV: production
+    BACKEND_URL: http://backend:8100
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  restart: unless-stopped
+  networks: [private, egress]
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    env_file:
+      - ../.env.production
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks: [private]
+
+  backend:
+    <<: *python-service
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        python -m alembic -c backend/alembic.ini upgrade head &&
+        python scripts/production_preflight.py &&
+        python scripts/ensure_storage_readiness.py &&
+        exec python -m uvicorn --factory backend.app.main:create_app
+        --host 0.0.0.0 --port 8100 --proxy-headers --forwarded-allow-ips=*
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8100/health/ready"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  worker:
+    <<: *python-service
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.python
+      target: worker
+    command: ["python", "scripts/run_service_loop.py", "worker"]
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  agent:
+    <<: *python-service
+    command: ["python", "scripts/run_service_loop.py", "agent"]
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    env_file:
+      - ../.env.production
+    environment:
+      NODE_ENV: production
+      BACKEND_URL: http://backend:8100
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "127.0.0.1:${PUBLIC_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:3000/api/backend-health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [private, public]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [public]
+    profiles: ["tunnel"]
+
+networks:
+  private:
+    internal: true
+  egress:
+  public:
+
+volumes:
+  postgres_data:

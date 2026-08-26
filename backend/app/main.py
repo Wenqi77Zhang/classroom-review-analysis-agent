@@ -26,6 +26,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.app.api.analyses import router as analyses_router
@@ -295,6 +296,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             current_trace_id.reset(token)
         response.headers["X-Trace-Id"] = trace_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if request.url.path.startswith("/api/") or request.url.path.startswith("/health"):
+            response.headers["Cache-Control"] = "no-store"
+        if settings.is_production:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
     register_exception_handlers(app)
@@ -315,12 +324,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """不查数据库：存活检查必须在依赖故障时仍能回答，否则无法区分"进程死了"和"数据库挂了"。"""
         return {"status": "ok", "app_env": settings.app_env.value}
 
-    @app.get("/health/ready", tags=["health"], summary="就绪检查（含数据库）")
-    async def ready() -> dict[str, str]:
-        factory = get_session_factory()
-        async with factory() as session:
-            await session.execute(text("SELECT 1"))
-        return {"status": "ready", "database": "ok"}
+    @app.get("/health/ready", tags=["health"], summary="就绪检查（数据库与对象存储）")
+    async def ready(request: Request) -> Response:
+        dependencies = {"database": "unavailable", "object_storage": "unavailable"}
+        try:
+            factory = get_session_factory()
+            async with factory() as session:
+                await session.execute(text("SELECT 1"))
+            dependencies["database"] = "ok"
+        except SQLAlchemyError:
+            logger.warning("就绪检查失败：database")
+
+        try:
+            await request.app.state.object_storage.ready()
+            dependencies["object_storage"] = "ok"
+        except AppError:
+            logger.warning("就绪检查失败：object_storage")
+
+        ready_now = all(value == "ok" for value in dependencies.values())
+        return JSONResponse(
+            status_code=200 if ready_now else 503,
+            content={
+                "status": "ready" if ready_now else "not_ready",
+                "dependencies": dependencies,
+            },
+        )
 
     return app
 

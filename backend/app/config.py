@@ -18,6 +18,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -154,6 +155,17 @@ class Settings(BaseSettings):
                 "WORKER_SERVICE_TOKEN 与 AGENT_SERVICE_TOKEN 必须不同，"
                 "否则服务身份无法区分，端点权限范围形同虚设。"
             )
+        if self.is_production:
+            frontend = urlparse(self.frontend_origin)
+            if frontend.scheme != "https" or not frontend.netloc:
+                raise ValueError("生产环境 FRONTEND_ORIGIN 必须是完整 HTTPS 地址。")
+            storage = urlparse(self.object_storage_endpoint)
+            if storage.scheme != "https" or not storage.netloc:
+                raise ValueError("生产环境对象存储端点必须使用 HTTPS。")
+            if self.demo_account_password is not None and len(
+                self.demo_account_password.get_secret_value()
+            ) < 16:
+                raise ValueError("生产环境演示账号口令至少 16 个字符。")
         return self
 
     @computed_field  # type: ignore[prop-decorator]

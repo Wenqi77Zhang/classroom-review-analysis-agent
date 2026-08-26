@@ -347,6 +347,17 @@ async def test_health_is_ok(client: httpx.AsyncClient) -> None:
     assert "X-Trace-Id" in response.headers
 
 
+async def test_sensitive_routes_set_security_and_no_store_headers(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.get("/health")
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "camera=()" in response.headers["Permissions-Policy"]
+
+
 async def test_trace_id_from_upstream_is_reused(client: httpx.AsyncClient) -> None:
     """Worker 与 Agent 透传的 trace_id 必须被沿用，否则跨模块链路串不起来。"""
     response = await client.get("/health", headers={"X-Trace-Id": "trace-from-agent"})

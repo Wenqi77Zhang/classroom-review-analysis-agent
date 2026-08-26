@@ -58,6 +58,32 @@ const realStatusCopy: Record<TaskRead["status"], string> = {
   cancelled: "已取消",
 };
 
+function getNextAction(task: TaskRead): string {
+  if (task.status === "succeeded") {
+    return "下一步：进入证据工作台，逐条核对原文、画面和课件页，再决定是否进入报告。";
+  }
+  if (task.status === "cancelled") {
+    return "下一步：返回资料区检查分析范围与输入文件，再创建一个新任务；已取消任务不会被静默恢复。";
+  }
+  if (task.status !== "failed") {
+    return task.status === "queued"
+      ? "系统正在等待媒体 Worker 领取任务；页面会自动同步真实状态，无需重复上传。"
+      : "系统正在处理当前阶段；可以保留此页面，任务 ID 与 Trace ID 可用于故障追踪。";
+  }
+
+  const code = (task.last_error_code ?? "").toUpperCase();
+  if (code.includes("TRANSLATION") || code.includes("BILINGUAL")) {
+    return "恢复建议：若课堂含英文，请补充 SRT/VTT 中文译文后重试；若实际为纯中文，请关闭双语要求后重新处理。";
+  }
+  if (code.includes("OBJECT_STORAGE") || code.includes("UPLOAD")) {
+    return "恢复建议：不要重复上传。先检查网络与对象存储授权，再使用原资料重新创建任务。";
+  }
+  if (code.includes("TRANSCRIBE") || code.includes("MEDIA") || code.includes("FFMPEG")) {
+    return "恢复建议：确认视频可正常播放且格式受支持，再使用原资料重试；失败仍会保留 Trace ID。";
+  }
+  return "恢复建议：保留任务 ID 与 Trace ID，检查下方原始错误后重试；系统不会把失败任务伪装成完成。";
+}
+
 export function TaskStatusPanel({
   enabled,
   state,
@@ -66,6 +92,7 @@ export function TaskStatusPanel({
 }: TaskStatusPanelProps) {
   if (task) {
     const activeIndex = realStages.findIndex((stage) => stage.value === task.stage);
+    const nextAction = getNextAction(task);
     return (
       <section className="task-status-panel" aria-labelledby="task-status-title">
         <header className="task-status-heading">
@@ -135,6 +162,10 @@ export function TaskStatusPanel({
               {task.last_error_message ??
                 `当前阶段：${task.stage}；真实进度 ${Math.round(task.progress * 100)}%。`}
             </p>
+            <p className="task-next-action">{nextAction}</p>
+            {task.retry_count > 0 && (
+              <small>已记录重试 {task.retry_count} 次；每次尝试均保留在审计链中。</small>
+            )}
           </div>
         </div>
       </section>

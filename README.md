@@ -29,6 +29,11 @@ PostgreSQL 写回和 Agent 原页引用技术 E2E，3/3 结论均含课件页证
 PostgreSQL 和合成机制边界验证，但尚未宣称真实教学效果改善。逐项状态、证据与阻塞统一记录在
 [`docs/product-and-technology-handbook.md`](docs/product-and-technology-handbook.md)。
 
+生产候选包已经完成分层健康检查、依赖降级、同源/限流门禁、非 root 前后端镜像、纯 CPU 媒体
+Worker、容器私网和 Cloudflare 命名隧道 profile；最终回归为 Python `324 passed, 12 skipped`，
+前端契约、类型检查和生产构建通过。永久公网地址仍需受控域名、持续运行主机和远程托管 Tunnel
+token；这些外部条件未提供前，不把临时预览冒充正式部署。
+
 ## 里程碑
 
 - 里程碑 M1：单节课堂从上传到报告导出的真实全链路——技术实现完成，剩书面授权、独立教师试用与正式部署门禁。
@@ -87,6 +92,30 @@ Cloudflare Quick Tunnel。组员无需安装项目环境，使用浏览器打开
 
 入口依赖负责人电脑、后端及隧道进程持续运行，停止后地址和访问码立即失效。不要把真实
 访问码、Cookie、预签名 URL 或课堂隐私数据写入群公告、Issue、PR 和仓库文件。
+
+### 生产部署
+
+仓库现提供 `deploy/compose.production.yml`、前后端独立 Dockerfile 和生产配置预检。
+部署拓扑只向公网映射 Next.js 前端；FastAPI、Worker、Agent 与 PostgreSQL 位于容器私网，
+浏览器不会接触服务令牌或数据库。复制 `deploy/.env.production.example` 为根目录
+`.env.production`，替换其中所有占位值并配置 B2 对精确 HTTPS 域名的 CORS 后运行：
+
+```bash
+docker compose --env-file .env.production -f deploy/compose.production.yml up -d --build
+docker compose --env-file .env.production -f deploy/compose.production.yml ps
+```
+
+若已经在 Cloudflare 控制台创建稳定域名的远程托管 Tunnel，并把源站配置为
+`http://frontend:3000`，可将令牌只写入本机 `.env.production` 后启用命名隧道：
+
+```bash
+docker compose --profile tunnel --env-file .env.production -f deploy/compose.production.yml up -d --build
+```
+
+前端端口默认只绑定服务器 loopback，不直接暴露 FastAPI、数据库或服务令牌。生产入口必须位于
+带托管 TLS 的反向代理或远程托管 Cloudflare Tunnel 之后。Quick Tunnel
+只用于临时验收；其地址随机、依赖本机进程，不能写成永久上线。详见产品与技术手册的
+“生产部署与回滚”一节。
 
 ## 开发环境基线
 
