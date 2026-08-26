@@ -193,3 +193,88 @@ export type ReportExportResponse = {
   download_url: string;
   expires_at: string;
 };
+
+export type ValidationMode = "real" | "synthetic";
+export type CycleStatus =
+  | "draft"
+  | "actions_ready"
+  | "followup_linked"
+  | "ready_to_compare"
+  | "reviewing"
+  | "completed";
+export type ActionProgress = "planned" | "in_progress" | "completed" | "dropped";
+export type ComparisonOutcome =
+  | "improved"
+  | "unchanged"
+  | "regressed"
+  | "insufficient_evidence";
+export type ImprovementActionRead = {
+  id: string;
+  source_conclusion_id: string;
+  action_text: string;
+  success_criterion: string;
+  priority: number;
+  progress: ActionProgress;
+  created_at: string;
+  updated_at?: string | null;
+};
+export type ImprovementComparisonRead = {
+  id: string;
+  action_id: string;
+  baseline_conclusion_id: string;
+  followup_conclusion_id?: string | null;
+  proposed_outcome: ComparisonOutcome;
+  summary: string;
+  baseline_evidence: EvidenceReference[];
+  followup_evidence: EvidenceReference[];
+  review_status: ReviewStatus;
+  reviewed_summary?: string | null;
+  trace_id: string;
+  skill: string;
+  prompt_version: string;
+  created_at: string;
+  updated_at?: string | null;
+};
+export type ImprovementCycleRead = {
+  id: string;
+  course_id: string;
+  baseline_classroom_id: string;
+  followup_classroom_id?: string | null;
+  title: string;
+  objective: string;
+  status: CycleStatus;
+  validation_mode: ValidationMode;
+  actions: ImprovementActionRead[];
+  comparisons: ImprovementComparisonRead[];
+  created_at: string;
+  updated_at?: string | null;
+};
+export type PortfolioClassroomRead = {
+  id: string;
+  title: string;
+  latest_task_id: string | null;
+  task_count: number;
+  succeeded_task_count: number;
+  reviewed_conclusion_count: number;
+  report_ready: boolean;
+};
+export type PortfolioCourseRead = {
+  id: string;
+  name: string;
+  classroom_count: number;
+  completed_cycle_count: number;
+  classrooms: PortfolioClassroomRead[];
+};
+export type PortfolioOverview = {
+  course_count: number;
+  classroom_count: number;
+  completed_cycle_count: number;
+  courses: PortfolioCourseRead[];
+};
+export type AggregateReportRead = {
+  title: string;
+  content: string;
+  included_cycle_ids: string[];
+  generated_at: string;
+  evidence_boundary: string;
+};

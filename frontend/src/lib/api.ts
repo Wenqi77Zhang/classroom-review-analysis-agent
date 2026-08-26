@@ -20,6 +20,13 @@ import type {
   TranscriptSegment,
   TranscriptSegmentUpdate,
   UserRef,
+  ImprovementActionRead,
+  ImprovementComparisonRead,
+  ImprovementCycleRead,
+  PortfolioOverview,
+  AggregateReportRead,
+  ValidationMode,
+  ActionProgress,
 } from "@/types/contracts";
 
 export class ApiClientError extends Error {
@@ -85,6 +92,14 @@ export async function createCourse(name: string): Promise<CourseRead> {
     method: "POST",
     body: JSON.stringify({ name }),
   });
+}
+
+export async function listCourses(): Promise<CourseRead[]> {
+  return requestJson("/api/courses");
+}
+
+export async function listClassrooms(courseId: string): Promise<ClassroomRead[]> {
+  return requestJson(`/api/courses/${encodeURIComponent(courseId)}/classrooms`);
 }
 
 export async function createClassroom(
@@ -309,4 +324,117 @@ export async function getReportExport(
   return requestJson(
     `/api/reports/${encodeURIComponent(reportId)}/export/${encodeURIComponent(format)}`,
   );
+}
+
+export async function listImprovementCycles(): Promise<ImprovementCycleRead[]> {
+  return requestJson("/api/m2/improvement-cycles");
+}
+
+export async function getImprovementCycle(id: string): Promise<ImprovementCycleRead> {
+  return requestJson(`/api/m2/improvement-cycles/${encodeURIComponent(id)}`);
+}
+
+export async function createImprovementCycle(input: {
+  baselineClassroomId: string;
+  title: string;
+  objective: string;
+  validationMode: ValidationMode;
+}): Promise<ImprovementCycleRead> {
+  return requestJson("/api/m2/improvement-cycles", {
+    method: "POST",
+    body: JSON.stringify({
+      baseline_classroom_id: input.baselineClassroomId,
+      title: input.title,
+      objective: input.objective,
+      validation_mode: input.validationMode,
+    }),
+  });
+}
+
+export async function updateImprovementCycle(
+  id: string,
+  input: { title?: string; objective?: string; followupClassroomId?: string },
+): Promise<ImprovementCycleRead> {
+  return requestJson(`/api/m2/improvement-cycles/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      ...(input.title ? { title: input.title } : {}),
+      ...(input.objective ? { objective: input.objective } : {}),
+      ...(input.followupClassroomId
+        ? { followup_classroom_id: input.followupClassroomId }
+        : {}),
+    }),
+  });
+}
+
+export async function createImprovementAction(
+  cycleId: string,
+  input: {
+    sourceConclusionId: string;
+    actionText: string;
+    successCriterion: string;
+    priority: number;
+  },
+): Promise<ImprovementActionRead> {
+  return requestJson(
+    `/api/m2/improvement-cycles/${encodeURIComponent(cycleId)}/actions`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        source_conclusion_id: input.sourceConclusionId,
+        action_text: input.actionText,
+        success_criterion: input.successCriterion,
+        priority: input.priority,
+      }),
+    },
+  );
+}
+
+export async function updateImprovementAction(
+  actionId: string,
+  input: { actionText?: string; successCriterion?: string; priority?: number; progress?: ActionProgress },
+): Promise<ImprovementActionRead> {
+  return requestJson(`/api/m2/improvement-actions/${encodeURIComponent(actionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      ...(input.actionText ? { action_text: input.actionText } : {}),
+      ...(input.successCriterion ? { success_criterion: input.successCriterion } : {}),
+      ...(input.priority ? { priority: input.priority } : {}),
+      ...(input.progress ? { progress: input.progress } : {}),
+    }),
+  });
+}
+
+export async function generateImprovementComparisons(
+  cycleId: string,
+): Promise<ImprovementComparisonRead[]> {
+  return requestJson(
+    `/api/m2/improvement-cycles/${encodeURIComponent(cycleId)}/comparisons`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export async function reviewImprovementComparison(
+  comparisonId: string,
+  input: { action: ReviewAction; editedSummary?: string; note?: string },
+): Promise<ImprovementComparisonRead> {
+  return requestJson(
+    `/api/m2/improvement-comparisons/${encodeURIComponent(comparisonId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action: input.action,
+        edited_summary: input.editedSummary || null,
+        note: input.note || null,
+      }),
+    },
+  );
+}
+
+export async function getPortfolioOverview(): Promise<PortfolioOverview> {
+  return requestJson("/api/m2/portfolio/overview");
+}
+
+export async function getAggregateReport(): Promise<AggregateReportRead> {
+  return requestJson("/api/m2/portfolio/aggregate-report");
 }

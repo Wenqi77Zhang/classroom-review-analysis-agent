@@ -29,6 +29,8 @@ export BACKEND_PORT FRONTEND_PORT
 export BACKEND_URL="http://127.0.0.1:$BACKEND_PORT"
 mkdir -p "$LOGS"
 (cd "$ROOT" && "$PYTHON" scripts/runtime_preflight.py)
+(cd "$ROOT" && "$PYTHON" -m alembic -c backend/alembic.ini upgrade head)
+echo "数据库迁移已就绪。"
 
 assert_port_available() {
   "$PYTHON" -c 'import socket,sys; s=socket.socket(); s.bind(("127.0.0.1", int(sys.argv[1]))); s.close()' "$1" \
