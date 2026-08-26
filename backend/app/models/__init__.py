@@ -1,6 +1,11 @@
 """Import all persistence models so SQLAlchemy and Alembic see one metadata graph."""
 
 from backend.app.models.identity import Classroom, Course, User
+from backend.app.models.improvement import (
+    ImprovementAction,
+    ImprovementComparison,
+    ImprovementCycle,
+)
 from backend.app.models.processing import (
     Asset,
     CoursewarePage,
@@ -27,6 +32,9 @@ __all__ = [
     "Course",
     "CoursewarePage",
     "EvidenceReference",
+    "ImprovementAction",
+    "ImprovementComparison",
+    "ImprovementCycle",
     "ProcessingTask",
     "Report",
     "ReviewDecision",

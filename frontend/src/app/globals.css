@@ -34,6 +34,159 @@
     "Fraunces Variable", "LXGW WenKai Screen R", "KaiTi", "STKaiti", serif;
 }
 
+/* M2–M3: evidence-bound improvement loops and course portfolio */
+.improvement-page,
+.portfolio-page {
+  min-height: 100vh;
+  padding: clamp(44px, 7vw, 108px) 0 110px;
+}
+
+.improvement-heading,
+.portfolio-heading {
+  max-width: 1050px;
+}
+
+.improvement-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.82fr) minmax(420px, 1.18fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.improvement-create,
+.cycle-list,
+.workflow-card,
+.portfolio-course,
+.aggregate-report {
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 30px;
+  background: rgba(244, 247, 244, 0.67);
+  box-shadow: 0 24px 68px rgba(50, 66, 69, 0.12);
+  backdrop-filter: blur(24px) saturate(112%);
+}
+
+.improvement-create,
+.cycle-list,
+.workflow-card,
+.aggregate-report {
+  padding: clamp(24px, 3vw, 40px);
+}
+
+.cycle-list {
+  display: grid;
+  gap: 16px;
+}
+
+.cycle-card {
+  display: block;
+  padding: 24px;
+  border: 1px solid rgba(83, 103, 101, 0.2);
+  border-radius: 24px;
+  color: var(--ink, #222c2c);
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.56);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.cycle-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(69, 102, 94, 0.52);
+  box-shadow: 0 18px 34px rgba(44, 67, 64, 0.12);
+}
+
+.cycle-card h2 { margin: 12px 0 8px; font-size: clamp(22px, 2.1vw, 30px); }
+.cycle-card p { margin: 0; color: rgba(34, 44, 44, 0.75); }
+.cycle-card footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; font-size: 14px; }
+
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(87, 119, 108, 0.13);
+  color: #365f53;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mode-badge.synthetic { background: rgba(158, 126, 76, 0.13); color: #765f36; }
+.mode-choice { display: flex; gap: 20px; border: 0; padding: 0; margin: 10px 0 0; }
+.mode-choice legend { margin-bottom: 8px; font-weight: 700; }
+.mode-choice label { display: flex; flex-direction: row; gap: 8px; align-items: center; }
+.boundary-note { padding: 13px 16px; border-left: 3px solid rgba(74, 105, 97, 0.55); background: rgba(255,255,255,.4); color: rgba(34,44,44,.76); }
+.success-notice { padding: 15px 20px; border-radius: 18px; background: rgba(86, 128, 111, 0.14); color: #315f50; }
+.cycle-meta { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 24px; }
+
+.cycle-workflow { display: grid; gap: 28px; }
+.workflow-card > header,
+.portfolio-course > header,
+.aggregate-report > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+.workflow-card > header { justify-content: flex-start; }
+.workflow-card > header > span {
+  display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px;
+  border-radius: 15px; background: #4b665f; color: white; font-weight: 800;
+}
+.workflow-card h2, .portfolio-course h2, .aggregate-report h2 { margin: 3px 0 0; font-size: clamp(22px, 2.3vw, 32px); }
+.workflow-card small, .portfolio-course small, .aggregate-report small { letter-spacing: .14em; text-transform: uppercase; color: #5e7470; font-weight: 700; }
+.action-stack { display: grid; gap: 12px; margin-bottom: 22px; }
+.action-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 20px; padding: 18px; border-radius: 20px; background: rgba(255,255,255,.55); }
+.action-row p { grid-column: 1; margin: 0; }
+.action-row select { grid-column: 2; grid-row: 1 / span 2; min-width: 130px; }
+.inline-action-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-top: 20px; border-top: 1px solid rgba(61,83,79,.16); }
+.inline-action-form label:first-child, .inline-action-form .button { grid-column: 1 / -1; }
+.followup-form { display: flex; flex-wrap: wrap; gap: 12px; }
+.followup-form select { min-width: min(100%, 360px); flex: 1; }
+.comparison-gate { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 18px; border-radius: 20px; background: rgba(255,255,255,.48); }
+.comparison-list { display: grid; gap: 18px; margin-top: 22px; }
+.comparison-card { padding: clamp(20px, 3vw, 30px); border-radius: 24px; background: rgba(255,255,255,.58); border: 1px solid rgba(70,91,87,.16); }
+.comparison-title { display: flex; gap: 18px; align-items: flex-start; }
+.comparison-title > span { color: #6b827b; font: 700 28px/1 var(--font-display, serif); }
+.comparison-title h3 { margin: 6px 0 0; font-size: 19px; line-height: 1.6; }
+.comparison-evidence-count { color: #5a716c; font-weight: 700; }
+.comparison-card textarea { width: 100%; }
+.comparison-card footer { margin-top: 16px; color: rgba(34,44,44,.62); font-size: 13px; overflow-wrap: anywhere; }
+.review-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 13px; }
+.review-accept { background: #526d63; color: white; }
+.review-modify { background: #e9e1cf; color: #514936; }
+.review-reject { background: #7b5551; color: white; }
+
+.portfolio-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 28px; }
+.portfolio-stats article { padding: 26px; border-radius: 25px; background: rgba(246,249,247,.65); border: 1px solid rgba(255,255,255,.8); backdrop-filter: blur(20px); }
+.portfolio-stats strong { display: block; font: 650 clamp(40px, 5vw, 68px)/1 var(--font-display, serif); color: #435e57; }
+.portfolio-stats span { display: block; margin-top: 10px; }
+.portfolio-courses { display: grid; gap: 24px; }
+.portfolio-course { padding: clamp(24px, 3.5vw, 42px); }
+.portfolio-classrooms { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+.portfolio-classroom { display: grid; gap: 7px; padding: 20px; border-radius: 20px; color: #24302f; background: rgba(255,255,255,.55); border: 1px solid rgba(71,94,89,.15); }
+.portfolio-classroom > a { color: #3f665e; font-weight: 700; text-underline-offset: .24em; }
+.portfolio-classroom:hover { border-color: rgba(69,102,94,.48); }
+.portfolio-classrooms span { color: rgba(34,44,44,.68); }
+.aggregate-report { margin-top: 28px; }
+.aggregate-report pre { white-space: pre-wrap; font: inherit; line-height: 1.8; padding: 22px; border-radius: 20px; background: rgba(255,255,255,.5); }
+.aggregate-report footer { color: rgba(34,44,44,.66); }
+
+@media (max-width: 980px) {
+  .improvement-grid { grid-template-columns: 1fr; }
+  .portfolio-classrooms { grid-template-columns: 1fr; }
+  .site-header nav { max-width: calc(100vw - 40px); overflow-x: auto; justify-content: flex-start; }
+}
+
+@media (max-width: 680px) {
+  .improvement-page, .portfolio-page { padding-top: 34px; }
+  .inline-action-form, .portfolio-stats { grid-template-columns: 1fr; }
+  .action-row { grid-template-columns: 1fr; }
+  .action-row select { grid-column: 1; grid-row: auto; }
+  .comparison-gate, .workflow-card > header, .portfolio-course > header, .aggregate-report > header { flex-direction: column; }
+  .review-actions .button, .followup-form .button, .followup-form select { width: 100%; }
+}
+
 /* Real page-aligned courseware evidence: same quiet glass palette as the
    transcript editor, with explicit controls for older teaching staff. */
 .courseware-evidence-panel {

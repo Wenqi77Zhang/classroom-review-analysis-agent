@@ -33,6 +33,7 @@ from backend.app.api.audit import router as audit_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.classrooms import router as classrooms_router
 from backend.app.api.courseware import router as courseware_router
+from backend.app.api.improvements import router as improvements_router
 from backend.app.api.reports import router as reports_router
 from backend.app.api.tasks import router as tasks_router
 from backend.app.api.transcripts import router as transcripts_router
@@ -307,6 +308,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(analyses_router, prefix="/api")
     app.include_router(audit_router, prefix="/api")
     app.include_router(reports_router, prefix="/api")
+    app.include_router(improvements_router, prefix="/api")
 
     @app.get("/health", tags=["health"], summary="存活检查")
     async def health() -> dict[str, str]:

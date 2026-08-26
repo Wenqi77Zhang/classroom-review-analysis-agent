@@ -87,13 +87,15 @@ export function SiteChrome({ children }: { children: ReactNode }) {
   return <>
     <div className="ambient-scene" aria-hidden="true"><span className="noise-layer" /></div>
     <div className="scroll-progress" aria-hidden="true"><span /></div>
-      <div className="prototype-banner" role="status"><span>M1 真实链路 · 教师最终确认</span><strong>视频、逐字稿、课件证据与报告均连接真实后台；示例模式会单独标注</strong></div>
+      <div className="prototype-banner" role="status"><span>M1–M3 证据链 · 教师最终确认</span><strong>复盘、改进行动、两轮对比与多课程汇总均保留来源；合成验证会单独标注</strong></div>
     <header className="site-header">
       <Link className="brand" href="/" aria-label="返回产品首页"><span className="brand-mark" aria-hidden="true">课</span><span><strong>课堂复盘 Agent</strong><small>Evidence-led teaching review</small></span></Link>
       <nav aria-label="主导航">
         <Link className={`nav-link ${active("/") ? "active" : ""}`} href="/">产品首页</Link>
         <Link className={`nav-link ${active("/classrooms") ? "active" : ""}`} href="/classrooms">创建课堂</Link>
         <Link className={`nav-link ${active("/tasks") ? "active" : ""}`} href="/tasks/demo-review">复盘任务</Link>
+        <Link className={`nav-link ${active("/improvements") ? "active" : ""}`} href="/improvements">改进循环</Link>
+        <Link className={`nav-link ${active("/portfolio") ? "active" : ""}`} href="/portfolio">课程总览</Link>
       </nav>
       <button className="user-chip" type="button" aria-label="当前为演示身份"><span>演</span>演示教师</button>
     </header>

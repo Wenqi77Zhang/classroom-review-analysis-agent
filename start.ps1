@@ -73,6 +73,11 @@ New-Item -ItemType Directory -Path $logs -Force | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "运行配置校验失败；未启动任何服务。"
 }
+& $python -m alembic -c "backend/alembic.ini" upgrade head
+if ($LASTEXITCODE -ne 0) {
+    throw "数据库迁移失败；为避免新旧 Schema 混用，未启动任何服务。"
+}
+Write-Host "数据库迁移已就绪。"
 $processes = @()
 $runtimeManifest = Join-Path $logs "runtime-processes.json"
 $runtimeMutex = [System.Threading.Mutex]::new(
