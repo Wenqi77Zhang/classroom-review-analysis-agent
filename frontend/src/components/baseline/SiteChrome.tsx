@@ -87,7 +87,7 @@ export function SiteChrome({ children }: { children: ReactNode }) {
   return <>
     <div className="ambient-scene" aria-hidden="true"><span className="noise-layer" /></div>
     <div className="scroll-progress" aria-hidden="true"><span /></div>
-    <div className="prototype-banner" role="status"><span>第一版界面基准 · 部分真实链路</span><strong>课堂、上传和任务 API 已接通；证据与报告仍含明确标记的演示数据</strong></div>
+      <div className="prototype-banner" role="status"><span>M1 真实链路 · 教师最终确认</span><strong>视频、逐字稿、课件证据与报告均连接真实后台；示例模式会单独标注</strong></div>
     <header className="site-header">
       <Link className="brand" href="/" aria-label="返回产品首页"><span className="brand-mark" aria-hidden="true">课</span><span><strong>课堂复盘 Agent</strong><small>Evidence-led teaching review</small></span></Link>
       <nav aria-label="主导航">

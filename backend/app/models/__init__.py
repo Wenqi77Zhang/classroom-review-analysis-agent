@@ -3,6 +3,7 @@
 from backend.app.models.identity import Classroom, Course, User
 from backend.app.models.processing import (
     Asset,
+    CoursewarePage,
     ProcessingTask,
     TaskEvent,
     TranscriptSegment,
@@ -24,6 +25,7 @@ __all__ = [
     "AuditEvent",
     "Classroom",
     "Course",
+    "CoursewarePage",
     "EvidenceReference",
     "ProcessingTask",
     "Report",

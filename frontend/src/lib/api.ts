@@ -6,6 +6,7 @@ import type {
   AssetRead,
   BackendHealthResponse,
   ClassroomRead,
+  CoursewarePageRead,
   CourseRead,
   DownloadUrlResponse,
   PresignResponse,
@@ -222,6 +223,12 @@ export async function getTaskAssets(taskId: string): Promise<AssetRead[]> {
 
 export async function getTranscript(taskId: string): Promise<TranscriptRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/transcript`);
+}
+
+export async function getCoursewarePages(
+  taskId: string,
+): Promise<CoursewarePageRead[]> {
+  return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/courseware`);
 }
 
 export async function updateTranscriptSegment(

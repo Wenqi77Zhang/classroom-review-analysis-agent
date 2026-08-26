@@ -130,6 +130,12 @@ class ProcessingTask(Base):
     transcript_segments: Mapped[list[TranscriptSegment]] = relationship(
         back_populates="task", cascade="all, delete-orphan", order_by="TranscriptSegment.index"
     )
+    courseware_pages: Mapped[list[CoursewarePage]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="CoursewarePage.asset_id, CoursewarePage.page_no",
+    )
 
     __table_args__ = (
         CheckConstraint("progress >= 0 AND progress <= 1", name="ck_tasks_progress_range"),
@@ -238,6 +244,43 @@ class TranscriptSegmentRevision(Base):
             ["segment_id", "owner_id"],
             ["transcript_segments.id", "transcript_segments.owner_id"],
             name="fk_transcript_revisions_segment_owner",
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class CoursewarePage(Base):
+    """Extracted page text scoped to both a task and its attached courseware asset."""
+
+    __tablename__ = "courseware_pages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    task_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    asset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    page_no: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    task: Mapped[ProcessingTask] = relationship(back_populates="courseware_pages")
+
+    __table_args__ = (
+        UniqueConstraint("task_id", "asset_id", "page_no", name="uq_courseware_task_asset_page"),
+        UniqueConstraint("id", "owner_id", name="uq_courseware_pages_id_owner"),
+        CheckConstraint("page_no >= 1", name="ck_courseware_page_positive"),
+        CheckConstraint("length(trim(text)) > 0", name="ck_courseware_page_text_nonempty"),
+        ForeignKeyConstraint(
+            ["task_id", "owner_id"],
+            ["processing_tasks.id", "processing_tasks.owner_id"],
+            name="fk_courseware_pages_task_owner",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["asset_id", "owner_id"],
+            ["assets.id", "assets.owner_id"],
+            name="fk_courseware_pages_asset_owner",
             ondelete="CASCADE",
         ),
     )

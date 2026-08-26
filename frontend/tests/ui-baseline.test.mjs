@@ -26,8 +26,8 @@ assert.match(
   "只有确认支持动画后才能隐藏待显现内容",
 );
 const chrome = readFileSync(resolve(root, "src/components/baseline/SiteChrome.tsx"), "utf8");
-assert.match(chrome, /部分真实链路/, "页面必须准确区分真实链路与演示能力");
-assert.match(chrome, /证据与报告仍含明确标记的演示数据/, "未完成能力必须继续诚实标注");
+assert.match(chrome, /M1 真实链路/, "页面必须准确呈现已接通的真实主链路");
+assert.match(chrome, /示例模式会单独标注/, "演示能力必须继续诚实标注");
 assert.match(chrome, /prefers-reduced-motion:\s*reduce/, "应尊重用户的减少动态效果设置");
 assert.match(chrome, /classList\.add\("reveal-enabled"\)/, "动画能力确认后才启用显现效果");
 assert.match(chrome, /window\.scrollTo\(\{ top: 0/, "页面切换后应回到顶部，避免继承旧页面滚动位置");

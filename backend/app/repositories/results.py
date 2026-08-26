@@ -13,6 +13,7 @@ from backend.app.errors import NotFoundError, ValidationFailedError
 from backend.app.models import (
     AnalysisConclusion,
     Asset,
+    CoursewarePage,
     EvidenceReference,
     ProcessingTask,
     TranscriptSegment,
@@ -24,6 +25,7 @@ from backend.app.schemas.analysis_report import (
     InternalConclusionBatchWrite,
     ReviewStatus,
 )
+from backend.app.schemas.courseware import InternalCoursewareWrite
 from backend.app.schemas.task import AssetKind
 from backend.app.schemas.transcript import InternalTranscriptWrite, TranscriptSegmentUpdate
 from backend.app.services.permissions import get_owned_or_404
@@ -78,6 +80,75 @@ async def get_transcript_segments(
     return list(rows)
 
 
+async def replace_courseware_pages(
+    session: AsyncSession,
+    task: ProcessingTask,
+    body: InternalCoursewareWrite,
+) -> list[CoursewarePage]:
+    """Replace task-scoped page evidence after verifying every asset boundary."""
+
+    attached_assets = {
+        asset.id: asset
+        for asset in await session.scalars(
+            select(Asset)
+            .join(task_assets, task_assets.c.asset_id == Asset.id)
+            .where(
+                task_assets.c.task_id == task.id,
+                task_assets.c.owner_id == task.owner_id,
+                Asset.owner_id == task.owner_id,
+            )
+        )
+    }
+    seen: set[tuple[UUID, int]] = set()
+    for item in body.pages:
+        asset = attached_assets.get(item.asset_id)
+        if asset is None:
+            raise NotFoundError("课件页引用的文件不属于当前任务。")
+        if AssetKind(asset.kind) is not AssetKind.COURSEWARE:
+            raise ValidationFailedError("课件页只能绑定当前任务的课件文件。")
+        key = (item.asset_id, item.page_no)
+        if key in seen:
+            raise ValidationFailedError("同一课件文件的页码不能重复。")
+        seen.add(key)
+
+    await session.execute(
+        delete(CoursewarePage).where(
+            CoursewarePage.task_id == task.id,
+            CoursewarePage.owner_id == task.owner_id,
+        )
+    )
+    pages = [
+        CoursewarePage(
+            owner_id=task.owner_id,
+            task_id=task.id,
+            asset_id=item.asset_id,
+            page_no=item.page_no,
+            text=item.text,
+        )
+        for item in body.pages
+    ]
+    session.add_all(pages)
+    await session.flush()
+    return pages
+
+
+async def get_courseware_pages(
+    session: AsyncSession,
+    owner_id: UUID,
+    task_id: UUID,
+) -> list[CoursewarePage]:
+    await get_owned_or_404(session, ProcessingTask, task_id, owner_id)
+    rows = await session.scalars(
+        select(CoursewarePage)
+        .where(
+            CoursewarePage.owner_id == owner_id,
+            CoursewarePage.task_id == task_id,
+        )
+        .order_by(CoursewarePage.asset_id, CoursewarePage.page_no)
+    )
+    return list(rows)
+
+
 async def edit_transcript_segment(
     session: AsyncSession,
     *,
@@ -113,6 +184,7 @@ async def _validate_evidence_scope(
     source_type: EvidenceSourceType,
     asset_id: UUID | None,
     segment_id: UUID | None,
+    page_no: int | None,
     image_ref: str | None,
 ) -> None:
     if source_type is EvidenceSourceType.TRANSCRIPT and segment_id is None:
@@ -148,6 +220,17 @@ async def _validate_evidence_scope(
             raise ValidationFailedError(
                 "证据来源类型与绑定文件类型不一致。"
             )
+        if source_type is EvidenceSourceType.COURSEWARE and page_no is not None:
+            courseware_page = await session.scalar(
+                select(CoursewarePage.id).where(
+                    CoursewarePage.owner_id == task.owner_id,
+                    CoursewarePage.task_id == task.id,
+                    CoursewarePage.asset_id == asset_id,
+                    CoursewarePage.page_no == page_no,
+                )
+            )
+            if courseware_page is None:
+                raise NotFoundError("课件证据页不属于当前任务或尚未完成解析。")
     if segment_id is not None:
         segment = await session.scalar(
             select(TranscriptSegment).where(
@@ -180,6 +263,7 @@ async def replace_pending_conclusions(
                 source_type=reference.source_type,
                 asset_id=reference.asset_id,
                 segment_id=reference.segment_id,
+                page_no=reference.page_no,
                 image_ref=reference.image_ref,
             )
         conclusion = AnalysisConclusion(

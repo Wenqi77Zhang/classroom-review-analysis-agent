@@ -82,12 +82,14 @@ assert.match(player, /preload="metadata"/, "播放器不得自动下载完整课
 assert.match(player, /playsInline/, "移动端播放器应支持页内播放");
 assert.match(player, /暂无真实视频可播放/, "缺少视频地址时必须诚实降级");
 assert.match(player, /尚未连接对象存储授权地址/, "不得伪造对象存储接入");
+assert.match(realWorkbench, /className="evidence-video-frame"/, "真实视频必须由左栏边界容器约束");
 
 assert.match(task, /realTask\.status === "succeeded"/, "真实证据只能在真实任务成功后显示");
 assert.match(task, /router\.replace\(`\/tasks\/\$\{task\.id\}`\)/, "创建任务后 URL 必须切换为可恢复的真实任务 ID");
 for (const boundary of [
   "getTaskAssets(task.id)",
   "getTranscript(task.id)",
+  "getCoursewarePages(task.id)",
   "getConclusions(task.classroom_id)",
   "getAssetDownloadUrl(video.id)",
   "updateTranscriptSegment",
@@ -134,6 +136,11 @@ assert.match(realWorkbench, /className="accept-review"/, "接受操作必须使�
 assert.match(realWorkbench, /className="modify-review"/, "修改操作必须使用明确的按钮视觉层级");
 assert.match(realWorkbench, /className="reject-review"/, "驳回操作必须使用明确的按钮视觉层级");
 assert.match(realWorkbench, /视频地址为限时授权/, "必须向教师说明视频授权的短期边界");
+assert.match(realWorkbench, /COURSEWARE EVIDENCE/, "真实工作台必须展示课件页级证据");
+assert.match(realWorkbench, /第 \{selectedPage\.page_no\} 页/, "课件证据必须显示真实页码");
+assert.match(realWorkbench, /#page=\$\{selectedPage\.page_no\}/, "PDF 原文件入口必须带页码定位");
+assert.match(realWorkbench, /reference\.source_type === "courseware"/, "课件证据点击后必须走页级定位而非视频时间定位");
+assert.match(realWorkbench, /scrollIntoView/, "课件证据点击后必须把教师带到核对面板");
 assert.doesNotMatch(realWorkbench, /localStorage|sessionStorage/, "真实证据和预签名地址不得进入浏览器持久化存储");
 assert.match(task, /taskLoadError\.status === 401/, "任务首次读取必须识别会话缺失");
 assert.match(task, /await startDemoSession\(\)/, "任务页必须通过服务端会话接口恢复访问");

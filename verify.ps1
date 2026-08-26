@@ -81,8 +81,22 @@ if (Test-Path -LiteralPath ".git") {
     }
 }
 
-& $python -m pytest -q
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$previousTemp = $env:TEMP
+$previousTmp = $env:TMP
+$pytestTemp = Join-Path $ProjectRoot "tmp\pytest-verify-$PID"
+New-Item -ItemType Directory -Force -Path $pytestTemp | Out-Null
+$env:TEMP = $pytestTemp
+$env:TMP = $pytestTemp
+try {
+    & $python -m pytest -q -p no:cacheprovider --basetemp (Join-Path $pytestTemp "run")
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally {
+    $env:TEMP = $previousTemp
+    $env:TMP = $previousTmp
+    if (Test-Path -LiteralPath $pytestTemp) {
+        Remove-Item -LiteralPath $pytestTemp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 & $python -m ruff check backend agent tests
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

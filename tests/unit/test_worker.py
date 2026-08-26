@@ -50,7 +50,7 @@ from worker.runner import (
 )
 from worker.stages.extract_audio import extract_audio
 from worker.stages.transcribe import transcribe_audio
-from worker.types import AsrResult, AsrSegment, PipelineTask, TranslationBatch
+from worker.types import AsrResult, AsrSegment, PipelineResult, PipelineTask, TranslationBatch
 
 
 class FakeAsr:
@@ -274,6 +274,8 @@ def test_remote_runner_claims_newly_uploaded_tasks_without_object_root() -> None
         TaskStage.EXTRACT_AUDIO,
         TaskStage.TRANSCRIBE,
         TaskStage.TRANSLATE,
+        TaskStage.PARSE_COURSEWARE,
+        TaskStage.BUILD_EVIDENCE_INDEX,
     ]
 
 
@@ -1362,8 +1364,18 @@ def test_reclaimed_transcribe_completes_without_backward_state_and_hands_off(
     )
 
     assert result.transcript_segments == 1
+    assert [event.stage for event in store.events[claim.task_id]][-3:] == [
+        TaskStage.PARSE_COURSEWARE,
+        TaskStage.PARSE_COURSEWARE,
+        TaskStage.BUILD_EVIDENCE_INDEX,
+    ]
     assert all(
-        event.stage is TaskStage.TRANSCRIBE
+        event.stage
+        in {
+            TaskStage.TRANSCRIBE,
+            TaskStage.PARSE_COURSEWARE,
+            TaskStage.BUILD_EVIDENCE_INDEX,
+        }
         for event in store.events[claim.task_id]
     )
     assert store.handoffs == [
@@ -1415,6 +1427,78 @@ def test_reclaimed_transcribe_cleanup_failure_stays_at_transcribe(
     assert store.events[claim.task_id][-1].stage is TaskStage.TRANSCRIBE
     assert store.events[claim.task_id][-1].status is TaskStatus.FAILED
     assert store.handoffs == []
+
+
+@pytest.mark.parametrize(
+    ("resume_stage", "expected_events"),
+    [
+        (
+            TaskStage.PARSE_COURSEWARE,
+            [
+                TaskStage.PARSE_COURSEWARE,
+                TaskStage.PARSE_COURSEWARE,
+                TaskStage.BUILD_EVIDENCE_INDEX,
+            ],
+        ),
+        (TaskStage.BUILD_EVIDENCE_INDEX, [TaskStage.BUILD_EVIDENCE_INDEX]),
+    ],
+)
+def test_post_media_resume_does_not_repeat_video_download_or_asr(
+    monkeypatch: pytest.MonkeyPatch,
+    resume_stage: TaskStage,
+    expected_events: list[TaskStage],
+) -> None:
+    claim = _claim().model_copy(update={"stage": resume_stage})
+    store = FakeClaimingStore(claim)
+
+    def forbidden(*_: object, **__: object) -> None:
+        raise AssertionError("post-media recovery must not re-run the media pipeline")
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", forbidden)
+    monkeypatch.setattr("worker.runner.run_pipeline", forbidden)
+
+    result = _process_claimed_media(
+        claim,
+        threading.Event(),
+        store,  # type: ignore[arg-type]
+        FakeAsr(AsrResult(language="zh", segments=())),
+        None,
+        "worker-post-media-resume",
+    )
+
+    assert result == PipelineResult(
+        task_id=claim.task_id,
+        transcript_segments=0,
+        translated_segments=0,
+        duration_ms=0,
+    )
+    assert [event.stage for event in store.events[claim.task_id]] == expected_events
+    if resume_stage is TaskStage.PARSE_COURSEWARE:
+        assert store.courseware[claim.task_id].pages == []
+    assert store.handoffs == [
+        (claim.task_id, InternalAgentHandoff(worker_id="worker-post-media-resume"))
+    ]
+
+
+@pytest.mark.parametrize(
+    "invalid_stage",
+    [TaskStage.PARSE_COURSEWARE, TaskStage.BUILD_EVIDENCE_INDEX, TaskStage.ANALYZE],
+)
+def test_media_pipeline_rejects_post_media_stage_floor(
+    tmp_path: Path,
+    invalid_stage: TaskStage,
+) -> None:
+    source = tmp_path / "input.wav"
+    _silent_wav(source)
+    task = PipelineTask(input_path=source)
+
+    with pytest.raises(ValueError, match="media input stage"):
+        run_pipeline(
+            task,
+            FakeAsr(AsrResult(language="zh", segments=())),
+            LocalJobStore(),
+            reported_stage_floor=invalid_stage,
+        )
 
 
 def test_http_job_store_heartbeat_state_and_batch_transcript_paths() -> None:

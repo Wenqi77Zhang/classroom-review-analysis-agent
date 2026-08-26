@@ -149,7 +149,13 @@ def run_pipeline(
         current_stage = TaskStage.TRANSLATE
         store.update_state(
             task.task_id,
-            _state(current_stage, TaskStatus.RUNNING, 0.0, task.trace_id, message="正在逐句翻译"),
+            _state(
+                current_stage,
+                TaskStatus.RUNNING,
+                0.0,
+                task.trace_id,
+                message="正在逐句翻译",
+            ),
         )
         translated = (
             align_supplemental_translations(transcript, supplemental_translation_path)
