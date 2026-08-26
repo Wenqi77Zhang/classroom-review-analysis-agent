@@ -17,6 +17,10 @@ from types import FrameType
 from typing import Self
 
 from backend.app.schemas.agent_runtime import InternalAgentHandoff
+from backend.app.schemas.courseware import (
+    InternalCoursewarePageWrite,
+    InternalCoursewareWrite,
+)
 from backend.app.schemas.task import (
     AssetKind,
     InternalAssetRead,
@@ -35,6 +39,7 @@ from worker.errors import WorkerError, WorkerErrorCode, public_worker_error_mess
 from worker.job_store import ClaimingJobStore, HttpJobStore, LocalJobStore
 from worker.pipeline import run_pipeline
 from worker.runtime import PollPolicy, RuntimeCounters, run_forever
+from worker.stages.parse_courseware import parse_courseware
 from worker.types import PipelineResult, PipelineTask
 
 WORKER_CLAIM_STAGES = [
@@ -42,6 +47,8 @@ WORKER_CLAIM_STAGES = [
     TaskStage.EXTRACT_AUDIO,
     TaskStage.TRANSCRIBE,
     TaskStage.TRANSLATE,
+    TaskStage.PARSE_COURSEWARE,
+    TaskStage.BUILD_EVIDENCE_INDEX,
 ]
 
 
@@ -223,6 +230,10 @@ def _claimed_translation_asset(claim: InternalTaskClaim) -> InternalAssetRead | 
     return candidates[-1] if candidates else None
 
 
+def _claimed_courseware_assets(claim: InternalTaskClaim) -> tuple[InternalAssetRead, ...]:
+    return tuple(asset for asset in claim.assets if asset.kind is AssetKind.COURSEWARE)
+
+
 @contextmanager
 def _claimed_input_path(
     claim: InternalTaskClaim,
@@ -333,6 +344,54 @@ def _claimed_translation_path(
                 raise
 
 
+@contextmanager
+def _claimed_courseware_paths(
+    claim: InternalTaskClaim,
+    store: HttpJobStore,
+    object_root: Path | None,
+) -> Iterator[tuple[tuple[InternalAssetRead, Path], ...]]:
+    assets = _claimed_courseware_assets(claim)
+    if not assets:
+        yield ()
+        return
+
+    if object_root is not None:
+        root = object_root.resolve()
+        resolved: list[tuple[InternalAssetRead, Path]] = []
+        for asset in assets:
+            candidate = (root / asset.object_key).resolve()
+            if not candidate.is_relative_to(root):
+                raise WorkerError(
+                    WorkerErrorCode.INPUT_NOT_FOUND,
+                    "课件对象地址越出允许的媒体目录。",
+                )
+            resolved.append((asset, candidate))
+        yield tuple(resolved)
+        return
+
+    work_dir = Path(tempfile.mkdtemp(prefix=f"courseware-download-{claim.task_id}-"))
+    primary_failure: BaseException | None = None
+    try:
+        downloaded: list[tuple[InternalAssetRead, Path]] = []
+        for index, asset in enumerate(assets):
+            suffix = Path(asset.filename).suffix.lower()
+            candidate = work_dir / f"courseware-{index}{suffix}"
+            store.download_asset(asset, candidate)
+            downloaded.append((asset, candidate))
+        yield tuple(downloaded)
+    except BaseException as exc:
+        primary_failure = exc
+        raise
+    finally:
+        try:
+            cleanup_path(work_dir)
+        except WorkerError as cleanup_error:
+            if primary_failure is not None:
+                primary_failure.add_note(f"{cleanup_error.code.value}: {cleanup_error}")
+            else:
+                raise
+
+
 def _process_claimed_media(
     claim: InternalTaskClaim,
     stop: threading.Event,
@@ -343,28 +402,107 @@ def _process_claimed_media(
     translation_adapter: TranslationAdapter | None = None,
 ) -> PipelineResult:
     pipeline_started = False
-    pipeline_completed = False
+    media_pipeline_completed = claim.stage in {
+        TaskStage.PARSE_COURSEWARE,
+        TaskStage.BUILD_EVIDENCE_INDEX,
+    }
+    post_media_stage: TaskStage | None = None
     used_supplemental_translation = _claimed_translation_asset(claim) is not None
+    result = PipelineResult(
+        task_id=claim.task_id,
+        transcript_segments=0,
+        translated_segments=0,
+        duration_ms=0,
+    )
     try:
-        with (
-            _claimed_input_path(claim, store, object_root) as input_path,
-            _claimed_translation_path(claim, store, object_root) as translation_path,
-        ):
-            pipeline_started = True
-            result = run_pipeline(
-                PipelineTask(
-                    task_id=claim.task_id,
+        if claim.stage not in {
+            TaskStage.PARSE_COURSEWARE,
+            TaskStage.BUILD_EVIDENCE_INDEX,
+        }:
+            with (
+                _claimed_input_path(claim, store, object_root) as input_path,
+                _claimed_translation_path(claim, store, object_root) as translation_path,
+            ):
+                pipeline_started = True
+                result = run_pipeline(
+                    PipelineTask(
+                        task_id=claim.task_id,
+                        trace_id=claim.trace_id,
+                        input_path=input_path,
+                    ),
+                    adapter,
+                    store,
+                    stop_event=stop,
+                    translation_adapter=translation_adapter,
+                    supplemental_translation_path=translation_path,
+                    reported_stage_floor=claim.stage,
+                )
+                media_pipeline_completed = True
+
+        if claim.stage is not TaskStage.BUILD_EVIDENCE_INDEX:
+            post_media_stage = TaskStage.PARSE_COURSEWARE
+            store.update_state(
+                claim.task_id,
+                InternalTaskStateUpdate(
+                    stage=TaskStage.PARSE_COURSEWARE,
+                    status=TaskStatus.RUNNING,
+                    progress=0.0,
+                    message="正在解析课件页级证据",
                     trace_id=claim.trace_id,
-                    input_path=input_path,
                 ),
-                adapter,
-                store,
-                stop_event=stop,
-                translation_adapter=translation_adapter,
-                supplemental_translation_path=translation_path,
-                reported_stage_floor=claim.stage,
             )
-            pipeline_completed = True
+            with _claimed_courseware_paths(
+                claim,
+                store,
+                object_root,
+            ) as courseware_paths:
+                documents = tuple(
+                    parse_courseware(
+                        path,
+                        asset_id=asset.id,
+                        content_type=asset.content_type,
+                    )
+                    for asset, path in courseware_paths
+                )
+                pages = [
+                    InternalCoursewarePageWrite(
+                        asset_id=document.asset_id,
+                        page_no=page.page_no,
+                        text=page.text,
+                    )
+                    for document in documents
+                    for page in document.pages
+                    if page.text.strip()
+                ]
+            store.save_courseware(
+                claim.task_id,
+                InternalCoursewareWrite(pages=pages, trace_id=claim.trace_id),
+            )
+            store.update_state(
+                claim.task_id,
+                InternalTaskStateUpdate(
+                    stage=TaskStage.PARSE_COURSEWARE,
+                    status=TaskStatus.RUNNING,
+                    progress=1.0,
+                    message=(
+                        f"课件解析完成：{len(documents)} 个文件，"
+                        f"{len(pages)} 个可引用页面"
+                    ),
+                    trace_id=claim.trace_id,
+                ),
+            )
+
+        post_media_stage = TaskStage.BUILD_EVIDENCE_INDEX
+        store.update_state(
+            claim.task_id,
+            InternalTaskStateUpdate(
+                stage=TaskStage.BUILD_EVIDENCE_INDEX,
+                status=TaskStatus.RUNNING,
+                progress=1.0,
+                message="逐字稿与课件证据索引已准备完成",
+                trace_id=claim.trace_id,
+            ),
+        )
         if stop.is_set():
             raise WorkerError(
                 WorkerErrorCode.STOPPED,
@@ -375,16 +513,19 @@ def _process_claimed_media(
             claim.task_id,
             InternalAgentHandoff(worker_id=worker_id),
         )
+        post_media_stage = None
         return result
     except WorkerError as exc:
         if exc.code is WorkerErrorCode.STOPPED:
             raise
-        # run_pipeline 自己记录其内部失败。下载尚未进入 pipeline，或 pipeline
-        # 成功后外层下载目录清理失败时，必须由 runner 补写真实失败状态。
-        if not pipeline_started or pipeline_completed:
-            if claim.stage in {TaskStage.TRANSCRIBE, TaskStage.TRANSLATE}:
+        # run_pipeline 自己记录其内部失败。下载尚未进入 pipeline、课件处理
+        # 失败，或媒体流水线成功后外层清理失败时，由 runner 补写真实状态。
+        if not pipeline_started or media_pipeline_completed:
+            if post_media_stage is not None:
+                stage = post_media_stage
+            elif claim.stage in {TaskStage.TRANSCRIBE, TaskStage.TRANSLATE}:
                 stage = claim.stage
-            elif pipeline_completed and (
+            elif media_pipeline_completed and (
                 translation_adapter is not None or used_supplemental_translation
             ):
                 stage = TaskStage.TRANSLATE

@@ -10,6 +10,7 @@ from uuid import UUID
 import httpx
 
 from backend.app.schemas.agent_runtime import InternalAgentHandoff
+from backend.app.schemas.courseware import InternalCoursewareWrite
 from backend.app.schemas.task import (
     InternalAssetRead,
     InternalTaskClaim,
@@ -26,6 +27,8 @@ class JobStore(Protocol):
 
     def save_transcript(self, task_id: UUID, transcript: InternalTranscriptWrite) -> None: ...
 
+    def save_courseware(self, task_id: UUID, courseware: InternalCoursewareWrite) -> None: ...
+
 
 class ClaimingJobStore(JobStore, Protocol):
     def claim(self, request: InternalTaskClaimRequest) -> InternalTaskClaim | None: ...
@@ -39,12 +42,16 @@ class ClaimingJobStore(JobStore, Protocol):
 class LocalJobStore:
     events: dict[UUID, list[InternalTaskStateUpdate]] = field(default_factory=dict)
     transcripts: dict[UUID, InternalTranscriptWrite] = field(default_factory=dict)
+    courseware: dict[UUID, InternalCoursewareWrite] = field(default_factory=dict)
 
     def update_state(self, task_id: UUID, update: InternalTaskStateUpdate) -> None:
         self.events.setdefault(task_id, []).append(update)
 
     def save_transcript(self, task_id: UUID, transcript: InternalTranscriptWrite) -> None:
         self.transcripts[task_id] = transcript
+
+    def save_courseware(self, task_id: UUID, courseware: InternalCoursewareWrite) -> None:
+        self.courseware[task_id] = courseware
 
 
 class HttpJobStore:
@@ -143,6 +150,13 @@ class HttpJobStore:
             json=transcript.model_dump(mode="json"),
         )
 
+    def save_courseware(self, task_id: UUID, courseware: InternalCoursewareWrite) -> None:
+        self._request(
+            "POST",
+            f"/api/internal/tasks/{task_id}/courseware",
+            json=courseware.model_dump(mode="json"),
+        )
+
     def download_asset(self, asset: InternalAssetRead, target: Path) -> None:
         received = 0
         try:
@@ -180,7 +194,7 @@ class HttpJobStore:
             self._remove_partial_download(target)
             raise WorkerError(
                 WorkerErrorCode.OBJECT_DOWNLOAD_FAILED,
-                "无法从限时对象地址下载课堂视频。",
+                "无法从限时对象地址下载任务输入文件。",
                 retryable=True,
             ) from None
 

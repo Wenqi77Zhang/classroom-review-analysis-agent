@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test:e2e:real": "playwright test --config playwright.config.ts",
     "test": "node tests/ui-baseline.test.mjs && node tests/upload-panel.test.mjs && node tests/backend-health.test.mjs && node tests/business-api.test.mjs && node tests/team-access.test.mjs && node tests/evidence-workbench.test.mjs && node tests/task-status-panel.test.mjs && node tests/report-flow.test.mjs && node tests/complete-flow.test.mjs"
   },
   "dependencies": {
@@ -20,12 +21,14 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "typescript": "6.0.3"
   },
   "overrides": {
+    "nanoid": "3.3.18",
     "postcss": "8.5.23",
     "sharp": "0.35.3"
   }

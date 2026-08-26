@@ -34,6 +34,102 @@
     "Fraunces Variable", "LXGW WenKai Screen R", "KaiTi", "STKaiti", serif;
 }
 
+/* Real page-aligned courseware evidence: same quiet glass palette as the
+   transcript editor, with explicit controls for older teaching staff. */
+.courseware-evidence-panel {
+  margin-top: 18px;
+  padding: 22px;
+  border: 1px solid rgba(91, 104, 91, 0.2);
+  border-radius: 24px;
+  background: rgba(247, 249, 245, 0.76);
+  box-shadow: 0 20px 60px rgba(43, 52, 47, 0.08);
+  backdrop-filter: blur(24px);
+}
+
+.courseware-evidence-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.courseware-evidence-panel h3 {
+  margin: 4px 0;
+}
+
+.courseware-evidence-panel header p,
+.courseware-evidence-panel > small {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.courseware-evidence-panel header a {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 15px;
+  border: 1px solid rgba(70, 99, 91, 0.28);
+  border-radius: 999px;
+  color: var(--indigo-deep);
+  background: rgba(255, 255, 255, 0.58);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.courseware-evidence-panel nav {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 12px;
+  padding-bottom: 6px;
+  overflow-x: auto;
+}
+
+.courseware-evidence-panel nav button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 7px 13px;
+  border: 1px solid rgba(91, 104, 91, 0.18);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.courseware-evidence-panel nav button.active {
+  border-color: rgba(70, 99, 91, 0.42);
+  color: var(--indigo-deep);
+  background: rgba(213, 228, 218, 0.72);
+  font-weight: 700;
+}
+
+.courseware-evidence-panel blockquote {
+  max-height: 300px;
+  margin: 0 0 12px;
+  padding: 18px 20px;
+  overflow: auto;
+  border-left: 3px solid rgba(70, 99, 91, 0.54);
+  border-radius: 4px 16px 16px 4px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.54);
+  font-size: 16px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .courseware-evidence-panel > header {
+    display: grid;
+  }
+
+  .courseware-evidence-panel header a {
+    justify-self: start;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -2496,7 +2592,14 @@ textarea {
 .evidence-media-column,
 .evidence-review-column {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 16px;
+}
+
+.evidence-media-column {
+  contain: inline-size;
+  overflow: clip;
 }
 
 .video-placeholder,
@@ -2504,6 +2607,16 @@ textarea {
   width: 100%;
   min-height: 280px;
   border-radius: 20px;
+}
+
+.evidence-video-frame {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  justify-self: start;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #1f2a2c;
 }
 
 .video-placeholder {
@@ -2537,6 +2650,11 @@ textarea {
 
 .evidence-video {
   display: block;
+  min-width: 0;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  object-fit: contain;
   background: #1f2a2c;
 }
 
@@ -3609,16 +3727,16 @@ textarea {
 
 .conclusion-review-carousel {
   display: grid;
-  gap: 0;
+  gap: 16px;
 }
 
 .conclusion-review-queue {
   display: grid;
   gap: 17px;
-  margin-bottom: -1px;
+  margin: 0;
   padding: 18px 20px 20px;
   border: 1px solid rgba(91, 104, 91, 0.18);
-  border-radius: 24px 24px 10px 10px;
+  border-radius: 24px;
   background: linear-gradient(145deg, rgba(247, 250, 247, 0.86), rgba(222, 232, 225, 0.62));
   box-shadow: 0 12px 34px rgba(43, 52, 47, 0.08);
   backdrop-filter: blur(22px) saturate(1.08);

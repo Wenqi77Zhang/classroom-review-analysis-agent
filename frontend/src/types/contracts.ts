@@ -123,6 +123,13 @@ export type TranscriptRead = {
   duration_ms: number;
   segments: TranscriptSegment[];
 };
+export type CoursewarePageRead = {
+  id: string;
+  task_id: string;
+  asset_id: string;
+  page_no: number;
+  text: string;
+};
 export type TranscriptSegmentUpdate = {
   text?: string | null;
   speaker?: string | null;

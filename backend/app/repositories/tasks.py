@@ -189,16 +189,16 @@ async def handoff_task_to_agent(
     task_id: UUID,
     worker_id: str,
 ) -> ProcessingTask:
-    """Worker 成功写入逐字稿后，显式释放租约并进入 Agent 队列。"""
+    """Worker 完成逐字稿与课件证据索引后释放租约并进入 Agent 队列。"""
 
     now = datetime.now(UTC)
     task = await get_internal_task(session, task_id)
     if (
         TaskStatus(task.status) is not TaskStatus.RUNNING
-        or TaskStage(task.stage) not in {TaskStage.TRANSCRIBE, TaskStage.TRANSLATE}
+        or TaskStage(task.stage) is not TaskStage.BUILD_EVIDENCE_INDEX
         or task.progress < 1.0
     ):
-        raise StateConflictError("只有已完成转写或双语对齐的运行中任务可以交给 Agent。")
+        raise StateConflictError("只有已完成证据索引的运行中任务可以交给 Agent。")
     if (
         task.claimed_by != worker_id
         or task.lease_expires_at is None
@@ -222,7 +222,7 @@ async def handoff_task_to_agent(
     task.claimed_by = None
     task.lease_expires_at = None
     task.finished_at = None
-    await append_task_event(session, task, message="Worker 已完成转写，等待 Agent 分析。")
+    await append_task_event(session, task, message="Worker 已完成证据索引，等待 Agent 分析。")
     await session.flush()
     await session.refresh(task)
     return task

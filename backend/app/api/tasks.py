@@ -17,7 +17,7 @@ from backend.app.dependencies import (
 )
 from backend.app.errors import PermissionDeniedError, StateConflictError, current_trace_id
 from backend.app.models import ProcessingTask, User
-from backend.app.repositories.results import get_transcript_segments
+from backend.app.repositories.results import get_courseware_pages, get_transcript_segments
 from backend.app.repositories.tasks import (
     append_task_event,
     claim_task,
@@ -381,6 +381,23 @@ async def post_agent_claim(
         )
         for segment in segments
     ]
+    pages = await get_courseware_pages(session, task.owner_id, task.id)
+    evidence.extend(
+        InternalAgentEvidence(
+            id=page.id,
+            task_id=task.id,
+            owner_id=task.owner_id,
+            reference=EvidenceReference(
+                source_type=EvidenceSourceType.COURSEWARE,
+                asset_id=page.asset_id,
+                page_no=page.page_no,
+                quote=page.text[:2000],
+            ),
+            text=page.text[:10000],
+            metadata={"page_no": page.page_no},
+        )
+        for page in pages
+    )
     return InternalAgentTaskClaim(
         task_id=task.id,
         classroom_id=task.classroom_id,

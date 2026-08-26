@@ -7,6 +7,7 @@ import {
   ApiClientError,
   getAssetDownloadUrl,
   getConclusions,
+  getCoursewarePages,
   getTaskAssets,
   getTranscript,
   reviewConclusion,
@@ -15,6 +16,9 @@ import {
 } from "@/lib/api";
 import type {
   AnalysisConclusion,
+  AssetRead,
+  CoursewarePageRead,
+  EvidenceReference,
   ReviewAction,
   TaskRead,
   TranscriptRead,
@@ -28,6 +32,9 @@ type WorkbenchData = {
   videoUrl?: string;
   transcript: TranscriptRead;
   conclusions: AnalysisConclusion[];
+  coursewarePages: CoursewarePageRead[];
+  coursewareAssets: Record<string, AssetRead>;
+  coursewareUrls: Record<string, string>;
 };
 
 const conclusionLabels = {
@@ -103,6 +110,7 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
   const [currentVideoTimeMs, setCurrentVideoTimeMs] = useState(0);
   const [seekToMs, setSeekToMs] = useState(0);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [selectedCoursewarePageId, setSelectedCoursewarePageId] = useState<string | null>(null);
   const [activeConclusionIndex, setActiveConclusionIndex] = useState(0);
   const [queueFeedback, setQueueFeedback] = useState("");
   const [queueExpanded, setQueueExpanded] = useState(false);
@@ -112,16 +120,31 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
     setLoading(true);
     setError(null);
     try {
-      const [assets, transcript, classroomConclusions] = await Promise.all([
+      const [assets, transcript, classroomConclusions, coursewarePages] = await Promise.all([
         getTaskAssets(task.id),
         getTranscript(task.id),
         getConclusions(task.classroom_id),
+        getCoursewarePages(task.id),
       ]);
       const video = assets.find((asset) => asset.kind === "video");
-      const download = video ? await getAssetDownloadUrl(video.id) : undefined;
+      const coursewareAssets = assets.filter((asset) => asset.kind === "courseware");
+      const [download, coursewareDownloads] = await Promise.all([
+        video ? getAssetDownloadUrl(video.id) : Promise.resolve(undefined),
+        Promise.all(
+          coursewareAssets.map(async (asset) => [
+            asset.id,
+            (await getAssetDownloadUrl(asset.id)).url,
+          ] as const),
+        ),
+      ]);
       setData({
         videoUrl: download?.url,
         transcript,
+        coursewarePages,
+        coursewareAssets: Object.fromEntries(
+          coursewareAssets.map((asset) => [asset.id, asset]),
+        ),
+        coursewareUrls: Object.fromEntries(coursewareDownloads),
         conclusions: classroomConclusions.filter(
           (conclusion) => conclusion.task_id === task.id,
         ),
@@ -131,6 +154,11 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
         transcript.segments.some((segment) => segment.id === current)
           ? current
           : transcript.segments[0]?.id ?? null,
+      );
+      setSelectedCoursewarePageId((current) =>
+        coursewarePages.some((page) => page.id === current)
+          ? current
+          : coursewarePages[0]?.id ?? null,
       );
     } catch (loadError) {
       setError(normalizeError(loadError));
@@ -169,6 +197,9 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
   );
   const selectedSegment = data?.transcript.segments.find(
     (segment) => segment.id === selectedSegmentId,
+  );
+  const selectedCoursewarePage = data?.coursewarePages.find(
+    (page) => page.id === selectedCoursewarePageId,
   );
   const reviewedConclusionCount =
     data?.conclusions.filter((item) => item.review_status !== "pending").length ?? 0;
@@ -329,11 +360,13 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
 
       <div className="evidence-workbench-grid">
         <div className="evidence-media-column">
-          <VideoPlayer
-            videoUrl={data.videoUrl}
-            seekToMs={seekToMs}
-            onTimeUpdate={setCurrentVideoTimeMs}
-          />
+          <div className="evidence-video-frame">
+            <VideoPlayer
+              videoUrl={data.videoUrl}
+              seekToMs={seekToMs}
+              onTimeUpdate={setCurrentVideoTimeMs}
+            />
+          </div>
           <TranscriptTimeline
             items={timelineItems}
             currentTimeMs={currentVideoTimeMs}
@@ -348,6 +381,15 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
           />
           {selectedSegment && (
             <TranscriptSegmentEditor segment={selectedSegment} onSave={saveSegment} />
+          )}
+          {data.coursewarePages.length > 0 && (
+            <CoursewareEvidencePanel
+              pages={data.coursewarePages}
+              assets={data.coursewareAssets}
+              downloadUrls={data.coursewareUrls}
+              selectedPageId={selectedCoursewarePage?.id ?? null}
+              onSelectPage={setSelectedCoursewarePageId}
+            />
           )}
         </div>
 
@@ -468,12 +510,28 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
                   <div key={conclusion.id} hidden={index !== activeConclusionIndex}>
                     <ConclusionReviewCard
                       conclusion={conclusion}
-                      onSeek={(timeMs, segmentId) => {
-                        if (timeMs != null) {
-                          setSeekToMs(timeMs);
-                          setCurrentVideoTimeMs(timeMs);
+                      onLocateEvidence={(reference) => {
+                        if (reference.source_type === "courseware") {
+                          const page = data.coursewarePages.find(
+                            (item) =>
+                              item.asset_id === reference.asset_id &&
+                              item.page_no === reference.page_no,
+                          );
+                          if (page) {
+                            setSelectedCoursewarePageId(page.id);
+                            document
+                              .getElementById("courseware-evidence-panel")
+                              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }
+                          return;
                         }
-                        if (segmentId) setSelectedSegmentId(segmentId);
+                        if (reference.start_ms != null) {
+                          setSeekToMs(reference.start_ms);
+                          setCurrentVideoTimeMs(reference.start_ms);
+                        }
+                        if (reference.segment_id) {
+                          setSelectedSegmentId(reference.segment_id);
+                        }
                       }}
                       onReview={persistReview}
                     />
@@ -505,6 +563,66 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
           )}
         </div>
       </div>
+    </section>
+  );
+}
+
+function CoursewareEvidencePanel({
+  pages,
+  assets,
+  downloadUrls,
+  selectedPageId,
+  onSelectPage,
+}: {
+  pages: CoursewarePageRead[];
+  assets: Record<string, AssetRead>;
+  downloadUrls: Record<string, string>;
+  selectedPageId: string | null;
+  onSelectPage: (pageId: string) => void;
+}) {
+  const selectedPage =
+    pages.find((page) => page.id === selectedPageId) ?? pages[0];
+  if (!selectedPage) return null;
+  const asset = assets[selectedPage.asset_id];
+  const baseUrl = downloadUrls[selectedPage.asset_id];
+  const isPdf = asset?.content_type === "application/pdf";
+  const sourceUrl = baseUrl
+    ? `${baseUrl}${isPdf ? `#page=${selectedPage.page_no}` : ""}`
+    : undefined;
+
+  return (
+    <section
+      className="courseware-evidence-panel"
+      id="courseware-evidence-panel"
+      aria-labelledby="courseware-evidence-title"
+    >
+      <header>
+        <div>
+          <span className="evidence-kicker">COURSEWARE EVIDENCE</span>
+          <h3 id="courseware-evidence-title">课件原页证据</h3>
+          <p>{asset?.filename ?? "课堂课件"} · 第 {selectedPage.page_no} 页</p>
+        </div>
+        {sourceUrl && (
+          <a href={sourceUrl} target="_blank" rel="noreferrer">
+            {isPdf ? "打开原文件并定位此页" : "打开原课件核对此页"}
+          </a>
+        )}
+      </header>
+      <nav aria-label="选择课件证据页">
+        {pages.map((page) => (
+          <button
+            type="button"
+            key={page.id}
+            className={page.id === selectedPage.id ? "active" : ""}
+            aria-current={page.id === selectedPage.id ? "page" : undefined}
+            onClick={() => onSelectPage(page.id)}
+          >
+            {assets[page.asset_id]?.filename ?? "课件"} · 第 {page.page_no} 页
+          </button>
+        ))}
+      </nav>
+      <blockquote>{selectedPage.text}</blockquote>
+      <small>页码与文字来自当前任务的真实课件解析结果，可回到原文件人工核对。</small>
     </section>
   );
 }
@@ -586,11 +704,11 @@ function TranscriptSegmentEditor({
 
 function ConclusionReviewCard({
   conclusion,
-  onSeek,
+  onLocateEvidence,
   onReview,
 }: {
   conclusion: AnalysisConclusion;
-  onSeek: (timeMs?: number | null, segmentId?: string | null) => void;
+  onLocateEvidence: (reference: EvidenceReference) => void;
   onReview: (
     conclusion: AnalysisConclusion,
     action: ReviewAction,
@@ -649,10 +767,10 @@ function ConclusionReviewCard({
           <button
             type="button"
             key={reference.id ?? `${conclusion.id}-${index}`}
-            onClick={() => onSeek(reference.start_ms, reference.segment_id)}
+            onClick={() => onLocateEvidence(reference)}
           >
             <strong>
-              证据 {index + 1} · {reference.source_type} · {formatTimestamp(reference.start_ms)}
+              证据 {index + 1} · {reference.source_type === "courseware" ? "课件" : reference.source_type} · {reference.source_type === "courseware" ? `第 ${reference.page_no ?? "?"} 页` : formatTimestamp(reference.start_ms)}
             </strong>
             <span>{reference.quote || "点击定位到对应原文或画面"}</span>
           </button>

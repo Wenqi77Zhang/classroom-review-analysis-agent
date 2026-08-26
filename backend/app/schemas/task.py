@@ -167,6 +167,7 @@ INTERNAL_ENDPOINT_SCOPES: dict[str, frozenset[ServiceIdentity]] = {
     # 两者都要回写状态，但各自只能改自己负责的阶段，见 AGENT_WRITABLE_STAGES。
     "tasks:state": frozenset({ServiceIdentity.WORKER, ServiceIdentity.AGENT}),
     "tasks:transcript": frozenset({ServiceIdentity.WORKER}),
+    "tasks:courseware": frozenset({ServiceIdentity.WORKER}),
     "tasks:conclusions": frozenset({ServiceIdentity.AGENT}),
     "tasks:trace": frozenset({ServiceIdentity.AGENT}),
 }

@@ -213,6 +213,31 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert complete.status_code == 200
             assert complete.json()["upload_status"] == "uploaded"
 
+            courseware_upload = await client.post(
+                f"/api/classrooms/{classroom_id}/uploads/presign",
+                json={
+                    "kind": "courseware",
+                    "filename": "lesson.pdf",
+                    "content_type": "application/pdf",
+                    "size_bytes": 15,
+                },
+                headers=first_headers,
+            )
+            assert courseware_upload.status_code == 201
+            courseware_asset_id = courseware_upload.json()["asset_id"]
+            courseware_object_key = courseware_upload.json()["object_key"]
+            storage.objects[courseware_object_key] = ObjectMetadata(
+                size_bytes=15,
+                content_type="application/pdf",
+                etag="courseware-etag",
+            )
+            courseware_complete = await client.post(
+                f"/api/assets/{courseware_asset_id}/complete",
+                json={"etag": '"courseware-etag"'},
+                headers=first_headers,
+            )
+            assert courseware_complete.status_code == 200
+
             cross_account = await client.get(
                 f"/api/assets/{asset_id}/download-url",
                 headers=second_headers,
@@ -247,7 +272,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
             task_response = await client.post(
                 f"/api/classrooms/{classroom_id}/tasks",
                 json={
-                    "asset_ids": [asset_id],
+                    "asset_ids": [asset_id, courseware_asset_id],
                     "analysis_contract": analysis_contract,
                 },
                 headers=first_headers,
@@ -262,8 +287,14 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 headers=first_headers,
             )
             assert task_assets.status_code == 200
-            assert [item["id"] for item in task_assets.json()] == [asset_id]
-            assert task_assets.json()[0]["kind"] == "video"
+            assert {item["id"] for item in task_assets.json()} == {
+                asset_id,
+                courseware_asset_id,
+            }
+            assert {item["kind"] for item in task_assets.json()} == {
+                "video",
+                "courseware",
+            }
             cross_account_task_assets = await client.get(
                 f"/api/tasks/{task_id}/assets",
                 headers=second_headers,
@@ -306,11 +337,12 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert claimed.status_code == 200
             assert claimed.json()["task_id"] == task_id
-            assert claimed.json()["assets"][0]["id"] == asset_id
-            assert claimed.json()["assets"][0]["download_url"].startswith(
+            claimed_assets = {item["id"]: item for item in claimed.json()["assets"]}
+            assert set(claimed_assets) == {asset_id, courseware_asset_id}
+            assert claimed_assets[asset_id]["download_url"].startswith(
                 "https://storage.invalid/download/"
             )
-            assert claimed.json()["assets"][0]["verified_etag"] == "verified-etag"
+            assert claimed_assets[asset_id]["verified_etag"] == "verified-etag"
 
             wrong_heartbeat = await client.post(
                 f"/api/internal/tasks/{task_id}/heartbeat",
@@ -398,6 +430,51 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert transcribed.status_code == 200
 
+            parsing_courseware = await client.patch(
+                f"/api/internal/tasks/{task_id}/state",
+                json={"stage": "parse_courseware", "status": "running", "progress": 0.0},
+                headers=worker_headers,
+            )
+            assert parsing_courseware.status_code == 200
+            stored_courseware = await client.post(
+                f"/api/internal/tasks/{task_id}/courseware",
+                json={
+                    "trace_id": task_trace_id,
+                    "pages": [
+                        {
+                            "asset_id": courseware_asset_id,
+                            "page_no": 2,
+                            "text": "检索流程：先明确目标，再选择关键词。",
+                        }
+                    ],
+                },
+                headers=worker_headers,
+            )
+            assert stored_courseware.status_code == 201
+            courseware_page_id = stored_courseware.json()[0]["id"]
+            teacher_courseware = await client.get(
+                f"/api/tasks/{task_id}/courseware",
+                headers=first_headers,
+            )
+            assert teacher_courseware.status_code == 200
+            assert teacher_courseware.json()[0]["page_no"] == 2
+            assert teacher_courseware.json()[0]["asset_id"] == courseware_asset_id
+            cross_account_courseware = await client.get(
+                f"/api/tasks/{task_id}/courseware",
+                headers=second_headers,
+            )
+            assert cross_account_courseware.status_code == 404
+            indexed = await client.patch(
+                f"/api/internal/tasks/{task_id}/state",
+                json={
+                    "stage": "build_evidence_index",
+                    "status": "running",
+                    "progress": 1.0,
+                },
+                headers=worker_headers,
+            )
+            assert indexed.status_code == 200
+
             forbidden_agent_stage = await client.patch(
                 f"/api/internal/tasks/{task_id}/state",
                 json={"stage": "transcribe", "status": "running", "progress": 0.6},
@@ -440,6 +517,16 @@ async def test_shortest_processing_chain_and_retry() -> None:
             assert agent_claim.json()["evidence"][0]["id"] == segment_id
             assert agent_claim.json()["evidence"][0]["reference"]["segment_id"] == segment_id
             assert agent_claim.json()["evidence"][0]["text"] == "请说明检索的第一步。"
+            assert agent_claim.json()["evidence"][1]["id"] == courseware_page_id
+            courseware_reference = agent_claim.json()["evidence"][1]["reference"]
+            assert courseware_reference["source_type"] == "courseware"
+            assert courseware_reference["asset_id"] == courseware_asset_id
+            assert courseware_reference["page_no"] == 2
+            assert courseware_reference["quote"] == "检索流程：先明确目标，再选择关键词。"
+            assert courseware_reference["segment_id"] is None
+            assert agent_claim.json()["evidence"][1]["text"] == (
+                "检索流程：先明确目标，再选择关键词。"
+            )
 
             wrong_agent_heartbeat = await client.post(
                 f"/api/internal/agent/tasks/{task_id}/heartbeat",
@@ -528,7 +615,7 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 "agent.started",
             ]
             assert task_audit_events[0]["details"] == {
-                "asset_count": 1,
+                "asset_count": 2,
                 "privacy_mode": "local",
             }
             assert task_audit_events[1]["details"] == {
@@ -666,6 +753,28 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert ungrounded.status_code == 400
 
+            nonexistent_courseware_page = await client.post(
+                f"/api/internal/tasks/{task_id}/conclusions",
+                json={
+                    "conclusions": [
+                        {
+                            "type": "fact",
+                            "content": "引用了不存在的课件页。",
+                            "trace_id": task_trace_id,
+                            "evidence_refs": [
+                                {
+                                    "source_type": "courseware",
+                                    "asset_id": courseware_asset_id,
+                                    "page_no": 999,
+                                }
+                            ],
+                        }
+                    ]
+                },
+                headers=agent_headers,
+            )
+            assert nonexistent_courseware_page.status_code == 404
+
             conclusions = await client.post(
                 f"/api/internal/tasks/{task_id}/conclusions",
                 json={
@@ -684,6 +793,12 @@ async def test_shortest_processing_chain_and_retry() -> None:
                                     "start_ms": 100,
                                     "end_ms": 1900,
                                     "quote": "请说明检索的第一步。",
+                                },
+                                {
+                                    "source_type": "courseware",
+                                    "asset_id": courseware_asset_id,
+                                    "page_no": 2,
+                                    "quote": "检索流程：先明确目标，再选择关键词。",
                                 }
                             ],
                         }
@@ -881,6 +996,33 @@ async def test_shortest_processing_chain_and_retry() -> None:
             )
             assert completed_translation.status_code == 200
 
+            resumed_parse = await restarted_client.patch(
+                f"/api/internal/tasks/{retry_task_id}/state",
+                json={
+                    "stage": "parse_courseware",
+                    "status": "running",
+                    "progress": 0.0,
+                },
+                headers=worker_headers,
+            )
+            assert resumed_parse.status_code == 200
+            resumed_courseware = await restarted_client.post(
+                f"/api/internal/tasks/{retry_task_id}/courseware",
+                json={"pages": []},
+                headers=worker_headers,
+            )
+            assert resumed_courseware.status_code == 201
+            resumed_index = await restarted_client.patch(
+                f"/api/internal/tasks/{retry_task_id}/state",
+                json={
+                    "stage": "build_evidence_index",
+                    "status": "running",
+                    "progress": 1.0,
+                },
+                headers=worker_headers,
+            )
+            assert resumed_index.status_code == 200
+
             resumed_handoff = await restarted_client.post(
                 f"/api/internal/tasks/{retry_task_id}/handoff-agent",
                 json={"worker_id": "worker-after-expiry"},
@@ -908,9 +1050,9 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 )
             )
             actions = [event.action for event in audit_events]
-            assert actions.count("asset.upload_requested") == 2
+            assert actions.count("asset.upload_requested") == 3
             assert actions.count("asset.upload_verification_failed") == 1
-            assert actions.count("asset.upload_verified") == 1
+            assert actions.count("asset.upload_verified") == 2
             assert actions.count("task.created") == 2
             assert actions.count("task.retried") == 1
             assert actions.count("transcript.replaced") == 3

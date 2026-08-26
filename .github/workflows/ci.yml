@@ -98,7 +98,11 @@ jobs:
         run: npm ci
       - name: Run frontend contract tests
         run: npm test
+      - name: Validate browser E2E specification
+        run: npm run test:e2e:real
       - name: Run TypeScript checks
         run: npm run typecheck
       - name: Build production frontend
         run: npm run build
+      - name: Reject high-severity dependency advisories
+        run: npm audit --audit-level=high
