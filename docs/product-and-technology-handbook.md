@@ -532,3 +532,33 @@ AI 可参与调研、需求梳理、方案、设计、代码、调试、测试�
 - 小组报告准确区分五位成员的计划、实际完成、协作修复和尝试。
 
 历史方案、被替代字段和逐日长日志不再进入本手册正文；需要审计时通过 Git、PR 与测试记录追溯。
+# 生产部署与回滚（2026-08-27 成熟度补强）
+
+生产拓扑由 `deploy/compose.production.yml` 固化：Next.js 只绑定宿主 loopback；FastAPI、Worker、
+Agent 和 PostgreSQL 均不映射宿主端口。前端通过容器私网调用后端，课堂媒体仍直接进入
+私有 B2。后端 `/health` 只说明进程存活，`/health/ready` 同时检查数据库与对象存储；
+本地依赖故障时网页可进入并明确禁用上传，生产编排器则只在就绪检查成功后开放入口。对象存储
+用固定的两字节非敏感 sentinel 验证受限应用密钥，避免错误要求 `HeadBucket` 这类宽泛权限。
+
+生产环境启动前由 `scripts/production_preflight.py` fail-closed 校验 HTTPS 来源、独立服务
+令牌、强演示口令、对象存储和真实模型路由。前后端统一设置 CSP、HSTS、拒绝嵌入、
+禁止 MIME 嗅探、最小 Referrer 与 Permissions Policy；访问码和演示会话入口还包含同源
+检查及有界限流。进程内限流只作为最后一道防线，多实例部署仍应在 CDN/WAF 配置共享限流。
+
+部署步骤：
+
+1. 复制 `deploy/.env.production.example` 为根目录 `.env.production`，逐项替换占位值；
+   该文件被 Git 忽略。
+2. 为正式域名配置 TLS，并将 B2 CORS 精确限制为该 HTTPS Origin。
+3. 使用反向代理时运行 `docker compose --env-file .env.production -f deploy/compose.production.yml up -d --build`；
+   使用 Cloudflare 稳定域名时，在控制台把源站设为 `http://frontend:3000`，将远程托管 Tunnel
+   token 只写入本机 `.env.production`，再加 `--profile tunnel` 启动。token 通过环境变量传入，
+   不进入命令行进程参数。
+4. 验证前端 `/api/backend-health`、后端容器 `/health/ready`、一次授权样例上传及失败重试。
+5. 回滚时固定到上一条绿色 main 提交重新构建；数据库只允许 Alembic 已验证的迁移链，
+   不以删除卷的方式回滚。先备份 PostgreSQL，再执行任何降级。
+
+当前仓库没有需求方正式域名、远程主机或 Cloudflare 账户/域名授权，因此不能把临时
+`trycloudflare.com` 地址冒充永久部署。Render 免费后台 Worker 不可用且免费 PostgreSQL
+会过期，也不符合私有课堂的稳定交付边界；正式部署需要一台可运行四个服务的受控主机，
+或等价的付费 Web/Worker/PostgreSQL 组合。

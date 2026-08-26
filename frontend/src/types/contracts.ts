@@ -38,6 +38,10 @@ export type BackendHealthResponse = {
   reachable: boolean;
   status: "ok" | "unavailable";
   appEnv?: "development" | "test" | "production";
+  dependencies?: {
+    database?: "ok" | "unavailable";
+    object_storage?: "ok" | "unavailable";
+  };
   traceId?: string;
 };
 

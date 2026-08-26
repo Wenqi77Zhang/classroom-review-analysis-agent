@@ -31,6 +31,11 @@ mkdir -p "$LOGS"
 (cd "$ROOT" && "$PYTHON" scripts/runtime_preflight.py)
 (cd "$ROOT" && "$PYTHON" -m alembic -c backend/alembic.ini upgrade head)
 echo "数据库迁移已就绪。"
+if (cd "$ROOT" && "$PYTHON" scripts/ensure_storage_readiness.py); then
+  echo "对象存储就绪对象已核验。"
+else
+  echo "警告：对象存储尚未就绪；网站将降级启动，真实上传暂不可用。" >&2
+fi
 
 assert_port_available() {
   "$PYTHON" -c 'import socket,sys; s=socket.socket(); s.bind(("127.0.0.1", int(sys.argv[1]))); s.close()' "$1" \

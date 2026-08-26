@@ -1771,6 +1771,20 @@ nav {
   background: rgba(255, 255, 255, 0.5);
 }
 
+.task-status-summary .task-next-action {
+  margin-top: 8px;
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.task-status-summary small {
+  display: block;
+  margin-top: 7px;
+  color: var(--ink-faint);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .task-preview-controls {
   display: flex;
   flex-wrap: wrap;

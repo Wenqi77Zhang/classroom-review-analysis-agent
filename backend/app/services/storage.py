@@ -14,6 +14,8 @@ from fastapi import Request
 from backend.app.config import Settings
 from backend.app.errors import UpstreamUnavailableError
 
+READINESS_OBJECT_KEY = "_system/readiness-v1"
+
 
 @dataclass(frozen=True, slots=True)
 class ObjectMetadata:
@@ -24,6 +26,8 @@ class ObjectMetadata:
 
 
 class ObjectStorage(Protocol):
+    async def ready(self) -> None: ...
+
     async def presign_upload(self, object_key: str, content_type: str) -> str: ...
 
     async def presign_download(self, object_key: str) -> str: ...
@@ -63,6 +67,23 @@ class S3ObjectStorage:
             "put_object",
             {"Bucket": self._bucket, "Key": object_key, "ContentType": content_type},
         )
+
+    async def ready(self) -> None:
+        """Verify that the configured private bucket is reachable.
+
+        Restricted application keys commonly cannot call ``HeadBucket`` even
+        though they can read and write objects. Probe the fixed, non-sensitive
+        readiness sentinel provisioned at startup instead, so a missing object
+        is also treated as not ready without listing files or exposing a URL.
+        """
+        try:
+            await asyncio.to_thread(
+                self._client.head_object,
+                Bucket=self._bucket,
+                Key=READINESS_OBJECT_KEY,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise UpstreamUnavailableError("对象存储暂时不可用。") from exc
 
     async def presign_download(self, object_key: str) -> str:
         return await asyncio.to_thread(

@@ -9,6 +9,7 @@ const readFrontend = (path) => readFileSync(resolve(frontendRoot, path), "utf8")
 const helper = readFrontend("src/lib/server/team-access.ts");
 const proxy = readFrontend("src/proxy.ts");
 const route = readFrontend("src/app/api/team-access/route.ts");
+const guard = readFrontend("src/lib/server/request-guard.ts");
 const page = readFrontend("src/app/team-access/page.tsx");
 const script = readFileSync(
   resolve(repositoryRoot, "scripts/start-team-tunnel.ps1"),
@@ -39,10 +40,11 @@ assert.match(
 );
 assert.match(route, /"Cache-Control": "no-store"/, "验证响应不得缓存");
 assert.match(
-  route,
-  /fetchSite === "cross-site"[\s\S]*x-forwarded-host[\s\S]*new URL\(origin\)\.host === requestHost/,
+  guard,
+  /sec-fetch-site[\s\S]*cross-site[\s\S]*x-forwarded-host[\s\S]*new URL\(origin\)\.host === requestHost/,
   "反向代理后的来源校验必须拒绝跨站请求并核对外部主机名",
 );
+assert.match(route, /consumeAttempt/, "访问码入口必须启用失败尝试限流");
 assert.match(
   route,
   /TEAM_TUNNEL_INSTANCE_ID[\s\S]*\{ enabled: true, instanceId \}/,

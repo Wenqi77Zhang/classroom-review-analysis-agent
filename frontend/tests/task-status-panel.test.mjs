@@ -43,6 +43,14 @@ test("真实任务面板展示后端可回溯 trace_id", () => {
   assert.match(panel, /Trace ID：/);
 });
 
+test("真实任务面板提供与错误类型匹配的恢复建议并披露重试次数", () => {
+  assert.match(panel, /补充 SRT\/VTT 中文译文后重试/);
+  assert.match(panel, /不要重复上传/);
+  assert.match(panel, /确认视频可正常播放且格式受支持/);
+  assert.match(panel, /task\.retry_count/);
+  assert.match(panel, /每次尝试均保留在审计链中/);
+});
+
 test("复盘流程使用共享任务状态面板并仅在待复核预览展示证据", () => {
   assert.match(
     workspace,

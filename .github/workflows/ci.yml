@@ -21,6 +21,12 @@ jobs:
         run: |
           bash -n start.sh
           pwsh -NoProfile -Command '[void][scriptblock]::Create((Get-Content -Raw ./start.ps1))'
+      - name: Validate production compose topology
+        shell: bash
+        run: |
+          cp deploy/.env.production.example .env.production
+          docker compose --env-file deploy/.env.production.example -f deploy/compose.production.yml config --quiet
+          rm .env.production
 
   backend-check:
     runs-on: ubuntu-latest
@@ -76,10 +82,32 @@ jobs:
           OBJECT_STORAGE_BUCKET: ci-test-bucket
           OBJECT_STORAGE_ACCESS_KEY_ID: ci-test-access-key
           OBJECT_STORAGE_SECRET_ACCESS_KEY: ci-test-secret-key
+      - name: Validate production configuration contract
+        shell: bash
+        run: |
+          set -a
+          source deploy/.env.production.example
+          FRONTEND_ORIGIN=https://classroom-review.ci.invalid
+          DATABASE_URL=postgresql+asyncpg://classroom_review:ci-production-password@postgres:5432/classroom_review
+          JWT_SECRET=ci-production-jwt-secret-with-more-than-thirty-two-characters
+          DEMO_ACCOUNT_PASSWORD=ci-production-demo-password
+          WORKER_SERVICE_TOKEN=ci-production-worker-token
+          AGENT_SERVICE_TOKEN=ci-production-agent-token
+          OBJECT_STORAGE_ENDPOINT=https://s3.ci.invalid
+          OBJECT_STORAGE_BUCKET=ci-private-bucket
+          OBJECT_STORAGE_ACCESS_KEY_ID=ci-access-key
+          OBJECT_STORAGE_SECRET_ACCESS_KEY=ci-secret-application-key
+          TEAM_TUNNEL_ACCESS_CODE=ci-production-entrance-code
+          CLOUDFLARE_TUNNEL_TOKEN=
+          CLOUD_MODEL_CHAT_COMPLETIONS_URL=https://model.ci.invalid/v1/chat/completions
+          CLOUD_MODEL_NAME=ci-model
+          CLOUD_MODEL_API_KEY=ci-model-api-key
+          set +a
+          python scripts/production_preflight.py
       - name: Run backend tests
         run: python -m pytest -q
       - name: Run backend and Agent lint
-        run: python -m ruff check backend agent tests
+        run: python -m ruff check backend agent worker scripts tests
 
   frontend-check:
     runs-on: ubuntu-latest

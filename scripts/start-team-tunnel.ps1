@@ -7,6 +7,9 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $frontendDirectory = Join-Path $repositoryRoot "frontend"
 $frontendProcess = $null
+$tunnelProcess = $null
+$tunnelOrigin = $null
+$tunnelLog = $null
 $previousAccessCode = [Environment]::GetEnvironmentVariable(
     "TEAM_TUNNEL_ACCESS_CODE",
     "Process"
@@ -86,13 +89,25 @@ try {
         }
     }
     try {
-        $ready = Invoke-RestMethod `
-            -Uri "http://127.0.0.1:$backendPort/health/ready" `
+        $live = Invoke-RestMethod `
+            -Uri "http://127.0.0.1:$backendPort/health" `
             -Method Get `
             -TimeoutSec 5
     }
     catch {
-        throw "本地后端未就绪。请先启动 PostgreSQL、执行迁移并启动 $backendPort 端口后端。"
+        throw "本地后端进程不可达。请先启动 $backendPort 端口的课堂后端。"
+    }
+    if ($live.status -ne "ok") {
+        throw "本地端口存在服务，但不是可用的课堂后端。"
+    }
+    try {
+        $ready = Invoke-RestMethod `
+            -Uri "http://127.0.0.1:$backendPort/health/ready" `
+            -Method Get `
+            -TimeoutSec 15
+    }
+    catch {
+        throw "课堂后端在线，但数据库或对象存储尚未就绪；为避免公网用户上传失败，未开放入口。"
     }
     if ($ready.status -ne "ready") {
         throw "后端 /health/ready 未返回 ready，不能创建团队联调入口。"
@@ -179,26 +194,93 @@ try {
     Write-Host "团队联调访问码（仅通过私聊发送，本次进程停止后失效）："
     Write-Host $accessCode -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "下面将由 Cloudflare 输出随机 https://*.trycloudflare.com 地址。"
-    Write-Host "该地址是临时测试入口，不是最终部署；关闭本窗口即停止服务。"
-    Write-Host "首次用真实 B2 上传前，必须把这个精确 HTTPS 地址加入 Bucket CORS。"
-    Write-Host "按 Ctrl+C 关闭入口。"
-    Write-Host ""
-
+    $tunnelLog = Join-Path ([IO.Path]::GetTempPath()) `
+        ("classroom-review-tunnel-{0}.log" -f $instanceId)
     $tunnelProcess = Start-Process `
         -FilePath $cloudflaredPath `
-        -ArgumentList @("tunnel", "--url", "http://127.0.0.1:$frontendPort") `
+        -ArgumentList @(
+            "tunnel",
+            "--url", "http://127.0.0.1:$frontendPort",
+            "--logfile", $tunnelLog,
+            "--loglevel", "info"
+        ) `
         -UseNewEnvironment `
-        -NoNewWindow `
-        -Wait `
+        -WindowStyle Hidden `
         -PassThru
-    if ($tunnelProcess.ExitCode -ne 0) {
-        throw "cloudflared 异常退出。若提示 config.yml 冲突，请按统一环境文档处理。"
+
+    foreach ($attempt in 1..60) {
+        if ($tunnelProcess.HasExited) {
+            throw "cloudflared 异常退出。请检查网络、代理或 cloudflared 配置。"
+        }
+        if (Test-Path -LiteralPath $tunnelLog) {
+            $logText = Get-Content -LiteralPath $tunnelLog -Raw -ErrorAction SilentlyContinue
+            $match = [regex]::Match(
+                $logText,
+                'https://[a-z0-9-]+\.trycloudflare\.com',
+                [Text.RegularExpressions.RegexOptions]::IgnoreCase
+            )
+            if ($match.Success) {
+                $tunnelOrigin = $match.Value.ToLowerInvariant()
+                break
+            }
+        }
+        Start-Sleep -Seconds 1
     }
+    if (-not $tunnelOrigin) {
+        throw "60 秒内没有取得 Quick Tunnel HTTPS 地址，已停止且未修改 B2 CORS。"
+    }
+
+    $projectPython = Join-Path $repositoryRoot ".venv\Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $projectPython)) {
+        throw "项目 .venv 不存在，无法安全配置本次 B2 CORS。"
+    }
+    $corsScript = Join-Path $PSScriptRoot "configure-team-tunnel-cors.py"
+    & $projectPython $corsScript --env-file $envFile apply --origin $tunnelOrigin
+    if ($LASTEXITCODE -ne 0) {
+        throw "无法为本次精确 HTTPS 地址配置 B2 CORS，公网入口已停止。"
+    }
+    & $projectPython $corsScript --env-file $envFile verify --origin $tunnelOrigin
+    if ($LASTEXITCODE -ne 0) {
+        throw "B2 CORS 预检失败，公网入口已停止。"
+    }
+
+    Write-Host ""
+    Write-Host "临时公网验收地址：" -NoNewline
+    Write-Host $tunnelOrigin -ForegroundColor Cyan
+    Write-Host "团队联调访问码（仅私聊发送，本次进程停止后失效）："
+    Write-Host $accessCode -ForegroundColor Cyan
+    Write-Host "B2 已只授权本次精确 HTTPS 地址；关闭入口时会自动撤销。"
+    Write-Host "该地址仅用于短时验收，不是永久生产域名。按 Ctrl+C 关闭入口。"
+    Write-Host ""
+
+    Wait-Process -Id $tunnelProcess.Id
 }
 finally {
+    if ($null -ne $tunnelProcess -and -not $tunnelProcess.HasExited) {
+        & taskkill.exe /PID $tunnelProcess.Id /T /F *> $null
+    }
+    if ($tunnelOrigin) {
+        $projectPython = Join-Path $repositoryRoot ".venv\Scripts\python.exe"
+        $corsScript = Join-Path $PSScriptRoot "configure-team-tunnel-cors.py"
+        if (
+            (Test-Path -LiteralPath $projectPython) -and
+            (Test-Path -LiteralPath $corsScript) -and
+            (Test-Path -LiteralPath (Join-Path $repositoryRoot ".env"))
+        ) {
+            try {
+                & $projectPython $corsScript `
+                    --env-file (Join-Path $repositoryRoot ".env") remove
+            }
+            catch {
+                Write-Warning "入口已关闭，但 B2 临时 CORS 撤销失败；请运行配置脚本 remove。"
+            }
+        }
+    }
     if ($null -ne $frontendProcess -and -not $frontendProcess.HasExited) {
         & taskkill.exe /PID $frontendProcess.Id /T /F *> $null
+    }
+    if ($tunnelLog -and (Test-Path -LiteralPath $tunnelLog)) {
+        Remove-Item -LiteralPath $tunnelLog -Force -ErrorAction SilentlyContinue
     }
     Restore-ProcessEnvironment `
         -Name "TEAM_TUNNEL_ACCESS_CODE" `

@@ -24,7 +24,7 @@ import type {
   TaskRead,
 } from "@/types/contracts";
 
-type BackendHealthState = "checking" | "reachable" | "unreachable";
+type BackendHealthState = "checking" | "reachable" | "degraded" | "unreachable";
 type UploadPhase =
   | "pending"
   | "presigning"
@@ -164,9 +164,10 @@ export function UploadPanel({
   useEffect(() => {
     const controller = new AbortController();
     getBackendHealth(controller.signal)
-      .then((health) =>
-        setBackendHealth(health.reachable ? "reachable" : "unreachable"),
-      )
+      .then((health) => {
+        if (!health.reachable) setBackendHealth("unreachable");
+        else setBackendHealth(health.status === "ok" ? "reachable" : "degraded");
+      })
       .catch(() => setBackendHealth("unreachable"));
     return () => controller.abort();
   }, []);
@@ -336,8 +337,10 @@ export function UploadPanel({
             {backendHealth === "checking"
               ? "正在检查后端"
               : backendHealth === "reachable"
-                ? "后端与安全上传接口可达"
-                : "后端服务未运行"}
+                ? "数据库与安全上传服务已就绪"
+                : backendHealth === "degraded"
+                  ? "后台在线，安全上传依赖暂不可用"
+                  : "课堂后台暂不可达"}
           </span>
           <h2 id="upload-title">上传课堂资料</h2>
           <p>

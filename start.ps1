@@ -78,6 +78,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "数据库迁移失败；为避免新旧 Schema 混用，未启动任何服务。"
 }
 Write-Host "数据库迁移已就绪。"
+& $python "scripts/ensure_storage_readiness.py"
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "对象存储就绪对象无法创建或核验；网站将降级启动，真实上传暂不可用。"
+}
 $processes = @()
 $runtimeManifest = Join-Path $logs "runtime-processes.json"
 $runtimeMutex = [System.Threading.Mutex]::new(
@@ -202,12 +206,14 @@ function Wait-FrontendReady {
             $response = Invoke-RestMethod `
                 -Uri "http://127.0.0.1:$frontendPort/api/backend-health" `
                 -TimeoutSec 2
-            if ($response.reachable -eq $true -and $response.status -eq "ok") { return }
+            # 前端能连到本项目后端即可完成启动。数据库或对象存储短暂故障时，
+            # 页面会显示“依赖暂不可用”并禁用上传，而不是让整个产品无法打开。
+            if ($response.reachable -eq $true) { return }
         }
         catch { }
         Start-Sleep -Milliseconds 500
     }
-    throw "frontend 在 20 秒内未能连接课堂后端；请查看 logs/frontend.err.log。"
+    throw "frontend 在 20 秒内未能连接本项目后端；请查看 logs/frontend.err.log。"
 }
 
 try {

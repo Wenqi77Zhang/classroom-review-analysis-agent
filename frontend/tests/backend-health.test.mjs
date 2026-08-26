@@ -13,7 +13,10 @@ const contracts = readFileSync(
   "utf8",
 );
 
-assert.match(route, /\/health/, "代理必须调用后端真实健康接口");
+assert.match(route, /\/health\/ready/, "代理必须验证数据库与对象存储均真实就绪");
+assert.match(route, /`\$\{backendUrl\}\/health`/, "代理必须先用快速存活检查区分进程故障与依赖降级");
+assert.match(route, /response\.ok && payload\.status === "ready"/, "依赖未就绪时不得开放上传入口");
+assert.match(route, /reachable: true/, "后端在线但依赖故障时仍应允许产品打开并展示降级状态");
 assert.match(route, /AbortSignal\.timeout/, "健康检查必须设置超时");
 assert.match(route, /cache: "no-store"/, "健康状态不得被静态缓存");
 assert.doesNotMatch(route, /error\.message|String\(error\)/, "不得向前端泄露内部连接错误");
