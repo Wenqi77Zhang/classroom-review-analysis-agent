@@ -12,6 +12,11 @@ async function expectResponsivePage(page: Page) {
 }
 
 test.describe("M2 改进循环与 M3 课程总览", () => {
+  test.skip(
+    !process.env.E2E_BASE_URL,
+    "设置 E2E_BASE_URL 后才连接真实运行服务；CI 只校验规范，不伪造后端会话。",
+  );
+
   test("教师可以进入改进循环并看到真实与合成证据边界", async ({ page }) => {
     await openDemoSession(page);
     await page.goto("/improvements");

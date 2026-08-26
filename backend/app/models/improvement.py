@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -70,6 +71,7 @@ class ImprovementAction(Base):
     cycle: Mapped[ImprovementCycle] = relationship(back_populates="actions")
     comparisons: Mapped[list[ImprovementComparison]] = relationship(back_populates="action", overlaps="comparisons")
     __table_args__ = (
+        CheckConstraint("priority BETWEEN 1 AND 3", name="ck_improvement_action_priority"),
         ForeignKeyConstraint(["cycle_id", "owner_id"], ["improvement_cycles.id", "improvement_cycles.owner_id"], name="fk_improvement_actions_cycle_owner", ondelete="CASCADE"),
         ForeignKeyConstraint(["source_conclusion_id", "owner_id"], ["analysis_conclusions.id", "analysis_conclusions.owner_id"], name="fk_improvement_actions_conclusion_owner", ondelete="RESTRICT"),
         UniqueConstraint("id", "owner_id", name="uq_improvement_actions_id_owner"),
