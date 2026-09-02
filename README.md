@@ -80,6 +80,10 @@ ollama pull qwen3.5:4b
 
 ### 真实浏览器验收
 
+普通 GitHub CI 只运行 `npm run test:e2e:spec`，确认浏览器用例能够被 Playwright 正确收集；
+它不会把未启动完整服务的 Runner 冒充成真实验收环境。下面的 `test:e2e:real` 必须连接正在运行的
+前端、后端、Worker、Agent、PostgreSQL 与对象存储，并以实际任务数据留证。
+
 先保持 `start.ps1` / `start.sh` 运行，再在另一个终端提供一条已经成功处理的真实任务 ID：
 
 ```powershell
