@@ -20,6 +20,8 @@ frontend/.next/
 frontend/out/
 frontend/test-results/
 frontend/playwright-report/
+.npm-cache/
+.playwright-cli/
 
 # Media, user data, databases and derived artifacts
 *.mp4
@@ -47,3 +49,4 @@ Thumbs.db
 # Logs
 *.log
 logs/
+deploy/backups/

@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-截至 2026-08-26，前端已通过同源 BFF 接通演示会话、
+截至 2026-09-02，前端已通过同源 BFF 接通正式教师与可关闭的演示会话、
 课程/课堂、真实上传、任务、证据工作台、教师复核和服务端报告；后端已具备账号隔离、
 私有对象存储、任务租约、逐字稿、证据结论、复核历史和三格式导出。短期 JWT 只保存在
 HttpOnly Cookie，长期对象存储密钥不进入浏览器。
@@ -29,9 +29,11 @@ PostgreSQL 写回和 Agent 原页引用技术 E2E，3/3 结论均含课件页证
 PostgreSQL 和合成机制边界验证，但尚未宣称真实教学效果改善。逐项状态、证据与阻塞统一记录在
 [`docs/product-and-technology-handbook.md`](docs/product-and-technology-handbook.md)。
 
-生产候选包已经完成分层健康检查、依赖降级、同源/限流门禁、非 root 前后端镜像、纯 CPU 媒体
-Worker、容器私网和 Cloudflare 命名隧道 profile；最终回归为 Python `324 passed, 12 skipped`，
-前端契约、类型检查和生产构建通过。永久公网地址仍需受控域名、持续运行主机和远程托管 Tunnel
+生产候选包已经完成正式教师登录、可撤销会话、账号隔离、课堂及对象删除、数据库备份恢复、
+分层健康检查、依赖降级、同源/限流门禁、非 root 前后端镜像、纯 CPU 媒体 Worker、容器私网和
+Cloudflare 命名隧道 profile；最新回归为 Python `344 passed, 12 skipped`，
+前端契约、类型检查和生产构建通过，真实 Playwright 浏览器验收为 `12 passed, 4 skipped`。
+永久公网地址仍需受控域名、持续运行主机和远程托管 Tunnel
 token；这些外部条件未提供前，不把临时预览冒充正式部署。
 
 ## 里程碑
@@ -40,7 +42,8 @@ token；这些外部条件未提供前，不把临时预览冒充正式部署。
 - 里程碑 M2：改进行动、同课程第二轮课堂、证据对比与教师复核——功能实现完成，等待同课程第二轮真实视频验证效果。
 - 里程碑 M3：多课程总览、课堂比较和教师确认内容汇总——功能实现完成，真实汇总内容随 M2 真实轮次产生。
 
-启动后可访问：`/classrooms` 创建课堂，`/improvements` 建立改进循环，`/portfolio` 查看多课程总览。
+启动后可访问：`/login` 登录正式教师账号，`/classrooms` 创建、继续或删除课堂，
+`/improvements` 建立改进循环，`/portfolio` 查看多课程总览。
 
 ## 快速入口
 
@@ -64,7 +67,7 @@ ollama pull qwen3.5:4b
 ```
 
 `start.ps1` / `start.sh` 会读取本机 `.env`，启动前端、FastAPI、Worker 轮询和 Agent
-轮询，并把运行日志写入已忽略的 `logs/runtime/`。脚本会先检查 `.venv`、`.env`、npm、
+轮询，并把运行日志写入已忽略的 `logs/`。脚本会先检查 `.venv`、`.env`、npm、
 必需变量、端口和 Worker/Agent 令牌隔离，再自动把 PostgreSQL 迁移到当前 Alembic head；
 配置、迁移或端口存在问题时 fail-closed。默认访问
 `http://localhost:3000`，课堂后端使用 `http://127.0.0.1:8100`，避免与其他常用本地项目的
@@ -74,6 +77,22 @@ ollama pull qwen3.5:4b
 
 安装脚本在项目内创建 `.venv`，安装当前声明并锁定的 Python/前端依赖，并在缺少时复制
 `.env.example`。脚本不会生成或写入真实密钥。
+
+### 真实浏览器验收
+
+先保持 `start.ps1` / `start.sh` 运行，再在另一个终端提供一条已经成功处理的真实任务 ID：
+
+```powershell
+Set-Location .\frontend
+$env:E2E_BASE_URL = "http://127.0.0.1:3000"
+$env:E2E_TASK_ID = "<已成功处理的真实任务 UUID>"
+npm run test:e2e:real
+```
+
+验收器默认只建立一次本地演示会话，并在四种视口下串行复用；登录状态仅写入已忽略的
+`frontend/test-results/`。长期服务器应关闭演示账号，并通过受保护的 CI Secret 同时提供
+`E2E_TEACHER_EMAIL` 与 `E2E_TEACHER_PASSWORD`，不要把教师口令写入命令、仓库、Issue 或日志。
+若未提供 `E2E_CYCLE_ID`，涉及某一条具体 M2 改进循环的 4 个视口用例会明确跳过，而不会伪造通过。
 
 ### 临时团队联调入口（非最终部署）
 
@@ -104,6 +123,18 @@ Cloudflare Quick Tunnel。组员无需安装项目环境，使用浏览器打开
 docker compose --env-file .env.production -f deploy/compose.production.yml up -d --build
 docker compose --env-file .env.production -f deploy/compose.production.yml ps
 ```
+
+首次部署由服务器管理员在受信任终端创建正式教师账号；口令采用隐藏输入，不进入命令历史：
+
+```bash
+docker compose --env-file .env.production -f deploy/compose.production.yml exec backend \
+  python scripts/manage_teacher_accounts.py create --email teacher@example.edu --display-name "教师姓名"
+```
+
+长期服务器默认不配置 `DEMO_ACCOUNT_PASSWORD`。教师忘记口令时使用同一脚本的
+`reset-password`，系统会立即撤销该账号已有登录令牌。数据库备份和受确认保护的恢复脚本位于
+`deploy/backup-database.sh` 与 `deploy/restore-database.sh`；备份包含私密课堂元数据，必须加密
+保存且不得提交 Git。
 
 若已经在 Cloudflare 控制台创建稳定域名的远程托管 Tunnel，并把源站配置为
 `http://frontend:3000`，可将令牌只写入本机 `.env.production` 后启用命名隧道：

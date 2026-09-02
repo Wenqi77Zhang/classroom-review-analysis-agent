@@ -6,9 +6,6 @@ test.describe("真实课堂证据工作台", () => {
   test.skip(!taskId, "设置 E2E_TASK_ID 后才会读取已完成的本地真实任务；CI 不伪造媒体结果。");
 
   test("恢复安全会话并展示可定位的课件、逐字稿和视频证据", async ({ page }) => {
-    const sessionResponse = await page.request.post("/api/session/demo");
-    expect(sessionResponse.ok()).toBeTruthy();
-
     await page.goto(`/tasks/${taskId}`);
     const workbench = page.locator(".evidence-workbench.real");
     await expect(workbench).toBeVisible();

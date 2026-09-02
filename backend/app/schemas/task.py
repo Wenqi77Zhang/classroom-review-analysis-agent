@@ -226,7 +226,8 @@ class AssetCompleteRequest(ApiModel):
     核对不通过返回 `ErrorCode.VALIDATION_ERROR`，并把 `upload_status` 落为 failed。
     （PR #6 审查意见 5）
 
-    TODO(成员 3)：`api/uploads.py` 实现时落实上述 HEAD 核对。
+    上述 HEAD 核对已由上传完成接口落实；任何不一致都会失败关闭，
+    不得仅依赖浏览器上报的字段。
     """
 
     etag: str | None = Field(

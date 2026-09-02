@@ -411,6 +411,41 @@ body::before {
   line-height: 1.65;
 }
 
+.auth-card {
+  width: min(100%, 620px);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--ink-faint);
+  font-size: 14px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: rgba(55, 79, 84, 0.16);
+}
+
+.team-access-card .auth-demo-button {
+  width: 100%;
+  margin: 14px 0 18px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(55, 79, 84, 0.24);
+  color: var(--indigo-deep);
+}
+
+.auth-back-link {
+  display: inline-flex;
+  margin-top: 18px;
+  color: var(--indigo-deep);
+  font-weight: 680;
+}
+
 button,
 input,
 select,
@@ -805,9 +840,18 @@ nav {
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 999px;
   color: var(--ink-soft);
-  cursor: default;
+  cursor: pointer;
   font-size: 14px;
   backdrop-filter: blur(18px);
+}
+
+.user-chip small {
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.user-login-link {
+  text-decoration: none;
 }
 
 .user-chip span {
@@ -4352,4 +4396,82 @@ textarea {
 .supplemental-file-name {
   color: var(--ink-soft);
   overflow-wrap: anywhere;
+}
+/* Teacher-owned classroom management: restrained glass surface with explicit deletion. */
+.owned-classrooms {
+  margin-top: clamp(28px, 5vw, 64px);
+  padding: clamp(22px, 3vw, 38px);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 30px;
+  background: rgba(247, 249, 245, 0.66);
+  box-shadow: 0 24px 70px rgba(48, 62, 59, 0.1);
+  backdrop-filter: blur(24px);
+}
+
+.owned-classroom-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.owned-classroom-row,
+.owned-classroom-actions,
+.delete-confirmation {
+  display: flex;
+  align-items: center;
+}
+
+.owned-classroom-row {
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 18px;
+  border: 1px solid rgba(69, 91, 84, 0.14);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.owned-classroom-row h3 {
+  margin: 4px 0 0;
+}
+
+.owned-classroom-actions,
+.delete-confirmation {
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.button.compact {
+  min-height: 42px;
+  padding: 9px 16px;
+  font-size: 15px;
+}
+
+.button.danger-quiet {
+  color: #7a4e4a;
+  border-color: rgba(122, 78, 74, 0.28);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.button.danger {
+  color: #fff;
+  border-color: #7a4e4a;
+  background: #7a4e4a;
+}
+
+.management-message {
+  margin: 18px 0 0;
+  color: #465d57;
+}
+
+@media (max-width: 760px) {
+  .owned-classroom-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .owned-classroom-actions,
+  .delete-confirmation {
+    justify-content: flex-start;
+  }
 }

@@ -66,3 +66,25 @@ def test_storage_readiness_sentinel_is_provisioned_before_serving() -> None:
     assert "READINESS_OBJECT_KEY" in provisioner
     assert 'b"ok"' in provisioner
     assert "OBJECT_STORAGE_SECRET_ACCESS_KEY" not in provisioner
+
+
+def test_database_backup_and_restore_are_private_and_guarded() -> None:
+    backup = (ROOT / "deploy/backup-database.sh").read_text(encoding="utf-8")
+    restore = (ROOT / "deploy/restore-database.sh").read_text(encoding="utf-8")
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+
+    assert "umask 077" in backup
+    assert "pg_dump" in backup and "--format=custom" in backup
+    assert "partial.$$" in backup and 'mv "$TEMP_TARGET" "$TARGET"' in backup
+    assert "deploy/backups/" in gitignore
+    assert "CONFIRM_DATABASE_RESTORE" in restore
+    assert "--clean --if-exists" in restore and "--exit-on-error" in restore
+    stop_index = restore.index("stop frontend backend worker agent")
+    assert restore.index("pg_restore --list") < stop_index
+    assert stop_index < restore.index("pg_restore --username", stop_index)
+
+
+def test_production_example_defaults_to_formal_accounts() -> None:
+    example = (ROOT / "deploy/.env.production.example").read_text(encoding="utf-8")
+    assert "# DEMO_ACCOUNT_PASSWORD=" in example
+    assert "# TEAM_TUNNEL_ACCESS_CODE=" in example

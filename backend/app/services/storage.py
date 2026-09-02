@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 import boto3
 from botocore.client import Config
@@ -37,6 +38,8 @@ class ObjectStorage(Protocol):
     async def head(self, object_key: str) -> ObjectMetadata | None: ...
 
     async def delete(self, object_key: str) -> None: ...
+
+    async def delete_prefix(self, prefix: str) -> int: ...
 
 
 class S3ObjectStorage:
@@ -153,6 +156,57 @@ class S3ObjectStorage:
             )
         except (BotoCoreError, ClientError) as exc:
             raise UpstreamUnavailableError("对象存储暂时无法删除文件。") from exc
+
+    async def delete_prefix(self, prefix: str) -> int:
+        """Delete every object below one owner-scoped classroom prefix.
+
+        Classroom deletion must also remove older report formats and derived
+        artifacts that are not represented by a single current database row.
+        S3 list/delete is used only for the exact immutable owner/classroom
+        prefix; callers must never pass a bucket-wide or owner-wide prefix.
+        """
+        parts = prefix.split("/")
+        if len(parts) != 5 or parts[0] != "owners" or parts[2] != "classrooms" or parts[4]:
+            raise ValueError("对象删除前缀必须精确限定到单个课堂。")
+        try:
+            UUID(parts[1])
+            UUID(parts[3])
+        except (ValueError, AttributeError) as exc:
+            raise ValueError("对象删除前缀必须精确限定到单个课堂。") from exc
+        return await asyncio.to_thread(self._delete_prefix, prefix)
+
+    def _delete_prefix(self, prefix: str) -> int:
+        deleted = 0
+        continuation_token: str | None = None
+        try:
+            while True:
+                params: dict[str, str] = {"Bucket": self._bucket, "Prefix": prefix}
+                if continuation_token:
+                    params["ContinuationToken"] = continuation_token
+                response = self._client.list_objects_v2(**params)
+                keys = [
+                    str(item["Key"])
+                    for item in response.get("Contents", [])
+                    if isinstance(item, dict) and item.get("Key")
+                ]
+                if keys:
+                    result = self._client.delete_objects(
+                        Bucket=self._bucket,
+                        Delete={"Objects": [{"Key": key} for key in keys], "Quiet": True},
+                    )
+                    if result.get("Errors"):
+                        raise UpstreamUnavailableError("对象存储未能完整删除课堂文件。")
+                    deleted += len(keys)
+                if not response.get("IsTruncated"):
+                    break
+                continuation_token = response.get("NextContinuationToken")
+                if not continuation_token:
+                    raise UpstreamUnavailableError("对象存储分页结果不完整，已停止删除。")
+        except UpstreamUnavailableError:
+            raise
+        except (BotoCoreError, ClientError) as exc:
+            raise UpstreamUnavailableError("对象存储暂时无法删除课堂文件。") from exc
+        return deleted
 
 
 def get_object_storage(request: Request) -> ObjectStorage:

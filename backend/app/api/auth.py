@@ -1,8 +1,4 @@
-"""Password and JWT primitives used by the authentication routes.
-
-The request/response route schemas remain intentionally deferred until the team confirms the
-login form contract. Security primitives do not depend on that UI decision.
-"""
+"""Formal teacher and explicitly enabled demo authentication routes."""
 
 from __future__ import annotations
 
@@ -30,9 +26,14 @@ DEMO_ACCOUNT_EMAIL = "demo@classroom-review.local"
 router = APIRouter(tags=["auth"])
 
 
+def login_identity_is_enabled(email: str, settings: Settings) -> bool:
+    """A persisted demo row must not bypass a deployment that disabled demos."""
+    return email != DEMO_ACCOUNT_EMAIL or settings.demo_account_password is not None
+
+
 def _token_response(user: User, settings: Settings) -> AccessTokenResponse:
     return AccessTokenResponse(
-        access_token=create_access_token(user.id, settings),
+        access_token=create_access_token(user.id, settings, auth_version=user.auth_version),
         expires_in_seconds=settings.access_token_expire_minutes * 60,
         user=UserRef.model_validate(user),
     )
@@ -47,7 +48,12 @@ async def login(
     user = await find_user_by_email(session, body.email)
     password_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
     valid = verify_password(body.password, password_hash)
-    if user is None or not user.is_active or not valid:
+    if (
+        user is None
+        or not user.is_active
+        or not valid
+        or not login_identity_is_enabled(body.email, settings)
+    ):
         raise UnauthenticatedError("邮箱或密码错误。")
     return _token_response(user, settings)
 

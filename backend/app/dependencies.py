@@ -15,7 +15,7 @@ from backend.app.database import session_scope
 from backend.app.errors import PermissionDeniedError, UnauthenticatedError
 from backend.app.models import User
 from backend.app.schemas.task import INTERNAL_ENDPOINT_SCOPES, ServiceIdentity
-from backend.app.services.authentication import decode_access_token
+from backend.app.services.authentication import decode_access_token_identity
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -36,10 +36,12 @@ async def get_current_user(
 ) -> User:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise UnauthenticatedError()
-    user_id = decode_access_token(credentials.credentials, settings)
-    user = await session.get(User, user_id)
+    token_identity = decode_access_token_identity(credentials.credentials, settings)
+    user = await session.get(User, token_identity.user_id)
     if user is None or not user.is_active:
         raise UnauthenticatedError("账号不存在或已停用。")
+    if user.auth_version != token_identity.auth_version:
+        raise UnauthenticatedError("登录已被管理员撤销，请重新登录。")
     return user
 
 

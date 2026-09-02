@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from backend.app.config import AppEnv
 from backend.app.errors import UpstreamUnavailableError
 from backend.app.services.storage import S3ObjectStorage
-from scripts.production_preflight import _require
+from scripts.production_preflight import _optional, _require
 
 
 def make_settings(**overrides: object):
@@ -77,6 +77,13 @@ def test_production_preflight_accepts_real_non_placeholder(monkeypatch: pytest.M
     assert _require("JWT_SECRET", minimum=32) == "x" * 40
 
 
+def test_demo_and_extra_entrance_gate_are_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DEMO_ACCOUNT_PASSWORD", raising=False)
+    monkeypatch.delenv("TEAM_TUNNEL_ACCESS_CODE", raising=False)
+    assert _optional("DEMO_ACCOUNT_PASSWORD", minimum=16) is None
+    assert _optional("TEAM_TUNNEL_ACCESS_CODE", minimum=16) is None
+
+
 @pytest.mark.asyncio
 async def test_storage_readiness_accepts_existing_sentinel() -> None:
     storage = S3ObjectStorage.__new__(S3ObjectStorage)
@@ -105,3 +112,52 @@ async def test_storage_readiness_rejects_forbidden_probe() -> None:
     storage._client.head_object = forbidden
     with pytest.raises(UpstreamUnavailableError):
         await storage.ready()
+
+
+@pytest.mark.asyncio
+async def test_storage_deletes_every_page_below_exact_classroom_prefix() -> None:
+    storage = S3ObjectStorage.__new__(S3ObjectStorage)
+    storage._bucket = "restricted-bucket"
+    calls: list[dict[str, object]] = []
+
+    class Client:
+        def list_objects_v2(self, **kwargs: object) -> dict[str, object]:
+            calls.append(kwargs)
+            if "ContinuationToken" not in kwargs:
+                return {
+                    "Contents": [{"Key": "owners/11111111-1111-1111-1111-111111111111/classrooms/22222222-2222-2222-2222-222222222222/video.mp4"}],
+                    "IsTruncated": True,
+                    "NextContinuationToken": "next-page",
+                }
+            return {
+                "Contents": [{"Key": "owners/11111111-1111-1111-1111-111111111111/classrooms/22222222-2222-2222-2222-222222222222/report.pdf"}],
+                "IsTruncated": False,
+            }
+
+        def delete_objects(self, **kwargs: object) -> dict[str, object]:
+            calls.append(kwargs)
+            return {}
+
+    storage._client = Client()
+    prefix = "owners/11111111-1111-1111-1111-111111111111/classrooms/22222222-2222-2222-2222-222222222222/"
+    deleted = await storage.delete_prefix(prefix)
+
+    assert deleted == 2
+    assert calls[0] == {"Bucket": "restricted-bucket", "Prefix": prefix}
+    assert calls[2]["ContinuationToken"] == "next-page"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "owners/u/",
+        "owners/u/classrooms/c/",
+        "owners/11111111-1111-1111-1111-111111111111/classrooms/",
+        "owners/11111111-1111-1111-1111-111111111111/classrooms/22222222-2222-2222-2222-222222222222/extra/",
+    ],
+)
+async def test_storage_rejects_broad_or_malformed_delete_prefix(prefix: str) -> None:
+    storage = S3ObjectStorage.__new__(S3ObjectStorage)
+    with pytest.raises(ValueError, match="单个课堂"):
+        await storage.delete_prefix(prefix)

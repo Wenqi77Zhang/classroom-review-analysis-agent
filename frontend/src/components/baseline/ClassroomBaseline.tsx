@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import {
   ApiClientError,
   createClassroom,
   createCourse,
+  deleteClassroom,
+  listClassrooms,
+  listCourses,
   startDemoSession,
 } from "@/lib/api";
+import type { ClassroomRead, CourseRead } from "@/types/contracts";
 
 import { SiteChrome } from "./SiteChrome";
 
@@ -17,6 +21,45 @@ export function ClassroomBaseline() {
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [courses, setCourses] = useState<CourseRead[]>([]);
+  const [classrooms, setClassrooms] = useState<ClassroomRead[]>([]);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [managementMessage, setManagementMessage] = useState("");
+
+  const refreshOwnedClassrooms = useCallback(async () => {
+    try {
+      await startDemoSession();
+      const ownedCourses = await listCourses();
+      const classroomGroups = await Promise.all(
+        ownedCourses.map((course) => listClassrooms(course.id)),
+      );
+      setCourses(ownedCourses);
+      setClassrooms(classroomGroups.flat());
+    } catch {
+      // Visitors may be logged out and production can disable the demo account.
+      // The creation form shows the actionable authentication error on submit.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshOwnedClassrooms();
+  }, [refreshOwnedClassrooms]);
+
+  async function removeClassroom(classroomId: string) {
+    setManagementMessage("");
+    try {
+      await deleteClassroom(classroomId);
+      setConfirmDeleteId(null);
+      setManagementMessage("课堂及其关联资料已删除，并已留下审计记录。");
+      await refreshOwnedClassrooms();
+    } catch (error) {
+      setManagementMessage(
+        error instanceof ApiClientError
+          ? error.message
+          : "删除失败，请稍后重试。",
+      );
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,7 +88,7 @@ export function ClassroomBaseline() {
       });
       sessionStorage.setItem("classroomName", classroom.title);
       sessionStorage.setItem("classroomId", classroom.id);
-      router.push(`/tasks/${classroom.id}`);
+      router.push(`/tasks/${classroom.id}?from=classroom`);
     } catch (error) {
       const message =
         error instanceof ApiClientError
@@ -135,8 +178,8 @@ export function ClassroomBaseline() {
                 <span aria-hidden>→</span>
               </button>
               <p className="form-security-note">
-                开发环境使用服务端演示账号；访问令牌只保存在 HttpOnly
-                Cookie，不写入浏览器存储。
+                正式环境使用教师账号；仅在管理员主动启用时提供演示账号。访问令牌只保存在
+                HttpOnly Cookie，不写入浏览器存储。
               </p>
             </form>
             <aside className="context-card" data-reveal>
@@ -168,6 +211,70 @@ export function ClassroomBaseline() {
               </dl>
             </aside>
           </div>
+          {classrooms.length > 0 && (
+            <section className="owned-classrooms" aria-labelledby="owned-classrooms-title">
+              <div className="section-title">
+                <span id="owned-classrooms-title">我的已有课堂</span>
+                <small>{classrooms.length} 节</small>
+              </div>
+              <p className="form-security-note">
+                可继续进入复盘；删除会同时清理该课堂的数据库记录与对象存储文件，且不可撤销。
+              </p>
+              <div className="owned-classroom-list">
+                {classrooms.map((classroom) => {
+                  const course = courses.find((item) => item.id === classroom.course_id);
+                  const confirming = confirmDeleteId === classroom.id;
+                  return (
+                    <article className="owned-classroom-row" key={classroom.id}>
+                      <div>
+                        <small>{course?.name ?? "未命名课程"}</small>
+                        <h3>{classroom.title}</h3>
+                      </div>
+                      <div className="owned-classroom-actions">
+                        <Link
+                          className="button secondary compact"
+                          href={`/tasks/${classroom.id}?from=classroom`}
+                        >
+                          进入复盘
+                        </Link>
+                        {!confirming ? (
+                          <button
+                            className="button danger-quiet compact"
+                            type="button"
+                            onClick={() => setConfirmDeleteId(classroom.id)}
+                          >
+                            删除课堂
+                          </button>
+                        ) : (
+                          <span className="delete-confirmation" role="group" aria-label="确认删除">
+                            <button
+                              className="button danger compact"
+                              type="button"
+                              onClick={() => void removeClassroom(classroom.id)}
+                            >
+                              确认永久删除
+                            </button>
+                            <button
+                              className="button secondary compact"
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                            >
+                              取消
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+              {managementMessage && (
+                <p className="management-message" role="status">
+                  {managementMessage}
+                </p>
+              )}
+            </section>
+          )}
         </div>
       </section>
     </SiteChrome>

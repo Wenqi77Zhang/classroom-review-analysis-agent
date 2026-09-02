@@ -84,7 +84,19 @@ export async function getBackendHealth(
 }
 
 export async function startDemoSession(): Promise<{ user: UserRef }> {
-  return requestJson("/api/session/demo", { method: "POST" });
+  try {
+    const user = await requestJson<UserRef>("/api/session/me");
+    return { user };
+  } catch (error) {
+    if (!(error instanceof ApiClientError) || error.status !== 401) throw error;
+  }
+  const session = await requestJson<{ user: UserRef }>("/api/session/demo", {
+    method: "POST",
+  });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("classroom-session-changed"));
+  }
+  return session;
 }
 
 export async function createCourse(name: string): Promise<CourseRead> {
@@ -100,6 +112,12 @@ export async function listCourses(): Promise<CourseRead[]> {
 
 export async function listClassrooms(courseId: string): Promise<ClassroomRead[]> {
   return requestJson(`/api/courses/${encodeURIComponent(courseId)}/classrooms`);
+}
+
+export async function deleteClassroom(classroomId: string): Promise<void> {
+  await requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function createClassroom(
@@ -224,6 +242,18 @@ export async function createTask(
 
 export async function getTask(taskId: string): Promise<TaskRead> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}`);
+}
+
+export async function listTasksForClassroom(
+  classroomId: string,
+  limit = 1,
+): Promise<TaskRead[]> {
+  const query = new URLSearchParams({
+    classroom_id: classroomId,
+    limit: String(limit),
+    offset: "0",
+  });
+  return requestJson(`/api/tasks?${query.toString()}`);
 }
 
 export async function cancelTask(taskId: string): Promise<TaskRead> {
