@@ -28,7 +28,8 @@ assert.match(
 assert.match(proxy, /pathname\.startsWith\("\/api\/"\)/, "未授权 API 不得重定向为 HTML");
 assert.match(proxy, /status: 401/, "未授权 API 必须返回 401");
 assert.match(proxy, /NextResponse\.redirect/, "未授权页面必须进入访问码页面");
-assert.match(proxy, /"\/team-access", "\/api\/team-access"/, "验证页面与接口必须可公开访问");
+assert.match(proxy, /"\/team-access"[\s\S]*"\/api\/team-access"/, "验证页面与接口必须可公开访问");
+assert.match(proxy, /"\/api\/backend-health"/, "启动健康检查不得被团队访问码拦截");
 assert.match(helper, /createHash\("sha256"\)/, "Cookie 不得保存访问码明文");
 assert.match(helper, /timingSafeEqual/, "访问码和 Cookie 比较必须使用恒定时间比较");
 assert.match(route, /httpOnly: true/, "访问会话 Cookie 必须为 HttpOnly");

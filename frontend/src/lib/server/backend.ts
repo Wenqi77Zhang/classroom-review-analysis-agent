@@ -1,6 +1,31 @@
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
 export const AUTH_COOKIE_NAME = "classroom_review_access_token";
+
+export function setAuthCookie(
+  response: NextResponse,
+  accessToken: string,
+  expiresInSeconds: number,
+) {
+  response.cookies.set(AUTH_COOKIE_NAME, accessToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: expiresInSeconds,
+  });
+}
+
+export function clearAuthCookie(response: NextResponse) {
+  response.cookies.set(AUTH_COOKIE_NAME, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
+}
 
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8100";
 

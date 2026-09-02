@@ -30,6 +30,8 @@ test("没有课堂视频时不能越过任务状态门禁", () => {
 test("真实课堂、上传和任务链路使用后端资源 ID", () => {
   assert.match(task, /UUID_PATTERN\.test\(resourceId\)/);
   assert.match(task, /getTask\(resourceId\)/);
+  assert.match(task, /listTasksForClassroom\(resourceId\)/);
+  assert.match(task, /resourceKind === "classroom"/);
   assert.match(task, /classroomId=\{realClassroomId\}/);
   assert.match(upload, /completedAssetIds/);
   assert.match(upload, /createTask\(/);
@@ -74,6 +76,7 @@ test("真实任务会话缺失时可自助恢复而不暴露令牌", () => {
 test("上传创建任务并切换 URL 后恢复真实进度而不是回到上传步骤", () => {
   assert.match(task, /setTaskLookupPending\(true\)/);
   assert.match(task, /applyTask\(await getTask\(resourceId\)\)/);
+  assert.match(task, /router\.replace\(`\/tasks\/\$\{latestTask\.id\}`\)/);
   assert.match(task, /if \(realTask\)/);
   assert.match(task, /<TaskStatusPanel[\s\S]*task=\{realTask\}/);
   assert.match(task, /课堂资料已提交/);

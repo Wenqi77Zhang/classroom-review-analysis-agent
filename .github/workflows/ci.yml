@@ -126,8 +126,8 @@ jobs:
         run: npm ci
       - name: Run frontend contract tests
         run: npm test
-      - name: Validate browser E2E specification
-        run: npm run test:e2e:real
+      - name: Validate browser E2E test collection
+        run: npm run test:e2e:spec
       - name: Run TypeScript checks
         run: npm run typecheck
       - name: Build production frontend

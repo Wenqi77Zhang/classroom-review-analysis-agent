@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="mist" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#edf3ef"/>
+      <stop offset="1" stop-color="#b9c9c2"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#mist)"/>
+  <rect x="1" y="1" width="62" height="62" rx="17" fill="none" stroke="#fff" stroke-opacity=".8"/>
+  <text x="32" y="42" text-anchor="middle" font-size="31" font-family="serif" font-weight="700" fill="#405a53">课</text>
+</svg>

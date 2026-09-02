@@ -2,10 +2,40 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useLayoutEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+
+type SessionUser = { id: string; display_name: string };
 
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [sessionKnown, setSessionKnown] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const refreshSession = async () => {
+      try {
+        const response = await fetch("/api/session/me", { cache: "no-store" });
+        const user = response.ok ? ((await response.json()) as SessionUser) : null;
+        if (active) setSessionUser(user);
+      } catch {
+        if (active) setSessionUser(null);
+      } finally {
+        if (active) setSessionKnown(true);
+      }
+    };
+    void refreshSession();
+    addEventListener("classroom-session-changed", refreshSession);
+    return () => {
+      active = false;
+      removeEventListener("classroom-session-changed", refreshSession);
+    };
+  }, [pathname]);
+
+  const logout = async () => {
+    await fetch("/api/session/logout", { method: "POST" }).catch(() => null);
+    window.location.assign("/login");
+  };
   useLayoutEffect(() => {
     // Route transitions can retain the previous page's scroll offset. Reset it
     // before measuring reveal targets so the next page starts with its primary
@@ -97,7 +127,15 @@ export function SiteChrome({ children }: { children: ReactNode }) {
         <Link className={`nav-link ${active("/improvements") ? "active" : ""}`} href="/improvements">改进循环</Link>
         <Link className={`nav-link ${active("/portfolio") ? "active" : ""}`} href="/portfolio">课程总览</Link>
       </nav>
-      <button className="user-chip" type="button" aria-label="当前为演示身份"><span>演</span>演示教师</button>
+      {sessionUser ? (
+        <button className="user-chip" type="button" aria-label={`当前账号：${sessionUser.display_name}；点击退出`} onClick={logout} title="退出当前账号">
+          <span>{sessionUser.display_name.slice(0, 1)}</span>{sessionUser.display_name}<small>退出</small>
+        </button>
+      ) : (
+        <Link className="user-chip user-login-link" href={`/login?next=${encodeURIComponent(pathname)}`} aria-label="登录教师账号">
+          <span>{sessionKnown ? "入" : "…"}</span>{sessionKnown ? "教师登录" : "检查会话"}
+        </Link>
+      )}
     </header>
     <main>{children}</main>
   </>;

@@ -5,7 +5,11 @@ import {
   TEAM_ACCESS_COOKIE_NAME,
 } from "@/lib/server/team-access";
 
-const PUBLIC_PATHS = new Set(["/team-access", "/api/team-access"]);
+const PUBLIC_PATHS = new Set([
+  "/team-access",
+  "/api/team-access",
+  "/api/backend-health",
+]);
 
 export function proxy(request: NextRequest) {
   const expectedAccessCode = getConfiguredTeamAccessCode();

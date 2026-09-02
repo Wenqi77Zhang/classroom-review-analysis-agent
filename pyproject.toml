@@ -23,7 +23,7 @@ dependencies = [
   "argon2-cffi>=25.1,<26.0",
   "boto3>=1.43,<2.0",
   "reportlab>=5.0,<6.0",
-  # TODO(成员 5)：Agent 模型与可观测依赖在此追加。
+  # Agent 模型通过本地 Ollama HTTP 协议接入，不额外引入厂商 SDK。
 ]
 
 [project.optional-dependencies]

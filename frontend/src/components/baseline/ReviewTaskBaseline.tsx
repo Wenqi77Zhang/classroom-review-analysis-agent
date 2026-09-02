@@ -9,6 +9,7 @@ import {
   createTask,
   getTask,
   getTaskAssets,
+  listTasksForClassroom,
   startDemoSession,
 } from "@/lib/api";
 import { saveDemoReportDraft } from "@/lib/demo-report-draft";
@@ -62,7 +63,13 @@ const demoTranscript: TranscriptItem[] = [
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function ReviewTaskBaseline({ resourceId }: { resourceId: string }) {
+export function ReviewTaskBaseline({
+  resourceId,
+  resourceKind = "unknown",
+}: {
+  resourceId: string;
+  resourceKind?: "classroom" | "unknown";
+}) {
   const router = useRouter();
   const [classroom, setClassroom] = useState("尚未创建课堂");
   const [messages, setMessages] = useState<string[]>([]);
@@ -116,6 +123,17 @@ export function ReviewTaskBaseline({ resourceId }: { resourceId: string }) {
     setTaskLookupPending(true);
     setTaskLoadError(null);
     try {
+      const isKnownClassroom =
+        resourceKind === "classroom" ||
+        sessionStorage.getItem("classroomId") === resourceId;
+      if (isKnownClassroom) {
+        const [latestTask] = await listTasksForClassroom(resourceId);
+        if (latestTask) {
+          applyTask(latestTask);
+          router.replace(`/tasks/${latestTask.id}`);
+        }
+        return;
+      }
       applyTask(await getTask(resourceId));
     } catch (error) {
       if (error instanceof ApiClientError && error.status !== 404) {
@@ -132,7 +150,7 @@ export function ReviewTaskBaseline({ resourceId }: { resourceId: string }) {
     } finally {
       setTaskLookupPending(false);
     }
-  }, [applyTask, resourceId]);
+  }, [applyTask, resourceId, resourceKind, router]);
   useEffect(() => {
     void loadTask();
   }, [loadTask]);

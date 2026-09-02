@@ -29,10 +29,11 @@ const classroom = read("src/components/baseline/ClassroomBaseline.tsx");
 const api = read("src/lib/api.ts");
 const contracts = read("src/types/contracts.ts");
 
-assert.match(sessionRoute, /httpOnly: true/, "JWT 必须保存在 HttpOnly Cookie");
-assert.match(sessionRoute, /sameSite: "lax"/, "会话 Cookie 必须限制跨站发送");
+assert.match(sessionRoute, /setAuthCookie/, "演示会话必须复用统一安全 Cookie 写入函数");
+assert.match(serverBackend, /httpOnly: true/, "JWT 必须保存在 HttpOnly Cookie");
+assert.match(serverBackend, /sameSite: "lax"/, "会话 Cookie 必须限制跨站发送");
 assert.match(
-  sessionRoute,
+  serverBackend,
   /secure: process\.env\.NODE_ENV === "production"/,
   "生产环境 Cookie 必须启用 Secure",
 );
@@ -144,6 +145,10 @@ assert.match(classroom, /await startDemoSession\(\)/, "创建课堂前必须建�
 assert.match(classroom, /await createCourse\(courseName\)/, "必须创建真实课程");
 assert.match(classroom, /await createClassroom\(course\.id/, "课堂必须绑定真实课程 ID");
 assert.match(classroom, /sessionStorage\.setItem\("classroomId"/, "页面导航必须保存真实课堂 ID");
-assert.match(classroom, /router\.push\(`\/tasks\/\$\{classroom\.id\}`\)/, "复盘页面 URL 必须携带真实课堂 ID");
+assert.match(
+  classroom,
+  /router\.push\(`\/tasks\/\$\{classroom\.id\}\?from=classroom`\)/,
+  "复盘页面 URL 必须携带真实课堂 ID 与资源类型",
+);
 
 console.log("BUSINESS_API_CONTRACT_OK");

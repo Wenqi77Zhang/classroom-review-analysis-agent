@@ -19,6 +19,15 @@ from backend.app.models import AuditEvent, User
 from backend.app.services.authentication import hash_password
 
 
+class DeletionRecordingStorage:
+    def __init__(self) -> None:
+        self.deleted_prefixes: list[str] = []
+
+    async def delete_prefix(self, prefix: str) -> int:
+        self.deleted_prefixes.append(prefix)
+        return 3
+
+
 def api_settings(database_url: str) -> Settings:
     return Settings(
         app_env="test",
@@ -57,6 +66,8 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
 
     app = create_app(settings)
     app.dependency_overrides[get_db] = test_db
+    storage = DeletionRecordingStorage()
+    app.state.object_storage = storage
 
     try:
         async with factory.begin() as session:
@@ -185,22 +196,24 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
             assert unchanged.json()["title"] == "Updated Search Lecture"
             assert unchanged.json()["description"] is None
 
-            blocked_delete = await client.delete(
-                f"/api/classrooms/{classroom_id}", headers=first_headers
-            )
-            assert blocked_delete.status_code == 409
-            assert blocked_delete.json()["error"]["code"] == "STATE_CONFLICT"
-
             cross_account_delete = await client.delete(
                 f"/api/classrooms/{classroom_id}", headers=second_headers
             )
             assert cross_account_delete.status_code == 404
             assert cross_account_delete.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
 
-            still_exists = await client.get(
+            deleted = await client.delete(
                 f"/api/classrooms/{classroom_id}", headers=first_headers
             )
-            assert still_exists.status_code == 200
+            assert deleted.status_code == 204
+            assert storage.deleted_prefixes == [
+                f"owners/{first_id}/classrooms/{classroom_id}/"
+            ]
+
+            no_longer_exists = await client.get(
+                f"/api/classrooms/{classroom_id}", headers=first_headers
+            )
+            assert no_longer_exists.status_code == 404
 
         async with factory() as session:
             events = list(
@@ -215,6 +228,7 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
                     "course.created": 1,
                     "classroom.created": 1,
                     "classroom.updated": 2,
+                    "classroom.deleted": 1,
                 }
             )
             assert [event.details for event in events if event.action == "classroom.updated"] == [
@@ -224,6 +238,8 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
             serialized = repr([event.details for event in events])
             assert "Updated Search Lecture" not in serialized
             assert "Initial description" not in serialized
+            deleted_events = [event for event in events if event.action == "classroom.deleted"]
+            assert [event.details for event in deleted_events] == [{"deleted_object_count": 3}]
     finally:
         async with factory.begin() as session:
             await session.execute(

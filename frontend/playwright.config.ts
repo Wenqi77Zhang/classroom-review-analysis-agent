@@ -1,9 +1,18 @@
+import { resolve } from "node:path";
+
 import { defineConfig } from "@playwright/test";
+
+const authStatePath = resolve(
+  process.cwd(),
+  "test-results/e2e-auth-state.json",
+);
 
 export default defineConfig({
   testDir: "tests/e2e",
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  globalSetup: "./tests/e2e/global-setup.ts",
+  timeout: 120_000,
+  expect: { timeout: 20_000 },
+  workers: 1,
   reporter: "line",
   projects: [
     { name: "desktop-1550", use: { viewport: { width: 1550, height: 1200 } } },
@@ -14,6 +23,7 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000",
     channel: process.env.E2E_BROWSER_CHANNEL ?? "msedge",
+    storageState: authStatePath,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

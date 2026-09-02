@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -61,3 +62,12 @@ def test_chinese_and_english_terms_can_support_relevance_matching() -> None:
 
 def test_generated_timestamp_fixture_is_timezone_aware() -> None:
     assert datetime.now(UTC).tzinfo is not None
+
+
+def test_classroom_deletion_checks_improvement_references_before_storage() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "backend/app/api/classrooms.py"
+    ).read_text(encoding="utf-8")
+    assert "ImprovementCycle.baseline_classroom_id" in source
+    assert "ImprovementCycle.followup_classroom_id" in source
+    assert source.index("improvement_reference_count") < source.index("storage.delete_prefix")

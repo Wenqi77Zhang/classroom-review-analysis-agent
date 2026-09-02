@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import ValidationError
 
+from backend.app.api.auth import DEMO_ACCOUNT_EMAIL, login_identity_is_enabled
 from backend.app.config import Settings
 from backend.app.dependencies import identify_service
 from backend.app.errors import UnauthenticatedError
@@ -14,16 +15,20 @@ from backend.app.schemas.task import ServiceIdentity
 from backend.app.services.authentication import (
     create_access_token,
     decode_access_token,
+    decode_access_token_identity,
     hash_password,
     verify_password,
 )
 
 
-def make_settings(*, jwt_secret: str | None = None) -> Settings:
+def make_settings(
+    *, jwt_secret: str | None = None, demo_account_password: str | None = None
+) -> Settings:
     return Settings(
         app_env="test",
         database_url="postgresql+asyncpg://test:test@localhost/test",
         jwt_secret=jwt_secret or "jwt-secret-that-is-at-least-thirty-two-characters",
+        demo_account_password=demo_account_password,
         worker_service_token="worker-token-that-is-long-and-distinct",
         agent_service_token="agent-token-that-is-long-and-distinct",
         object_storage_endpoint="http://localhost:9000",
@@ -31,6 +36,15 @@ def make_settings(*, jwt_secret: str | None = None) -> Settings:
         object_storage_access_key_id="access",
         object_storage_secret_access_key="secret",
     )
+
+
+def test_disabled_demo_row_cannot_use_formal_login_path() -> None:
+    assert not login_identity_is_enabled(DEMO_ACCOUNT_EMAIL, make_settings())
+    assert login_identity_is_enabled(
+        DEMO_ACCOUNT_EMAIL,
+        make_settings(demo_account_password="local-demo-password"),
+    )
+    assert login_identity_is_enabled("teacher@example.edu", make_settings())
 
 
 def test_password_hash_does_not_contain_plaintext() -> None:
@@ -45,6 +59,16 @@ def test_access_token_roundtrip() -> None:
     user_id = uuid.uuid4()
     token = create_access_token(user_id, settings)
     assert decode_access_token(token, settings) == user_id
+
+
+def test_auth_version_is_signed_for_immediate_session_revocation() -> None:
+    settings = make_settings()
+    user_id = uuid.uuid4()
+    identity = decode_access_token_identity(
+        create_access_token(user_id, settings, auth_version=4), settings
+    )
+    assert identity.user_id == user_id
+    assert identity.auth_version == 4
 
 
 def test_expired_access_token_is_rejected() -> None:

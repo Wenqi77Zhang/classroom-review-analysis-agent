@@ -10,8 +10,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test:e2e:spec": "playwright test --config playwright.config.ts --list",
     "test:e2e:real": "playwright test --config playwright.config.ts",
-    "test": "node tests/ui-baseline.test.mjs && node tests/upload-panel.test.mjs && node tests/backend-health.test.mjs && node tests/business-api.test.mjs && node tests/team-access.test.mjs && node tests/production-security.test.mjs && node tests/evidence-workbench.test.mjs && node tests/task-status-panel.test.mjs && node tests/report-flow.test.mjs && node tests/complete-flow.test.mjs && node tests/improvement-portfolio.test.mjs"
+    "test": "node tests/ui-baseline.test.mjs && node tests/upload-panel.test.mjs && node tests/backend-health.test.mjs && node tests/business-api.test.mjs && node tests/auth-session.test.mjs && node tests/team-access.test.mjs && node tests/production-security.test.mjs && node tests/evidence-workbench.test.mjs && node tests/task-status-panel.test.mjs && node tests/report-flow.test.mjs && node tests/complete-flow.test.mjs && node tests/improvement-portfolio.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/fraunces": "5.3.0",

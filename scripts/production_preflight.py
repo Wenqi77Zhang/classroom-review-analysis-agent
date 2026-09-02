@@ -19,14 +19,21 @@ def _require(name: str, *, minimum: int = 1) -> str:
     return value
 
 
+def _optional(name: str, *, minimum: int) -> str | None:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return None
+    return _require(name, minimum=minimum)
+
+
 def main() -> int:
     if os.getenv("APP_ENV", "").strip() != "production":
         raise ValueError("公网部署必须设置 APP_ENV=production。")
     origin = urlparse(_require("FRONTEND_ORIGIN"))
     if origin.scheme != "https" or not origin.netloc:
         raise ValueError("公网部署 FRONTEND_ORIGIN 必须是完整 HTTPS 地址。")
-    _require("TEAM_TUNNEL_ACCESS_CODE", minimum=16)
-    _require("DEMO_ACCOUNT_PASSWORD", minimum=16)
+    _optional("TEAM_TUNNEL_ACCESS_CODE", minimum=16)
+    _optional("DEMO_ACCOUNT_PASSWORD", minimum=16)
     _require("DATABASE_URL", minimum=16)
     _require("JWT_SECRET", minimum=32)
     _require("OBJECT_STORAGE_ENDPOINT", minimum=8)
