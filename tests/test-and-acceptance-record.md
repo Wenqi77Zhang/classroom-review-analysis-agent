@@ -240,6 +240,16 @@ SRT/VTT 作为教师优先译文。系统不静默忽略契约，不接受缺行
 **复测：** `http://127.0.0.1:8100/health` 返回 `status=ok` 和 `app_env=development`，
 `http://127.0.0.1:3000/api/backend-health` 返回 `reachable=true`，经前端创建演示会话返回 HTTP 200。
 
+### 6.8 开发环境 CSP 阻断 React 调试工具
+
+**现象：** 本地开发页面出现 `eval() is not supported in this environment`，React/Next 调试界面
+持续报错；生产构建不受影响。
+
+**原因：** 生产级 `script-src` 被原样用于开发服务器，而 React 开发调试功能需要 `eval()` 重建调用栈。
+
+**处理与复测：** 仅当 `NODE_ENV=development` 时加入 `unsafe-eval`，生产模式仍不允许该能力；
+契约测试同时锁定两条分支，避免为了方便调试而永久降低线上 CSP。
+
 ## 7. 教师人工试用脚本
 
 ### 7.1 试用者与资料
