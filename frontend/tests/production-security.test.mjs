@@ -25,6 +25,11 @@ for (const header of [
   assert.match(config, new RegExp(header), `生产前端必须声明 ${header}`);
 }
 assert.match(config, /output: "standalone"/, "部署镜像必须使用 Next standalone 输出");
+assert.match(
+  config,
+  /process\.env\.NODE_ENV === "development"[\s\S]*script-src 'self' 'unsafe-inline' 'unsafe-eval'[\s\S]*script-src 'self' 'unsafe-inline'/,
+  "React 调试所需 unsafe-eval 只能在 development CSP 中出现，生产分支必须保持严格",
+);
 assert.match(guard, /createHash\("sha256"\)/, "限流键不得保存客户端地址明文");
 assert.match(guard, /MAX_TRACKED_KEYS/, "进程内限流表必须有内存上限");
 assert.match(guard, /sec-fetch-site[\s\S]*cross-site/, "写接口必须拒绝跨站请求");
