@@ -97,12 +97,14 @@ try {
         Remove-Item -LiteralPath $pytestTemp -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
-& $python -m ruff check backend agent tests
+& $python -m ruff check backend agent worker scripts tests
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Push-Location -LiteralPath "frontend"
 try {
     & npm.cmd test
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & npm.cmd run test:e2e:spec
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & npm.cmd run typecheck
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -112,5 +114,5 @@ try {
     Pop-Location
 }
 
-Write-Host "Release verification passed: Python tests/lint and frontend test/typecheck/build."
+Write-Host "Release verification passed: Python tests/lint and frontend contract/E2E collection/typecheck/build."
 exit 0

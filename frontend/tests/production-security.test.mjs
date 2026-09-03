@@ -11,6 +11,8 @@ const demo = read("src/app/api/session/demo/route.ts");
 const team = read("src/app/api/team-access/route.ts");
 const packageJson = JSON.parse(read("package.json"));
 const ciWorkflow = read("../.github/workflows/ci.yml");
+const windowsVerify = read("../verify.ps1");
+const unixVerify = read("../verify.sh");
 
 for (const header of [
   "Content-Security-Policy",
@@ -46,5 +48,17 @@ assert.doesNotMatch(
   /run:\s*npm run test:e2e:real/,
   "真实 E2E 必须连接运行中的完整系统，不应在普通 CI Runner 中无条件执行",
 );
+for (const verifier of [windowsVerify, unixVerify]) {
+  assert.match(
+    verifier,
+    /ruff check backend agent worker scripts tests/,
+    "一键验证必须覆盖后端、Agent、Worker、脚本和测试代码",
+  );
+  assert.match(
+    verifier,
+    /test:e2e:spec/,
+    "一键验证必须确认真实浏览器用例可以被收集",
+  );
+}
 
 console.log("PRODUCTION_SECURITY_CONTRACT_OK");
