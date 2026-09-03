@@ -48,8 +48,9 @@ macOS/Linux：
 ./verify.sh
 ```
 
-验证脚本应覆盖 Python 静态检查与测试、前端测试、TypeScript 类型检查、Next.js 生产构建、
-Markdown/骨架约束和敏感文件扫描。任何一步失败都应返回非零退出码。
+验证脚本应覆盖 Python 后端、Agent、Worker、运行脚本与测试代码的静态检查和测试、前端契约测试、
+真实浏览器 E2E 用例收集、TypeScript 类型检查、Next.js 生产构建、Markdown/骨架约束和敏感文件
+扫描。任何一步失败都应返回非零退出码；真实浏览器执行仍须连接已经启动的完整系统。
 
 ### 2.2 分模块命令
 
@@ -65,6 +66,7 @@ Python：
 ```powershell
 Set-Location .\frontend
 npm test
+npm run test:e2e:spec
 npm run typecheck
 npm run build
 ```

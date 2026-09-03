@@ -54,7 +54,7 @@ else
 fi
 
 "$python" -m pytest -q
-"$python" -m ruff check backend agent tests
-(cd frontend && npm test && npm run typecheck && npm run build)
+"$python" -m ruff check backend agent worker scripts tests
+(cd frontend && npm test && npm run test:e2e:spec && npm run typecheck && npm run build)
 
-echo "Release verification passed: Python tests/lint and frontend test/typecheck/build."
+echo "Release verification passed: Python tests/lint and frontend contract/E2E collection/typecheck/build."
