@@ -2571,6 +2571,25 @@ textarea {
   margin-top: 10px;
 }
 
+.agent-response-meta,
+.dialogue-error small {
+  display: block;
+  margin-top: 9px;
+  color: var(--ink-faint);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.agent-thinking {
+  border-color: rgba(71, 109, 113, 0.26);
+}
+
+.dialogue-error {
+  background: rgba(244, 231, 227, 0.72);
+  border-color: rgba(147, 79, 68, 0.2);
+  color: #74483f;
+}
+
 .text-button {
   color: #476d71;
   font-weight: 650;
@@ -2608,6 +2627,83 @@ textarea {
 
 .contract-form {
   padding: 20px;
+}
+
+.contract-form > label:not(.permission-check) {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 15px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.contract-form > label small {
+  color: var(--ink-faint);
+  font-size: 13px;
+  font-weight: 450;
+}
+
+.contract-form textarea,
+.contract-form select,
+.contract-form input[type="number"] {
+  width: 100%;
+  margin: 0;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(95, 100, 123, 0.2);
+  border-radius: 13px;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 480;
+}
+
+.contract-form textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.contract-time-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: -4px 0 15px;
+}
+
+.contract-time-range label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.contract-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 13px 0;
+}
+
+.contract-provenance span {
+  padding: 5px 9px;
+  background: rgba(84, 111, 109, 0.08);
+  border: 1px solid rgba(84, 111, 109, 0.14);
+  border-radius: 999px;
+  color: var(--ink-faint);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.contract-guidance {
+  margin: 12px 0;
+  padding: 11px 12px;
+  background: rgba(185, 157, 98, 0.1);
+  border: 1px solid rgba(185, 157, 98, 0.18);
+  border-radius: 13px;
+  color: #695c3f;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .contract-form fieldset {

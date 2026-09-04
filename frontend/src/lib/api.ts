@@ -27,6 +27,7 @@ import type {
   AggregateReportRead,
   ValidationMode,
   ActionProgress,
+  ReviewDialogueResponse,
 } from "@/types/contracts";
 
 export class ApiClientError extends Error {
@@ -136,6 +137,19 @@ export async function createClassroom(
       analysis_contract: input.analysisContract ?? {},
     }),
   });
+}
+
+export async function clarifyReviewGoal(
+  classroomId: string,
+  teacherMessages: string[],
+): Promise<ReviewDialogueResponse> {
+  return requestJson(
+    `/api/classrooms/${encodeURIComponent(classroomId)}/review-dialogue`,
+    {
+      method: "POST",
+      body: JSON.stringify({ teacher_messages: teacherMessages }),
+    },
+  );
 }
 
 export async function presignUpload(

@@ -94,6 +94,13 @@ class Settings(BaseSettings):
         description="Agent 回写分析结论的服务令牌，权限范围小于 Worker 令牌。"
     )
 
+    # ---------------- Local model ----------------
+    # 资料上传前的复盘澄清与资料处理后的证据分析复用同一台 loopback-only
+    # Ollama 服务，但使用不同的结构化契约和提示词。模型地址不允许由浏览器提供。
+    local_model_chat_completions_url: str = "http://127.0.0.1:11434/v1/chat/completions"
+    local_model_name: str = "qwen3.5:4b"
+    local_model_reasoning_effort: Literal["none", "low", "medium", "high"] = "none"
+
     # ---------------- Object storage ----------------
     # M1 默认 Backblaze B2（成员 1 确定），走其 S3 兼容 API。变量名保持通用，
     # 换供应商不必改前端、数据库与 Worker。

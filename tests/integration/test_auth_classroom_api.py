@@ -16,6 +16,8 @@ from backend.app.config import Settings
 from backend.app.dependencies import get_db
 from backend.app.main import create_app
 from backend.app.models import AuditEvent, User
+from backend.app.schemas.review_dialogue import ReviewDialogueResponse
+from backend.app.schemas.task import AnalysisContract
 from backend.app.services.authentication import hash_password
 
 
@@ -26,6 +28,26 @@ class DeletionRecordingStorage:
     async def delete_prefix(self, prefix: str) -> int:
         self.deleted_prefixes.append(prefix)
         return 3
+
+
+class RecordingReviewClarifier:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def clarify(self, **kwargs: object) -> ReviewDialogueResponse:
+        self.calls.append(kwargs)
+        teacher_messages = kwargs["teacher_messages"]
+        assert isinstance(teacher_messages, list)
+        return ReviewDialogueResponse(
+            clarification_needed=False,
+            assistant_message="已根据你的概念顺序目标形成契约草案，请核对。",
+            analysis_contract=AnalysisContract(
+                goal="复盘概念讲解顺序",
+                focus_areas=["概念铺垫与讲解顺序"],
+            ),
+            model_name="integration-test-model",
+            trace_id=str(kwargs["trace_id"]),
+        )
 
 
 def api_settings(database_url: str) -> Settings:
@@ -68,6 +90,8 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
     app.dependency_overrides[get_db] = test_db
     storage = DeletionRecordingStorage()
     app.state.object_storage = storage
+    clarifier = RecordingReviewClarifier()
+    app.state.review_clarifier = clarifier
 
     try:
         async with factory.begin() as session:
@@ -142,6 +166,27 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
 
             own = await client.get(f"/api/classrooms/{classroom_id}", headers=first_headers)
             assert own.status_code == 200
+
+            dialogue = await client.post(
+                f"/api/classrooms/{classroom_id}/review-dialogue",
+                json={"teacher_messages": ["请分析概念讲解顺序是否清楚"]},
+                headers=first_headers,
+            )
+            assert dialogue.status_code == 200
+            assert dialogue.json()["analysis_contract"]["focus_areas"] == [
+                "概念铺垫与讲解顺序"
+            ]
+            assert dialogue.json()["analysis_contract"]["confirmed"] is False
+            assert dialogue.json()["model_name"] == "integration-test-model"
+            assert clarifier.calls[0]["course_name"] == "AI Course"
+
+            foreign_dialogue = await client.post(
+                f"/api/classrooms/{classroom_id}/review-dialogue",
+                json={"teacher_messages": ["试图读取其他账户的课堂"]},
+                headers=second_headers,
+            )
+            assert foreign_dialogue.status_code == 404
+            assert len(clarifier.calls) == 1
 
             cross_account = await client.get(
                 f"/api/classrooms/{classroom_id}", headers=second_headers
@@ -227,6 +272,7 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
                 {
                     "course.created": 1,
                     "classroom.created": 1,
+                    "review_dialogue.generated": 1,
                     "classroom.updated": 2,
                     "classroom.deleted": 1,
                 }
@@ -236,6 +282,7 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
                 {"updated_fields": ["description"]},
             ]
             serialized = repr([event.details for event in events])
+            assert "请分析概念讲解顺序是否清楚" not in serialized
             assert "Updated Search Lecture" not in serialized
             assert "Initial description" not in serialized
             deleted_events = [event for event in events if event.action == "classroom.deleted"]

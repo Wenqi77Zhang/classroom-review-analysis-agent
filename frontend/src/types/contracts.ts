@@ -34,6 +34,15 @@ export type AnalysisContract = {
   confirmed: boolean;
 };
 
+export type ReviewDialogueResponse = {
+  clarification_needed: boolean;
+  assistant_message: string;
+  analysis_contract: AnalysisContract;
+  model_name: string;
+  prompt_version: "clarification-v1";
+  trace_id: string;
+};
+
 export type BackendHealthResponse = {
   reachable: boolean;
   status: "ok" | "unavailable";

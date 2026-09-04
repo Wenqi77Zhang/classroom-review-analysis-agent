@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   ApiClientError,
   cancelTask,
+  clarifyReviewGoal,
   createTask,
   getTask,
   getTaskAssets,
@@ -13,7 +14,7 @@ import {
   startDemoSession,
 } from "@/lib/api";
 import { saveDemoReportDraft } from "@/lib/demo-report-draft";
-import type { TaskRead } from "@/types/contracts";
+import type { AnalysisContract, ReviewDialogueResponse, TaskRead } from "@/types/contracts";
 import { EvidenceCard } from "../evidence/EvidenceCard";
 import { RealEvidenceWorkbench } from "../evidence/RealEvidenceWorkbench";
 import {
@@ -63,6 +64,20 @@ const demoTranscript: TranscriptItem[] = [
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+type DialogueEntry = {
+  role: "teacher" | "agent";
+  content: string;
+  modelName?: string;
+  traceId?: string;
+};
+
+function linesFromEditor(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function ReviewTaskBaseline({
   resourceId,
   resourceKind = "unknown",
@@ -72,12 +87,17 @@ export function ReviewTaskBaseline({
 }) {
   const router = useRouter();
   const [classroom, setClassroom] = useState("尚未创建课堂");
-  const [messages, setMessages] = useState<string[]>([]);
-  const [conversationStep, setConversationStep] = useState<0 | 1 | 2>(0);
+  const [teacherMessages, setTeacherMessages] = useState<string[]>([]);
+  const [dialogueEntries, setDialogueEntries] = useState<DialogueEntry[]>([]);
   const [goal, setGoal] = useState("");
-  const [contract, setContract] = useState(false);
+  const [contractDraft, setContractDraft] = useState<AnalysisContract | null>(null);
+  const [clarificationNeeded, setClarificationNeeded] = useState(true);
+  const [agentPending, setAgentPending] = useState(false);
+  const [dialogueError, setDialogueError] = useState<{
+    message: string;
+    traceId?: string;
+  } | null>(null);
   const [confirmed, setConfirmed] = useState(false);
-  const [bilingualRequired, setBilingualRequired] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
   const [preview, setPreview] = useState<TaskPreviewState>("empty");
@@ -167,17 +187,55 @@ export function ReviewTaskBaseline({
       window.clearInterval(timer);
     };
   }, [realTask]);
-  function send(event: FormEvent) {
+  async function send(event: FormEvent) {
     event.preventDefault();
-    if (!goal.trim() || conversationStep === 2) return;
-    setMessages((list) => [...list, goal.trim()]);
-    setGoal("");
-    if (conversationStep === 0) {
-      setConversationStep(1);
-    } else {
-      setConversationStep(2);
-      setContract(true);
+    const teacherMessage = goal.trim();
+    if (!teacherMessage || agentPending || !clarificationNeeded) return;
+    if (!UUID_PATTERN.test(realClassroomId)) {
+      setDialogueError({ message: "请先创建真实课堂，再使用复盘 Agent 形成分析契约。" });
+      return;
     }
+    const nextTeacherMessages = [...teacherMessages, teacherMessage];
+    setGoal("");
+    setAgentPending(true);
+    setDialogueError(null);
+    try {
+      const response: ReviewDialogueResponse = await clarifyReviewGoal(
+        realClassroomId,
+        nextTeacherMessages,
+      );
+      setTeacherMessages(nextTeacherMessages);
+      setDialogueEntries((entries) => [
+        ...entries,
+        { role: "teacher", content: teacherMessage },
+        {
+          role: "agent",
+          content: response.assistant_message,
+          modelName: response.model_name,
+          traceId: response.trace_id,
+        },
+      ]);
+      setContractDraft(response.analysis_contract);
+      setClarificationNeeded(response.clarification_needed);
+      setConfirmed(false);
+      setUploadOpen(false);
+    } catch (error) {
+      setGoal(teacherMessage);
+      setDialogueError(
+        error instanceof ApiClientError
+          ? { message: error.message, traceId: error.traceId }
+          : { message: "复盘 Agent 暂时无法连接，请稍后重试。" },
+      );
+    } finally {
+      setAgentPending(false);
+    }
+  }
+  function updateContractDraft(changes: Partial<AnalysisContract>) {
+    setContractDraft((current) =>
+      current ? { ...current, ...changes, confirmed: false } : current,
+    );
+    setConfirmed(false);
+    setUploadOpen(false);
   }
   async function recoverTaskSession() {
     setRecoveringSession(true);
@@ -319,29 +377,47 @@ export function ReviewTaskBaseline({
       </SiteChrome>
     );
   }
+  const latestAgentEntry = dialogueEntries.slice().reverse().find((entry) => entry.role === "agent");
+  const contractReady = Boolean(
+    contractDraft &&
+      !clarificationNeeded &&
+      contractDraft.goal.trim() &&
+      contractDraft.focus_areas.length > 0 &&
+      (contractDraft.scope === "full_lesson" ||
+        ((contractDraft.end_ms ?? 0) > (contractDraft.start_ms ?? 0))),
+  );
   return <SiteChrome><section className="view active" aria-labelledby="workspace-title"><div className="workspace-shell">
     <div className="workspace-header" data-reveal><div><p className="eyebrow">DEFINE THE REVIEW · 步骤 2 / 3</p><h1 id="workspace-title">说清这次想复盘什么</h1></div><div className="classroom-context"><small>当前课堂</small><strong>{classroom}</strong></div></div>
-    <div className="workspace-grid"><section className="conversation-panel" data-reveal aria-label="与 Agent 对话"><div className="panel-heading"><div><span className="agent-avatar">A</span><span><strong>复盘 Agent</strong><small>仅协助，不替代教师判断</small></span></div><span className="mock-pill backend-reachable">任务引导</span></div>
-      <div className="messages" aria-live="polite"><article className="message agent"><div className="message-label">Agent</div><p>请用自然语言说明这次最想复盘的问题。我会在开始处理前确认范围、证据条件和输出形式。</p></article>{messages[0] && <article className="message teacher"><div className="message-label">教师</div><p>{messages[0]}</p></article>}{conversationStep >= 1 && <article className="message agent"><div className="message-label">Agent 追问</div><p>你希望分析整节课堂还是指定片段？哪些证据必须保留，是否需要中英双语？</p></article>}{messages[1] && <article className="message teacher"><div className="message-label">教师</div><p>{messages[1]}</p></article>}{contract && <article className="message agent"><div className="message-label">Agent</div><p>我已根据两轮输入整理为右侧分析契约。请核对范围、证据条件和隐私边界后再确认。</p></article>}</div>
-      <form className="composer" onSubmit={send}><label htmlFor="goal-input" className="sr-only">复盘目标</label><textarea id="goal-input" rows={3} value={goal} disabled={conversationStep === 2} onChange={(event) => setGoal(event.target.value)} placeholder={conversationStep === 0 ? "例如：请分析内容组织、讲解清晰度和提问后的等待时间……" : conversationStep === 1 ? "例如：分析整节课堂，每条判断保留时间戳和中英原文……" : "分析契约已形成；如需调整，可返回并重新创建复盘任务。"} /><div className="composer-footer"><button className="text-button" type="button" disabled={conversationStep === 2} onClick={() => setGoal(conversationStep === 0 ? "请分析整节课堂的内容组织、讲解清晰度和提问后的等待时间，并为每条判断附上原文证据。" : "分析整节课堂；每条判断必须保留时间戳、课堂原文和中文翻译。")}>使用示例回答</button><button className="button primary compact" type="submit" disabled={conversationStep === 2}>{conversationStep === 0 ? "发送目标" : "回答追问"}</button></div></form>
+    <div className="workspace-grid"><section className="conversation-panel" data-reveal aria-label="与 Agent 对话"><div className="panel-heading"><div><span className="agent-avatar">A</span><span><strong>复盘 Agent</strong><small>真实本地模型 · 仅协助，不替代教师判断</small></span></div><span className="mock-pill backend-reachable">目标澄清</span></div>
+      <div className="messages" aria-live="polite">
+        <article className="message agent"><div className="message-label">系统引导</div><p>请用自然语言说明这次最想复盘的问题。发送后，本地模型会根据你的实际目标决定是否追问，并生成可修改的分析契约草案。</p></article>
+        {dialogueEntries.map((entry, index) => <article className={`message ${entry.role}`} key={`${entry.role}-${index}`}><div className="message-label">{entry.role === "teacher" ? "教师" : "Agent"}</div><p>{entry.content}</p>{entry.role === "agent" && <small className="agent-response-meta">{entry.modelName} · Trace {entry.traceId}</small>}</article>)}
+        {agentPending && <article className="message agent agent-thinking" role="status"><div className="message-label">Agent 正在理解</div><p>正在结合本课堂信息分析你的目标并生成结构化契约…</p></article>}
+        {dialogueError && <article className="message agent dialogue-error" role="alert"><div className="message-label">智能服务未完成</div><p>{dialogueError.message}</p>{dialogueError.traceId && <small>Trace {dialogueError.traceId}</small>}</article>}
+      </div>
+      <form className="composer" onSubmit={send}><label htmlFor="goal-input" className="sr-only">复盘目标</label><textarea id="goal-input" rows={3} value={goal} disabled={agentPending || !clarificationNeeded} onChange={(event) => setGoal(event.target.value)} placeholder={!clarificationNeeded ? "分析契约草案已形成；请在右侧核对和修改。" : teacherMessages.length === 0 ? "例如：请重点分析我讲解算法时，概念顺序是否清楚……" : "请回答 Agent 刚才针对本节课提出的问题……"} /><div className="composer-footer"><button className="text-button" type="button" disabled={agentPending || !clarificationNeeded} onClick={() => setGoal(teacherMessages.length === 0 ? "请分析整节课堂中知识点的讲解顺序是否清楚，并为每条判断附上原文或课件证据。" : "分析整节课堂；优先保留课堂原文和课件页码，不需要中英双语。")}>使用示例回答</button><button className="button primary compact" type="submit" disabled={agentPending || !clarificationNeeded || !goal.trim()}>{agentPending ? "Agent 处理中…" : !clarificationNeeded ? "契约已形成" : teacherMessages.length === 0 ? "发送给 Agent" : "回答 Agent"}</button></div></form>
     </section>
-    <aside className="contract-panel" data-reveal aria-labelledby="contract-title"><div className="panel-heading"><div><span className="contract-icon">✓</span><span><strong id="contract-title">分析契约</strong><small>教师确认后才开始处理</small></span></div><span className={`status-badge ${confirmed ? "ready" : "pending"}`}>{confirmed ? "已确认" : contract ? "待确认" : "待补充"}</span></div>
-      {!contract ? <div className="contract-empty"><span aria-hidden>✦</span><strong>尚未形成契约</strong><p>Agent 完成必要追问后，这里将展示可修改的分析范围与证据条件。</p></div> : <form className="contract-form"><label>分析范围<select><option>整节课堂</option><option>指定时间范围</option></select></label><fieldset><legend>关注维度</legend><label><input type="checkbox" defaultChecked /> 内容组织</label><label><input type="checkbox" defaultChecked /> 讲解清晰度</label><label><input type="checkbox" defaultChecked /> 提问等待时间</label></fieldset><div className="contract-rule"><span>证据条件</span><strong>每条判断必须连接视频时间或课堂原文</strong></div><label className="permission-check compact-check bilingual-contract-choice"><input type="checkbox" checked={bilingualRequired} onChange={(event) => setBilingualRequired(event.target.checked)} /><span><strong>需要中英双语证据</strong><small>仅用于英文或中英混合课堂：保留英文原文并生成逐句中文译文。纯中文课堂不要勾选。</small></span></label><div className="contract-rule"><span>双语要求</span><strong>{bilingualRequired ? "已开启；若译文不完整，系统将停止并提示修正" : "未开启；按课堂原语言生成证据"}</strong></div><label className="permission-check compact-check"><input type="checkbox" checked={confirmed} onChange={(event) => { setConfirmed(event.target.checked); if (!event.target.checked) setUploadOpen(false); }} /><span>我已核对范围、证据条件和隐私边界</span></label><button className="button primary wide" type="button" disabled={!confirmed} onClick={() => { setUploadOpen(true); setPreview("empty"); requestAnimationFrame(() => document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>确认契约，进入资料上传</button></form>}
+    <aside className="contract-panel" data-reveal aria-labelledby="contract-title"><div className="panel-heading"><div><span className="contract-icon">✓</span><span><strong id="contract-title">分析契约</strong><small>模型生成草案，教师修改确认后才开始处理</small></span></div><span className={`status-badge ${confirmed ? "ready" : "pending"}`}>{confirmed ? "已确认" : contractDraft ? clarificationNeeded ? "待回答" : "待确认" : "待生成"}</span></div>
+      {!contractDraft ? <div className="contract-empty"><span aria-hidden>✦</span><strong>尚未生成契约</strong><p>发送复盘目标后，真实本地模型会给出针对性回复与可编辑契约；模型不可用时这里不会伪造结果。</p></div> : <form className="contract-form">
+        <label>复盘目标<textarea rows={3} value={contractDraft.goal} onChange={(event) => updateContractDraft({ goal: event.target.value })} /></label>
+        <label>分析范围<select value={contractDraft.scope} onChange={(event) => updateContractDraft(event.target.value === "time_range" ? { scope: "time_range", start_ms: 0, end_ms: 60_000 } : { scope: "full_lesson", start_ms: null, end_ms: null })}><option value="full_lesson">整节课堂</option><option value="time_range">指定时间范围</option></select></label>
+        {contractDraft.scope === "time_range" && <div className="contract-time-range"><label>开始（秒）<input type="number" min={0} value={Math.round((contractDraft.start_ms ?? 0) / 1000)} onChange={(event) => updateContractDraft({ start_ms: Math.max(0, Number(event.target.value) * 1000) })} /></label><label>结束（秒）<input type="number" min={1} value={Math.round((contractDraft.end_ms ?? 0) / 1000)} onChange={(event) => updateContractDraft({ end_ms: Math.max(0, Number(event.target.value) * 1000) })} /></label></div>}
+        <label>关注维度<small>每行一项，可直接修改</small><textarea rows={4} value={contractDraft.focus_areas.join("\n")} onChange={(event) => updateContractDraft({ focus_areas: linesFromEditor(event.target.value) })} /></label>
+        <label>判断标准<small>每行一项</small><textarea rows={3} value={contractDraft.judgment_criteria.join("\n")} onChange={(event) => updateContractDraft({ judgment_criteria: linesFromEditor(event.target.value) })} /></label>
+        <label>证据要求<small>每行一项</small><textarea rows={3} value={contractDraft.evidence_requirements.join("\n")} onChange={(event) => updateContractDraft({ evidence_requirements: linesFromEditor(event.target.value) })} /></label>
+        <label>课程领域<select value={contractDraft.course_domain} onChange={(event) => updateContractDraft({ course_domain: event.target.value as AnalysisContract["course_domain"] })}><option value="general">通用</option><option value="computer_ai">计算机 / 人工智能</option><option value="humanities">人文社科</option></select></label>
+        <label className="permission-check compact-check bilingual-contract-choice"><input type="checkbox" checked={contractDraft.bilingual_required} onChange={(event) => updateContractDraft({ bilingual_required: event.target.checked })} /><span><strong>需要中英双语证据</strong><small>仅用于英文或中英混合课堂；纯中文课堂不要勾选。</small></span></label>
+        <div className="contract-rule"><span>隐私与来源</span><strong>{confirmed ? "课堂内容仅路由到本机模型；教师已确认当前契约" : "课堂内容仅路由到本机模型；草案尚未经教师确认"}</strong></div>
+        {latestAgentEntry && <div className="contract-provenance"><span>{latestAgentEntry.modelName}</span><span>clarification-v1</span><span>Trace {latestAgentEntry.traceId}</span></div>}
+        {clarificationNeeded && <p className="contract-guidance">Agent 仍需一项关键信息。请先回答左侧追问，再确认契约。</p>}
+        <label className="permission-check compact-check"><input type="checkbox" checked={confirmed} disabled={!contractReady} onChange={(event) => { setConfirmed(event.target.checked); if (!event.target.checked) setUploadOpen(false); }} /><span>我已核对并修改分析范围、证据条件和隐私边界</span></label>
+        <button className="button primary wide" type="button" disabled={!confirmed || !contractReady} onClick={() => { setUploadOpen(true); setPreview("empty"); requestAnimationFrame(() => document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>确认真实契约，进入资料上传</button>
+      </form>}
     </aside></div>
     {uploadOpen && (
       <UploadPanel
           classroomId={realClassroomId}
-          analysisContract={{
-            goal: messages[0] ?? "",
-            scope: "full_lesson",
-            focus_areas: ["内容组织", "讲解清晰度", "提问等待时间"],
-            judgment_criteria: ["区分事实、判断与建议"],
-            evidence_requirements: ["每条结论必须连接时间戳或课堂原文"],
-            bilingual_required: bilingualRequired,
-            privacy_mode: "local",
-            course_domain: "general",
-            confirmed: true,
-          }}
+          analysisContract={{ ...contractDraft!, confirmed: true }}
         onVideoReadinessChange={setHasVideo}
         onTaskCreated={(task) => {
           setRealTask(task);

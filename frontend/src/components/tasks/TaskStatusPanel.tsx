@@ -22,7 +22,7 @@ const stages = [
 const stateCopy: Record<TaskPreviewState, { title: string; detail: string }> = {
   empty: {
     title: "尚未创建真实处理任务",
-    detail: "请先确认分析契约并选择课堂视频；当前后端尚未提供任务创建接口。",
+    detail: "请先确认分析契约并选择课堂视频；上传完成后将创建真实任务并显示后端状态。",
   },
   processing: {
     title: "本地预览：处理中",
