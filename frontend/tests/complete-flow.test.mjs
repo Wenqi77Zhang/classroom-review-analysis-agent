@@ -11,8 +11,6 @@ const supplementalUpload = read(
   "src/components/upload/SupplementalTranslationUpload.tsx",
 );
 const status = read("src/components/tasks/TaskStatusPanel.tsx");
-const report = read("src/components/reports/ReportEditor.tsx");
-const draft = read("src/lib/demo-report-draft.ts");
 
 test("分析契约由真实复盘 Agent 按需追问后形成", () => {
   assert.match(task, /await clarifyReviewGoal\(/);
@@ -24,8 +22,9 @@ test("分析契约由真实复盘 Agent 按需追问后形成", () => {
 
 test("没有课堂视频时不能越过任务状态门禁", () => {
   assert.match(upload, /onVideoReadinessChange\?\.\(hasVideo\)/);
-  assert.match(task, /enabled=\{uploadOpen && hasVideo\}/);
-  assert.match(status, /disabled=\{!enabled\}/);
+  assert.match(upload, /if \(!hasVideo \|\| !classroomId \|\| backendHealth !== "reachable"\) return/);
+  assert.match(upload, /!hasVideo/);
+  assert.match(task, /任务创建前不会展示模拟进度或分析结果/);
 });
 
 test("真实课堂、上传和任务链路使用后端资源 ID", () => {
@@ -50,16 +49,9 @@ test("任务提交使用后端与 Agent 共用的已确认分析契约", () => {
   assert.doesNotMatch(task, /scope: "full_class"/);
 });
 
-test("本地复核结果通过会话状态交接给报告且不冒充后端持久化", () => {
-  assert.match(task, /saveDemoReportDraft\(reviewStatus, reviewNote\)/);
-  assert.match(draft, /sessionStorage\.setItem/);
-  assert.match(report, /loadDemoReportDraft\(\)/);
-  assert.match(report, /尚未保存到服务器/);
-});
-
-test("修改结论缺少说明时不能进入报告", () => {
-  assert.match(task, /reviewStatus === "modified" && !reviewNote\.trim\(\)/);
-  assert.match(task, /请先填写教师修改说明/);
+test("普通任务入口不再包含本地状态、证据或报告模拟链路", () => {
+  assert.doesNotMatch(task, /Mock 证据工作台|demoTranscript|saveDemoReportDraft/);
+  assert.doesNotMatch(status, /本地状态预览|预览安全重试|TaskPreviewState/);
 });
 
 test("真实任务会话缺失时可自助恢复而不暴露令牌", () => {

@@ -26,6 +26,8 @@ assert.match(
   "只有确认支持动画后才能隐藏待显现内容",
 );
 const chrome = readFileSync(resolve(root, "src/components/baseline/SiteChrome.tsx"), "utf8");
+const home = readFileSync(resolve(root, "src/components/baseline/HomeBaseline.tsx"), "utf8");
+const taskPage = readFileSync(resolve(root, "src/app/tasks/[taskId]/page.tsx"), "utf8");
 assert.match(chrome, /M1–M3 证据链/, "页面必须准确呈现已接通的完整证据链");
 assert.match(chrome, /合成验证会单独标注/, "合成验证能力必须继续诚实标注");
 assert.match(chrome, /prefers-reduced-motion:\s*reduce/, "应尊重用户的减少动态效果设置");
@@ -47,4 +49,9 @@ assert.match(
   /mutationObserver\?\.observe\(document\.body, \{ childList: true, subtree: true \}\)/,
   "显现逻辑必须持续观察任务状态切换后新增的核心控件",
 );
+assert.match(chrome, /href="\/classrooms#owned-classrooms">复盘任务<\/Link>/, "复盘导航必须引导用户选择真实课堂");
+assert.doesNotMatch(chrome, /\/tasks\/demo-review/, "主导航不得暴露模拟任务入口");
+assert.match(home, /LIVE PRODUCT FLOW · 真实链路/, "首页能力预览必须准确标注真实链路");
+assert.doesNotMatch(home, /PRODUCT FILM|play-button|播放产品演示视频/, "没有真实影片时不得伪装成可播放视频");
+assert.match(taskPage, /UUID_PATTERN\.test\(taskId\)/, "任务页面必须拒绝演示名称等非真实资源 ID");
 console.log("UI_BASELINE_V1_OK");

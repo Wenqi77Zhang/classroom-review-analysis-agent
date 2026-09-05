@@ -6,72 +6,12 @@ const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
 const task = read("src/components/baseline/ReviewTaskBaseline.tsx");
-const card = read("src/components/evidence/EvidenceCard.tsx");
-const controls = read("src/components/evidence/ReviewControls.tsx");
 const timeline = read("src/components/evidence/TranscriptTimeline.tsx");
 const player = read("src/components/evidence/VideoPlayer.tsx");
 const realWorkbench = read("src/components/evidence/RealEvidenceWorkbench.tsx");
 
-assert.match(
-  task,
-  /preview === "ready"/,
-  "证据工作台只能在待教师复核状态显示",
-);
-assert.match(
-  task,
-  /Mock 证据工作台/,
-  "演示工作台必须显式标记为 Mock",
-);
-assert.match(
-  task,
-  /不代表真实课堂处理已经完成/,
-  "演示结论不得冒充真实处理结果",
-);
-assert.doesNotMatch(
-  task,
-  /\/assets\/test\.mp4/,
-  "不得引用未提交的伪测试视频",
-);
-
-assert.match(card, /可核对事实/, "证据卡必须区分事实");
-assert.match(card, /分析判断/, "证据卡必须区分判断");
-assert.match(card, /改进建议/, "证据卡必须区分建议");
-assert.match(card, /不会进入最终报告/, "Mock 结论不得进入最终报告");
-
-assert.match(controls, /type="button"/, "复核按钮必须声明按钮类型");
-for (const status of ["accepted", "modified", "rejected"]) {
-  assert.ok(controls.includes(`"${status}"`), `缺少复核状态：${status}`);
-}
-assert.match(
-  controls,
-  /尚未写入后端/,
-  "本地复核状态必须明确说明没有持久化",
-);
-assert.match(
-  controls,
-  /onStatusChange/,
-  "复核组件必须通过回调向上层传递状态",
-);
-assert.match(
-  controls,
-  /onStatusChange\("pending"\)/,
-  "重置操作必须通过受控回调同步父页面状态",
-);
-assert.match(
-  controls,
-  /onNoteChange\(""\)/,
-  "重置操作必须同时清除修改或驳回说明",
-);
-assert.match(
-  task,
-  /onSeekEvidence=\{\(\) => \{/,
-  "证据卡定位入口必须由页面接通",
-);
-assert.match(
-  task,
-  /setSeekToMs\(evidenceStartMs\)/,
-  "证据定位必须驱动播放器目标时间",
-);
+assert.match(task, /realTask\.status === "succeeded" && <RealEvidenceWorkbench/);
+assert.doesNotMatch(task, /Mock 证据工作台|demoTranscript|\/reports\/demo/);
 
 assert.match(timeline, /startMs: number/, "时间轴必须使用毫秒时间契约");
 assert.match(timeline, /endMs: number/, "时间轴必须声明片段结束时间");
