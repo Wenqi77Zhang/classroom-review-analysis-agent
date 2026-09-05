@@ -11,31 +11,27 @@ const workspace = fs.readFileSync(
   "utf8",
 );
 
-test("任务状态面板明确区分本地预览和真实后台任务", () => {
-  assert.match(panel, /本地状态预览 · 非真实任务/);
+test("任务状态面板只接受真实后台任务", () => {
   assert.match(panel, /真实后台任务/);
   assert.match(panel, /状态来自后端任务记录/);
-  assert.match(panel, /后端任务 API 接通后/);
-  assert.match(panel, /不会自动增加进度/);
+  assert.match(panel, /task: TaskRead/);
+  assert.doesNotMatch(panel, /TaskPreviewState|本地预览|onStateChange/);
 });
 
-test("任务状态面板覆盖处理阶段、失败原因和安全重试", () => {
+test("任务状态面板覆盖真实处理阶段", () => {
   for (const stage of [
     "资料上传",
     "音频抽取",
+    "媒体分段",
     "语音识别",
     "双语对齐",
+    "课件解析",
+    "证据索引",
     "证据分析",
   ]) {
     assert.match(panel, new RegExp(stage));
   }
-  assert.match(panel, /示例原因：语音识别服务不可用/);
-  assert.match(panel, /预览安全重试/);
-  assert.match(
-    panel,
-    /state === "processing" \|\| state === "failure"\s*\? 2/,
-    "语音识别失败时必须停在第三阶段，后续阶段保持等待",
-  );
+  assert.match(panel, /task\.status === "failed" && index === activeIndex/);
 });
 
 test("真实任务面板展示后端可回溯 trace_id", () => {
@@ -51,16 +47,12 @@ test("真实任务面板提供与错误类型匹配的恢复建议并披露重�
   assert.match(panel, /每次尝试均保留在审计链中/);
 });
 
-test("复盘流程使用共享任务状态面板并仅在待复核预览展示证据", () => {
+test("复盘流程只在真实任务成功后展示真实证据", () => {
   assert.match(
     workspace,
-    /<TaskStatusPanel[\s\S]*enabled[\s\S]*task=\{realTask\}/,
+    /<TaskStatusPanel task=\{realTask\}/,
     "已创建任务必须向共享状态面板传入真实后端记录",
   );
-  assert.match(
-    workspace,
-    /<TaskStatusPanel[\s\S]*enabled=\{uploadOpen && hasVideo\}[\s\S]*task=\{null\}/,
-    "创建任务前的状态预览必须保持显式非真实边界",
-  );
-  assert.match(workspace, /preview === "ready"/);
+  assert.match(workspace, /realTask\.status === "succeeded" && <RealEvidenceWorkbench/);
+  assert.doesNotMatch(workspace, /preview === "ready"|Mock 证据工作台|task=\{null\}/);
 });

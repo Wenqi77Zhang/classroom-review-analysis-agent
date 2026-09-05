@@ -1291,11 +1291,12 @@ nav {
   content: none;
 }
 
-.video-frame {
+.workflow-proof-frame {
   position: relative;
   min-height: 470px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   overflow: hidden;
   background:
     linear-gradient(150deg, rgba(34, 48, 50, 0.12), rgba(17, 25, 28, 0.7)),
@@ -1307,7 +1308,7 @@ nav {
   will-change: transform;
 }
 
-.video-frame::before {
+.workflow-proof-frame::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -1320,7 +1321,7 @@ nav {
   animation: video-light 10s ease-in-out infinite alternate;
 }
 
-.video-aurora {
+.workflow-proof-aurora {
   position: absolute;
   inset: 12% 8%;
   z-index: -1;
@@ -1354,7 +1355,7 @@ nav {
   }
 }
 
-.video-label {
+.workflow-proof-label {
   position: absolute;
   top: 22px;
   left: 23px;
@@ -1369,61 +1370,67 @@ nav {
   backdrop-filter: blur(16px);
 }
 
-.play-button {
+.workflow-proof-steps {
   position: relative;
-  width: 76px;
-  height: 76px;
+  z-index: 1;
   display: grid;
-  place-items: center;
+  gap: 12px;
+  margin: 54px 24px 92px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.64);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 12px rgba(255, 255, 255, 0.05),
-    0 14px 40px rgba(19, 23, 42, 0.25),
-    inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  list-style: none;
+}
+
+.workflow-proof-steps li {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(244, 248, 246, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
   color: white;
-  cursor: pointer;
-  backdrop-filter: blur(22px);
-  transition:
-    transform 0.3s ease,
-    background 0.3s ease,
-    box-shadow 0.3s ease;
+  backdrop-filter: blur(18px);
+  transition: background 0.3s ease, transform 0.3s ease;
 }
 
-.play-button:hover {
-  transform: scale(1.055);
-  background: rgba(255, 255, 255, 0.24);
-  box-shadow:
-    0 0 0 16px rgba(255, 255, 255, 0.055),
-    0 18px 50px rgba(19, 23, 42, 0.3),
-    0 0 34px rgba(182, 193, 241, 0.24);
+.workflow-proof-steps li:hover {
+  background: rgba(244, 248, 246, 0.17);
+  transform: translateX(4px);
 }
 
-.play-button span {
-  margin-left: 4px;
-  font-size: 18px;
+.workflow-proof-steps li > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 14px;
+  color: rgba(255, 255, 255, 0.74);
+  font-family: var(--font-fraunces), serif;
+  font-size: 13px;
 }
 
-.video-frame.is-playing .play-button span {
-  margin-left: 0;
-  font-size: 0;
+.workflow-proof-steps div {
+  display: grid;
+  gap: 2px;
 }
 
-.video-frame.is-playing .play-button span::after {
-  content: "Ⅱ";
+.workflow-proof-steps strong {
   font-size: 16px;
+  font-weight: 650;
 }
 
-.video-frame.is-playing .video-aurora {
-  animation-duration: 3.2s;
+.workflow-proof-steps small {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 13px;
+  letter-spacing: 0.03em;
 }
 
-.video-caption {
+.workflow-proof-caption {
   position: absolute;
   right: 25px;
-  bottom: 32px;
+  bottom: 26px;
   left: 25px;
   display: grid;
   gap: 6px;
@@ -1431,50 +1438,18 @@ nav {
   text-shadow: 0 2px 18px rgba(13, 16, 30, 0.36);
 }
 
-.video-caption span {
+.workflow-proof-caption span {
   color: rgba(255, 255, 255, 0.62);
   font-size: 13px;
   font-weight: 620;
   letter-spacing: 0.08em;
 }
 
-.video-caption strong {
+.workflow-proof-caption strong {
   max-width: 350px;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 590;
   line-height: 1.55;
-}
-
-.timeline {
-  position: absolute;
-  right: 25px;
-  bottom: 18px;
-  left: 25px;
-  height: 2px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.24);
-  border-radius: 2px;
-}
-
-.timeline span {
-  display: block;
-  width: 22%;
-  height: 100%;
-  background: linear-gradient(90deg, #d8d7f0, #a9d7e8);
-  box-shadow: 0 0 10px rgba(194, 212, 242, 0.6);
-}
-
-.video-frame.is-playing .timeline span {
-  animation: mock-progress 8s linear infinite;
-}
-
-@keyframes mock-progress {
-  from {
-    width: 22%;
-  }
-  to {
-    width: 92%;
-  }
 }
 
 .value-grid {
@@ -1829,24 +1804,16 @@ nav {
   line-height: 1.55;
 }
 
-.task-preview-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.task-preview-controls button {
-  padding: 8px 12px;
-  border: 1px solid rgba(95, 100, 123, 0.18);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.48);
+.task-creation-boundary {
+  margin: 16px 0 0;
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 16px;
+  background: rgba(239, 244, 241, 0.52);
   color: var(--ink-soft);
-}
-
-.task-preview-controls button.active {
-  background: var(--indigo);
-  color: white;
+  font-size: 14px;
+  line-height: 1.65;
+  backdrop-filter: blur(16px);
 }
 
 @media (max-width: 900px) {
@@ -2032,11 +1999,6 @@ nav {
 .report-transfer-ok {
   background: rgba(231, 243, 237, 0.68);
   color: var(--success);
-}
-
-.task-preview-controls button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .report-edit-form,
@@ -2468,7 +2430,7 @@ textarea {
   color: var(--success);
 }
 
-.mock-pill,
+.status-pill,
 .status-badge {
   padding: 6px 9px;
   border: 1px solid rgba(255, 255, 255, 0.72);
@@ -2478,22 +2440,22 @@ textarea {
   backdrop-filter: blur(14px);
 }
 
-.mock-pill {
+.status-pill {
   background: rgba(238, 221, 229, 0.58);
   color: #8a5267;
 }
 
-.mock-pill.backend-checking {
+.status-pill.backend-checking {
   background: rgba(237, 226, 204, 0.56);
   color: #806b42;
 }
 
-.mock-pill.backend-reachable {
+.status-pill.backend-reachable {
   background: rgba(207, 226, 218, 0.58);
   color: #3f6a5c;
 }
 
-.mock-pill.backend-unreachable {
+.status-pill.backend-unreachable {
   background: rgba(238, 221, 229, 0.58);
   color: #8a5267;
 }
@@ -3613,7 +3575,7 @@ textarea {
     gap: 40px;
   }
 
-  .video-frame {
+  .workflow-proof-frame {
     min-height: 420px;
   }
 }
@@ -3807,7 +3769,7 @@ textarea {
     flex-direction: column;
   }
 
-  .video-frame {
+  .workflow-proof-frame {
     min-height: 420px;
   }
 
@@ -3816,7 +3778,7 @@ textarea {
     border-radius: 30px;
   }
 
-  .video-frame {
+  .workflow-proof-frame {
     border-radius: 23px;
   }
 

@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { SiteChrome } from "./SiteChrome";
 
 export function HomeBaseline() {
-  const [playing, setPlaying] = useState(false);
   return <SiteChrome><section className="view active" aria-labelledby="home-title">
     <div className="hero">
       <div className="hero-copy" data-reveal>
@@ -14,8 +12,17 @@ export function HomeBaseline() {
         <div className="hero-actions"><Link className="button primary" href="/classrooms">创建一次课堂复盘 <span aria-hidden>→</span></Link><a className="button secondary" href="#workflow">先了解完整流程</a></div>
         <ul className="trust-list" aria-label="产品边界"><li>无证据，不进入报告</li><li>教师始终保留最终决定权</li><li>不用于自动给教师打分</li></ul>
       </div>
-      <aside className="hero-proof" aria-label="产品演示视频" data-reveal data-parallax>
-        <div className={`video-frame ${playing ? "playing" : ""}`}><div className="video-aurora" aria-hidden /><span className="video-label">PRODUCT FILM · 01:28</span><button type="button" className="play-button" onClick={() => setPlaying((value) => !value)} aria-label={playing ? "暂停产品演示视频" : "播放产品演示视频"}><span aria-hidden>{playing ? "Ⅱ" : "▶"}</span></button><div className="video-caption"><span>课堂复盘 Agent</span><strong>从一段课堂，到一份可核验的改进记录</strong></div><div className="timeline"><span /></div></div>
+      <aside className="hero-proof" aria-label="真实产品链路概览" data-reveal data-parallax>
+        <div className="workflow-proof-frame">
+          <div className="workflow-proof-aurora" aria-hidden />
+          <span className="workflow-proof-label">LIVE PRODUCT FLOW · 真实链路</span>
+          <ol className="workflow-proof-steps">
+            <li><span>01</span><div><strong>私有资料进入处理链</strong><small>对象存储 · Worker · ASR</small></div></li>
+            <li><span>02</span><div><strong>结论回到课堂证据</strong><small>视频时间 · 逐字稿 · 课件原页</small></div></li>
+            <li><span>03</span><div><strong>教师确认后生成报告</strong><small>接受 · 修改 · 驳回 · 导出</small></div></li>
+          </ol>
+          <div className="workflow-proof-caption"><span>课堂复盘 Agent</span><strong>这里展示已接通的能力，不伪装成尚未制作的产品影片</strong></div>
+        </div>
       </aside>
     </div>
     <aside className="product-note" data-reveal aria-label="产品流程简述"><span className="product-note-label">HOW IT WORKS</span><p>上传课堂视频、课件或逐字稿，定位值得复盘的片段；教师核对原文、修改结论，再导出可信的改进报告。</p><span className="product-note-index">INPUT · REVIEW · REPORT</span></aside>

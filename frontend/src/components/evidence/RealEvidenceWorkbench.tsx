@@ -347,7 +347,7 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
     <section className="evidence-workbench real" aria-labelledby="real-evidence-title">
       <header className="evidence-workbench-heading">
         <div>
-          <span className="mock-pill backend-reachable">真实任务证据 · 教师复核</span>
+            <span className="status-pill backend-reachable">真实任务证据 · 教师复核</span>
           <h2 id="real-evidence-title">逐条核对原文与画面，再决定是否进入报告</h2>
         </div>
         <div className="real-evidence-heading-actions">

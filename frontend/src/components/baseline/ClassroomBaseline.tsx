@@ -212,7 +212,7 @@ export function ClassroomBaseline() {
             </aside>
           </div>
           {classrooms.length > 0 && (
-            <section className="owned-classrooms" aria-labelledby="owned-classrooms-title">
+            <section className="owned-classrooms" id="owned-classrooms" aria-labelledby="owned-classrooms-title">
               <div className="section-title">
                 <span id="owned-classrooms-title">我的已有课堂</span>
                 <small>{classrooms.length} 节</small>
