@@ -9,6 +9,9 @@ const sessionRoute = read("src/app/api/session/demo/route.ts");
 const presignRoute = read(
   "src/app/api/classrooms/[classroomId]/uploads/presign/route.ts",
 );
+const reviewDialogueRoute = read(
+  "src/app/api/classrooms/[classroomId]/review-dialogue/route.ts",
+);
 const assetRoute = read("src/app/api/assets/[assetId]/route.ts");
 const downloadRoute = read(
   "src/app/api/assets/[assetId]/download-url/route.ts",
@@ -48,6 +51,18 @@ assert.match(
   presignRoute,
   /\/uploads\/presign/,
   "干净检出必须包含预签名上传 BFF 路由",
+);
+assert.match(reviewDialogueRoute, /requestCameFromSameOrigin/, "复盘 Agent BFF 必须拒绝跨站调用");
+assert.match(reviewDialogueRoute, /consumeAttempt/, "复盘 Agent BFF 必须限制模型请求频率");
+assert.match(
+  reviewDialogueRoute,
+  /\/review-dialogue/,
+  "复盘 Agent BFF 必须代理真实澄清接口",
+);
+assert.match(
+  api,
+  /clarifyReviewGoal[\s\S]*Promise<ReviewDialogueResponse>/,
+  "复盘目标必须通过有类型的真实 Agent 接口生成契约",
 );
 assert.match(
   assetRoute,

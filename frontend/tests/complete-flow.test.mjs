@@ -14,11 +14,12 @@ const status = read("src/components/tasks/TaskStatusPanel.tsx");
 const report = read("src/components/reports/ReportEditor.tsx");
 const draft = read("src/lib/demo-report-draft.ts");
 
-test("分析契约经过一次明确追问后才形成", () => {
-  assert.match(task, /Agent 追问/);
-  assert.match(task, /setConversationStep\(1\)/);
-  assert.match(task, /setConversationStep\(2\)/);
-  assert.match(task, /setContract\(true\)/);
+test("分析契约由真实复盘 Agent 按需追问后形成", () => {
+  assert.match(task, /await clarifyReviewGoal\(/);
+  assert.match(task, /response\.assistant_message/);
+  assert.match(task, /setContractDraft\(response\.analysis_contract\)/);
+  assert.match(task, /setClarificationNeeded\(response\.clarification_needed\)/);
+  assert.doesNotMatch(task, /setConversationStep|setContract\(true\)/);
 });
 
 test("没有课堂视频时不能越过任务状态门禁", () => {
@@ -40,14 +41,11 @@ test("真实课堂、上传和任务链路使用后端资源 ID", () => {
 });
 
 test("任务提交使用后端与 Agent 共用的已确认分析契约", () => {
-  assert.match(task, /scope: "full_lesson"/);
-  assert.match(task, /focus_areas:/);
-  assert.match(task, /evidence_requirements:/);
-  assert.match(task, /\[bilingualRequired, setBilingualRequired\] = useState\(false\)/);
-  assert.match(task, /bilingual_required: bilingualRequired/);
-  assert.match(task, /privacy_mode: "local"/);
-  assert.match(task, /course_domain: "general"/);
-  assert.match(task, /confirmed: true/);
+  assert.match(task, /setContractDraft\(response\.analysis_contract\)/);
+  assert.match(task, /updateContractDraft\(changes: Partial<AnalysisContract>\)/);
+  assert.match(task, /analysisContract=\{\{ \.\.\.contractDraft!, confirmed: true \}\}/);
+  assert.match(task, /contractDraft\.focus_areas\.length > 0/);
+  assert.match(task, /课堂内容仅路由到本机模型/);
   assert.doesNotMatch(task, /teacher_goal:/);
   assert.doesNotMatch(task, /scope: "full_class"/);
 });
@@ -86,8 +84,8 @@ test("上传创建任务并切换 URL 后恢复真实进度而不是回到上传
 test("双语要求必须显式选择且选错后可复用原资料修正", () => {
   assert.match(task, /需要中英双语证据/);
   assert.match(task, /纯中文课堂不要勾选/);
-  assert.match(task, /setBilingualRequired\(event\.target\.checked\)/);
-  assert.doesNotMatch(task, /bilingualRequired = \/双语\|翻译\|英文原文\//);
+  assert.match(task, /updateContractDraft\(\{ bilingual_required: event\.target\.checked \}\)/);
+  assert.doesNotMatch(task, /\/双语\|翻译\|英文原文\//);
   assert.match(task, /await getTaskAssets\(task\.id\)/);
   assert.match(task, /await cancelTask\(task\.id\)/);
   assert.match(task, /bilingual_required: false/);
