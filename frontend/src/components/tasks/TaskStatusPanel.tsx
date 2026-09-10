@@ -1,9 +1,13 @@
 "use client";
 
+import { useState } from "react";
+import { ApiClientError, cancelTask, retryTask } from "@/lib/api";
+import { redirectToLogin } from "@/lib/session-path";
 import type { TaskRead, TaskStage } from "@/types/contracts";
 
 type TaskStatusPanelProps = {
   task: TaskRead;
+  onTaskUpdated?: (task: TaskRead) => void;
 };
 
 const realStages: Array<{ value: TaskStage; label: string }> = [
@@ -19,7 +23,7 @@ const realStages: Array<{ value: TaskStage; label: string }> = [
 
 const realStatusCopy: Record<TaskRead["status"], string> = {
   pending: "待入队",
-  queued: "等待 Worker",
+  queued: "排队等待处理",
   running: "处理中",
   succeeded: "处理完成",
   failed: "处理失败",
@@ -52,7 +56,18 @@ function getNextAction(task: TaskRead): string {
   return "恢复建议：保留任务 ID 与 Trace ID，检查下方原始错误后重试；系统不会把失败任务伪装成完成。";
 }
 
-export function TaskStatusPanel({ task }: TaskStatusPanelProps) {
+export function TaskStatusPanel({ task, onTaskUpdated }: TaskStatusPanelProps) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function changeTask(action: "retry" | "cancel") {
+    setBusy(true);
+    setError("");
+    try { onTaskUpdated?.(await (action === "retry" ? retryTask(task.id) : cancelTask(task.id))); }
+    catch (caught) {
+      if (caught instanceof ApiClientError && caught.status === 401) redirectToLogin();
+      setError(caught instanceof Error ? caught.message : "操作失败，请重试。");
+    } finally { setBusy(false); }
+  }
   const activeIndex = realStages.findIndex((stage) => stage.value === task.stage);
   const nextAction = getNextAction(task);
 
@@ -60,10 +75,10 @@ export function TaskStatusPanel({ task }: TaskStatusPanelProps) {
     <section className="task-status-panel" aria-labelledby="task-status-title">
       <header className="task-status-heading">
         <div>
-          <span className="status-pill backend-reachable">真实后台任务</span>
+          <span className="status-pill backend-reachable">课堂处理</span>
           <h2 id="task-status-title">课堂处理任务</h2>
           <p>
-            状态来自后端任务记录，不使用前端计时器伪造进度。任务 ID：
+            任务编号：
             <code>{task.id}</code>
           </p>
           {task.trace_id && (
@@ -131,6 +146,11 @@ export function TaskStatusPanel({ task }: TaskStatusPanelProps) {
           )}
         </div>
       </div>
+      {onTaskUpdated && <div className="report-export-actions">
+        {task.status === "failed" && <button className="button primary" type="button" disabled={busy} onClick={() => void changeTask("retry")}>{busy ? "正在提交…" : "使用原资料重试"}</button>}
+        {["pending", "queued", "running"].includes(task.status) && <button className="button secondary" type="button" disabled={busy} onClick={() => void changeTask("cancel")}>{busy ? "正在取消…" : "取消处理"}</button>}
+      </div>}
+      {error && <p className="upload-error" role="alert">{error}</p>}
     </section>
   );
 }

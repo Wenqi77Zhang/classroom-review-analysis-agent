@@ -22,7 +22,7 @@ from backend.app.schemas.audit import AuditEventRead, InternalTraceEventWrite
 from backend.app.schemas.task import ServiceIdentity
 
 router = APIRouter(tags=["audit"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 AgentTraceWriter = Annotated[
     ServiceIdentity,

@@ -220,11 +220,25 @@ class ReportRead(OrmModel):
         description="实际组合进报告的结论；后端保证其 review_status 都在 "
         "REPORTABLE_REVIEW_STATUSES 内。"
     )
+    conclusions: list[AnalysisConclusion] = Field(default_factory=list, description="与正文同一事务快照中的已复核结论，用于安全编辑。")
     updated_at: datetime | None = None
+
+
+class ReportConclusionEdit(ApiModel):
+    id: ResourceId
+    content: NonBlankText = Field(max_length=20000)
+    previous_content: NonBlankText = Field(max_length=20000)
 
 
 class ReportUpdate(ApiModel):
     title: ReportTitle
+    conclusion_edits: list[ReportConclusionEdit] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def _unique_edits(self) -> ReportUpdate:
+        if len({item.id for item in self.conclusion_edits}) != len(self.conclusion_edits):
+            raise ValueError("同一结论不能重复修改。")
+        return self
 
 
 class ReportExportRequest(ApiModel):

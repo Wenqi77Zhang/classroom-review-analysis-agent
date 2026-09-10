@@ -1,5 +1,7 @@
 "use client";
 
+import { redirectToLogin } from "@/lib/session-path";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
@@ -11,7 +13,6 @@ import {
   getTaskAssets,
   getTranscript,
   reviewConclusion,
-  startDemoSession,
   updateTranscriptSegment,
 } from "@/lib/api";
 import type {
@@ -167,18 +168,6 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
     }
   }, [task.classroom_id, task.id]);
 
-  async function recoverDemoSession() {
-    setLoading(true);
-    setError(null);
-    try {
-      await startDemoSession();
-      await loadWorkbench();
-    } catch (sessionError) {
-      setError(normalizeError(sessionError));
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
     void loadWorkbench();
   }, [loadWorkbench, reloadKey]);
@@ -328,16 +317,16 @@ export function RealEvidenceWorkbench({ task }: { task: TaskRead }) {
         <strong>{sessionExpired ? "浏览器会话尚未建立" : "真实证据工作台暂时无法载入"}</strong>
         <p>
           {sessionExpired
-            ? "当前浏览器没有有效的演示会话。建立会话后，系统会自动重新读取任务证据。"
+            ? "当前登录已失效。使用原教师账号登录后，系统会自动重新读取任务证据。"
             : error?.message || "后端没有返回可用证据。"}
         </p>
         {error?.traceId && <small>追踪编号：{error.traceId}</small>}
         <button
           className={`button ${sessionExpired ? "primary" : "secondary compact"}`}
           type="button"
-          onClick={() => void (sessionExpired ? recoverDemoSession() : setReloadKey((key) => key + 1))}
+          onClick={() => void (sessionExpired ? redirectToLogin() : setReloadKey((key) => key + 1))}
         >
-          {sessionExpired ? "建立演示会话并重试" : "重试读取"}
+          {sessionExpired ? "登录并返回" : "重试读取"}
         </button>
       </section>
     );

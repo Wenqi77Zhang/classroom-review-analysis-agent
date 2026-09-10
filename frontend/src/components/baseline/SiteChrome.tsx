@@ -129,7 +129,7 @@ export function SiteChrome({ children }: { children: ReactNode }) {
       </nav>
       {sessionUser ? (
         <button className="user-chip" type="button" aria-label={`当前账号：${sessionUser.display_name}；点击退出`} onClick={logout} title="退出当前账号">
-          <span>{sessionUser.display_name.slice(0, 1)}</span>{sessionUser.display_name}<small>退出</small>
+          <span className="user-avatar">{sessionUser.display_name.slice(0, 1)}</span><span className="user-display-name">{sessionUser.display_name}</span><small>退出</small>
         </button>
       ) : (
         <Link className="user-chip user-login-link" href={`/login?next=${encodeURIComponent(pathname)}`} aria-label="登录教师账号">

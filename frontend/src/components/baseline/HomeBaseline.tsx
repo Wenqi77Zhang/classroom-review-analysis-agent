@@ -21,7 +21,7 @@ export function HomeBaseline() {
             <li><span>02</span><div><strong>结论回到课堂证据</strong><small>视频时间 · 逐字稿 · 课件原页</small></div></li>
             <li><span>03</span><div><strong>教师确认后生成报告</strong><small>接受 · 修改 · 驳回 · 导出</small></div></li>
           </ol>
-          <div className="workflow-proof-caption"><span>课堂复盘 Agent</span><strong>这里展示已接通的能力，不伪装成尚未制作的产品影片</strong></div>
+          <div className="workflow-proof-caption"><span>课堂复盘 Agent</span><strong>从课堂资料到证据核对，再到教师确认的复盘报告</strong></div>
         </div>
       </aside>
     </div>

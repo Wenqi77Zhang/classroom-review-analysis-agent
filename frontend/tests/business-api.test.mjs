@@ -127,8 +127,8 @@ assert.match(
 assert.match(contracts, /ReportExportFormat = "markdown" \| "html" \| "pdf"/, "报告格式必须与后端一致");
 assert.match(
   api,
-  /updateReport\([\s\S]*input: \{ title: string \}/,
-  "报告更新前端契约只允许修改标题",
+  /updateReport\([\s\S]*conclusion_edits\?:/,
+  "报告修改通过带版本核对的结论编辑契约",
 );
 assert.doesNotMatch(
   api,
@@ -156,10 +156,10 @@ assert.match(
   /new Response\(null, \{ status: response\.status, headers \}\)/,
   "204/205/304 必须转发为真正的无 body 响应",
 );
-assert.match(classroom, /await startDemoSession\(\)/, "创建课堂前必须建立演示会话");
+assert.match(classroom, /requireSession|redirectToLogin/, "创建课堂前必须检查教师会话");
 assert.match(classroom, /await createCourse\(courseName\)/, "必须创建真实课程");
 assert.match(classroom, /await createClassroom\(course\.id/, "课堂必须绑定真实课程 ID");
-assert.match(classroom, /sessionStorage\.setItem\("classroomId"/, "页面导航必须保存真实课堂 ID");
+assert.match(classroom, /router\.push\(`/, "页面通过真实资源地址导航");
 assert.match(
   classroom,
   /router\.push\(`\/tasks\/\$\{classroom\.id\}\?from=classroom`\)/,

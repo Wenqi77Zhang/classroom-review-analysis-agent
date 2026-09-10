@@ -21,6 +21,7 @@ from backend.app.models import (
     AuditEvent,
     Classroom,
     Course,
+    EvidenceReference,
     ProcessingTask,
     Report,
     ReviewDecision,
@@ -155,6 +156,8 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
                         content=f"model-content-{index}",
                         review_status=ReviewStatus.PENDING,
                         trace_id=f"review-trace-{index}",
+                        model_name="test-structured-model", skill="teaching-analysis", prompt_version="test-v1",
+                        evidence_refs=[EvidenceReference(owner_id=first_id, source_type="transcript", start_ms=1000, end_ms=3000, quote=f"observed-source-{index}")],
                     )
                     for index, conclusion_id in enumerate(conclusion_ids)
                 ]
@@ -272,12 +275,14 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
                     (conclusion_ids[1], "teacher revision"),
                 ]
             )
-            expected_content = "\n".join(
-                f"- {content}" for _, content in expected_reportable
-            )
             for response in concurrent_reports:
                 body = response.json()
-                assert body["content"] == expected_content
+                assert "model-content-0" in body["content"]
+                assert "teacher revision" in body["content"]
+                assert "observed-source-1" in body["content"]
+                assert "1000–3000 ms" in body["content"]
+                assert "test-structured-model" in body["content"]
+                assert "教师修改确认" in body["content"]
                 assert body["included_conclusion_ids"] == [
                     str(conclusion_id) for conclusion_id, _ in expected_reportable
                 ]
@@ -322,8 +327,34 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
             assert gated_report.json()["included_conclusion_ids"] == [
                 str(conclusion_ids[1])
             ]
-            assert gated_report.json()["content"] == "- teacher revision"
+            assert "teacher revision" in gated_report.json()["content"]
             assert "model-content-0" not in gated_report.json()["content"]
+
+            # Atomic edit gate: a rejected batch must not partly update its first item.
+            invalid_batch = await client.put(
+                f"/api/classrooms/{classroom_id}/report", headers=first_headers,
+                json={"title": "Must not be saved", "conclusion_edits": [
+                    {"id": str(conclusion_ids[1]), "content": "partial update forbidden", "previous_content": "teacher revision"},
+                    {"id": str(conclusion_ids[3]), "content": "pending bypass", "previous_content": "model-content-3"},
+                ]},
+            )
+            assert invalid_batch.status_code == 409
+            unchanged = await client.get(f"/api/classrooms/{classroom_id}/report", headers=first_headers)
+            assert "partial update forbidden" not in unchanged.json()["content"]
+            assert unchanged.json()["title"] == saved_report.json()["title"]
+            conflict = await client.put(f"/api/classrooms/{classroom_id}/report", headers=first_headers,
+                json={"title": saved_report.json()["title"], "conclusion_edits": [
+                    {"id": str(conclusion_ids[1]), "content": "conflicting edit", "previous_content": "stale draft"}]})
+            assert conflict.status_code == 409
+            edited = await client.put(f"/api/classrooms/{classroom_id}/report", headers=first_headers,
+                json={"title": saved_report.json()["title"], "conclusion_edits": [
+                    {"id": str(conclusion_ids[1]), "content": "teacher final revision", "previous_content": "teacher revision"}]})
+            assert edited.status_code == 200, edited.text
+            assert "teacher final revision" in edited.json()["content"]
+            assert "observed-source-1" in edited.json()["content"]
+            edit_history = await client.get(f"/api/conclusions/{conclusion_ids[1]}/history", headers=first_headers)
+            assert edit_history.json()[-1]["previous_content"] == "teacher revision"
+            assert edit_history.json()[-1]["edited_content"] == "teacher final revision"
 
             missing_export = await client.get(
                 f"/api/reports/{report_id}/export/markdown", headers=first_headers
@@ -357,8 +388,11 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
 
             markdown = storage.contents[exported_keys["markdown"]].decode()
             html = storage.contents[exported_keys["html"]].decode()
-            assert markdown == f"# {saved_report.json()['title']}\n\n- teacher revision\n"
-            assert "teacher revision" in html
+            assert markdown.startswith(f"# {saved_report.json()['title']}\n")
+            assert "teacher final revision" in markdown
+            assert "observed-source-1" in markdown
+            assert "review-trace-1" in markdown
+            assert "teacher final revision" in html
             assert "model-content-0" not in html
             assert storage.contents[exported_keys["pdf"]].startswith(b"%PDF-")
 
@@ -400,9 +434,9 @@ async def test_review_history_report_gate_audit_and_owner_isolation() -> None:
             )
             assert Counter(event.action for event in events) == Counter(
                 {
-                    "conclusion.reviewed": 5,
+                    "conclusion.reviewed": 6,
                     "report.created": 1,
-                    "report.updated": 1,
+                    "report.updated": 2,
                     "report.exported": 3,
                 }
             )

@@ -1,13 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-
-function safeNextPath(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
-}
+import { safeNextPath } from "@/lib/session-path";
 
 export default function TeamAccessPage() {
   const [accessCode, setAccessCode] = useState("");

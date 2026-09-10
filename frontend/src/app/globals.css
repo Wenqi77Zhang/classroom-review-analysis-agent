@@ -854,7 +854,7 @@ nav {
   text-decoration: none;
 }
 
-.user-chip span {
+.user-chip > span:not(.user-display-name) {
   width: 29px;
   height: 29px;
   display: grid;
@@ -864,6 +864,16 @@ nav {
   color: #506a6c;
   font-weight: 720;
 }
+
+.user-display-name {
+  min-width: 0;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-chip small { flex-shrink: 0; white-space: nowrap; }
 
 .view {
   display: none;
@@ -2057,7 +2067,8 @@ nav {
 }
 
 .report-paper {
-  min-height: 680px;
+  align-content: start;
+  min-height: 0;
 }
 
 .report-paper > span,
@@ -3604,7 +3615,11 @@ textarea {
   }
 
   .user-chip {
-    display: none;
+    display: inline-flex;
+    max-width: 40vw;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
   }
 
   .hero,
@@ -4532,4 +4547,17 @@ textarea {
   .delete-confirmation {
     justify-content: flex-start;
   }
+}
+
+.report-conclusion-edit { margin: 1.5rem 0; }
+.report-conclusion-edit textarea { display: block; width: 100%; box-sizing: border-box; margin: .65rem 0; padding: .85rem; border: 1px solid var(--border, #bccac1); border-radius: 12px; font: inherit; line-height: 1.7; resize: vertical; }
+.report-conclusion-edit details { font-size: .9rem; }
+.report-source-body { overflow-wrap: anywhere; line-height: 1.85; }
+.report-source-body p { margin: .6em 0; }
+.report-source-body h3 { margin: .5em 0 1em; }
+.report-source-detail { padding-left: 1em; font-size: .9em; }
+@media (max-width: 620px) {
+  .nav-link { padding: 8px 4px; font-size: 12px; white-space: nowrap; }
+  .site-header .user-chip { padding: 8px 10px; font-size: 12px; }
+  .site-header .user-chip > .user-avatar { display: none; }
 }

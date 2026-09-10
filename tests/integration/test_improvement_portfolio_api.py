@@ -8,9 +8,11 @@ from collections.abc import AsyncIterator
 
 import httpx
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from agent.providers.base import ModelResponse
+from agent.skills.evidence_comparison import EvidenceComparisonAgent
 from backend.app.config import Settings
 from backend.app.dependencies import get_db
 from backend.app.main import create_app
@@ -21,6 +23,7 @@ from backend.app.models import (
     Course,
     EvidenceReference,
     ProcessingTask,
+    ReviewDecision,
     User,
 )
 from backend.app.schemas.analysis_report import ConclusionType, EvidenceSourceType, ReviewStatus
@@ -71,6 +74,22 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
 
     app = create_app(settings(database_url))
     app.dependency_overrides[get_db] = database
+
+    class ComparisonFixtureProvider:
+        async def generate_structured(self, request):
+            import json
+            context = json.loads(request.user_prompt)
+            baseline = context["baseline"]
+            followup = context["followup_candidates"][0]
+            return ModelResponse(data={
+                "followup_conclusion_id": followup["id"], "outcome": "improved",
+                "baseline_evidence_ids": [baseline["evidence"][0]["id"]],
+                "followup_evidence_ids": [followup["evidence"][0]["id"]],
+                "baseline_quote": baseline["evidence"][0]["quote"],
+                "followup_quote": followup["evidence"][0]["quote"],
+            }, model_name="integration-fixture", latency_ms=1)
+
+    app.state.evidence_comparer = EvidenceComparisonAgent(ComparisonFixtureProvider())
     try:
         async with factory.begin() as session:
             session.add_all([
@@ -134,6 +153,8 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             comparison = compared.json()[0]
             assert comparison["proposed_outcome"] == "improved"
             assert comparison["review_status"] == "pending"
+            assert comparison["model_name"] == "integration-fixture"
+            assert comparison["prompt_version"] == "comparison-v2"
 
             reviewed = await client.post(f"/api/improvement-comparisons/{comparison['id']}/review", headers=owner_headers, json={"action": "modify", "edited_summary": "教师核对两轮证据后，确认本轮出现了更充分的学生回应。"})
             assert reviewed.status_code == 200, reviewed.text
@@ -148,16 +169,24 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             assert report.status_code == 200
             assert report.json()["included_cycle_ids"] == [cycle_id]
             assert "教师核对两轮证据后" in report.json()["content"]
+            regenerated = await client.post(f"/api/improvement-cycles/{cycle_id}/comparisons", headers=owner_headers, json={})
+            assert regenerated.status_code == 409
+            relinked = await client.patch(f"/api/improvement-cycles/{cycle_id}", headers=owner_headers, json={"followup_classroom_id": None})
+            assert relinked.status_code == 409
+            changed_criterion = await client.patch(f"/api/improvement-actions/{comparison['action_id']}", headers=owner_headers, json={"success_criterion": "changed after review"})
+            assert changed_criterion.status_code == 409
+            await client.post(f"/api/conclusions/{baseline_conclusion_id}/review", headers=owner_headers, json={"action": "reject"})
+            stale = await client.post(f"/api/improvement-comparisons/{comparison['id']}/review", headers=owner_headers, json={"action": "accept"})
+            assert stale.status_code == 409
+            stale_report = await client.get("/api/portfolio/aggregate-report", headers=owner_headers)
+            assert stale_report.json()["included_cycle_ids"] == []
+            stale_overview = await client.get("/api/portfolio/overview", headers=owner_headers)
+            assert stale_overview.json()["completed_cycle_count"] == 0
     finally:
         async with factory.begin() as session:
-            test_user_ids = list(
-                (
-                    await session.scalars(
-                        select(User.id).where(User.email.like("m2-%@example.invalid"))
-                    )
-                ).all()
-            )
+            test_user_ids = [owner_id, outsider_id]
             if test_user_ids:
+                await session.execute(delete(ReviewDecision).where(ReviewDecision.owner_id.in_(test_user_ids)))
                 await session.execute(
                     delete(AuditEvent).where(AuditEvent.owner_id.in_(test_user_ids))
                 )

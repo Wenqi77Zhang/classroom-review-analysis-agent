@@ -12,8 +12,8 @@ const workspace = fs.readFileSync(
 );
 
 test("任务状态面板只接受真实后台任务", () => {
-  assert.match(panel, /真实后台任务/);
-  assert.match(panel, /状态来自后端任务记录/);
+  assert.match(panel, /retryTask\(task.id\)/);
+  assert.match(panel, /cancelTask\(task.id\)/);
   assert.match(panel, /task: TaskRead/);
   assert.doesNotMatch(panel, /TaskPreviewState|本地预览|onStateChange/);
 });

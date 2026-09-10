@@ -32,7 +32,7 @@ from backend.app.services.permissions import get_owned_or_404
 from backend.app.services.storage import ObjectStorage, get_object_storage
 
 router = APIRouter(tags=["uploads"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Storage = Annotated[ObjectStorage, Depends(get_object_storage)]
 AppSettings = Annotated[Settings, Depends(get_app_settings)]

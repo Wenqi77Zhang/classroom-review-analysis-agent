@@ -31,7 +31,7 @@ from backend.app.schemas.task import ServiceIdentity, TaskStage, TaskStatus
 from backend.app.services.permissions import get_owned_or_404
 
 router = APIRouter(tags=["analyses"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 AgentWriter = Annotated[
     ServiceIdentity,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -25,13 +26,14 @@ def get_app_settings(request: Request) -> Settings:
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    async for session in session_scope():
+    # Forward route exceptions into the transaction manager as well as normal exit.
+    async with asynccontextmanager(session_scope)() as session:
         yield session
 
 
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db, scope="function")],
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> User:
     if credentials is None or credentials.scheme.lower() != "bearer":

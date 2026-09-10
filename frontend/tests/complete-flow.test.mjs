@@ -57,19 +57,19 @@ test("普通任务入口不再包含本地状态、证据或报告模拟链路",
 test("真实任务会话缺失时可自助恢复而不暴露令牌", () => {
   assert.match(task, /ApiClientError/);
   assert.match(task, /taskLoadError\.status === 401/);
-  assert.match(task, /await startDemoSession\(\)/);
-  assert.match(task, /await loadTask\(\)/);
-  assert.match(task, /建立演示会话并重试/);
+  assert.match(task, /requireSession|redirectToLogin/);
+  assert.match(task, /loadTask\(\)/);
+  assert.match(task, /登录并返回/);
   assert.doesNotMatch(task, /document\.cookie|localStorage/);
 });
 
 test("上传创建任务并切换 URL 后恢复真实进度而不是回到上传步骤", () => {
   assert.match(task, /setTaskLookupPending\(true\)/);
-  assert.match(task, /applyTask\(await getTask\(resourceId\)\)/);
+  assert.match(task, /getTask\(resourceId\)/);
   assert.match(task, /router\.replace\(`\/tasks\/\$\{latestTask\.id\}`\)/);
   assert.match(task, /if \(realTask\)/);
   assert.match(task, /<TaskStatusPanel[\s\S]*task=\{realTask\}/);
-  assert.match(task, /课堂资料已提交/);
+  assert.match(task, /restored-task-title/);
   assert.match(task, /不会要求重复上传/);
 });
 

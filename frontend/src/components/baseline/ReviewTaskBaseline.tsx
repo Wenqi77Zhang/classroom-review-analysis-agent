@@ -1,17 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ApiClientError,
   cancelTask,
   clarifyReviewGoal,
   createTask,
+  getClassroom,
   getTask,
   getTaskAssets,
   listTasksForClassroom,
-  startDemoSession,
 } from "@/lib/api";
+import { redirectToLogin } from "@/lib/session-path";
 import type { AnalysisContract, ReviewDialogueResponse, TaskRead } from "@/types/contracts";
 import { RealEvidenceWorkbench } from "../evidence/RealEvidenceWorkbench";
 import { UploadPanel } from "../upload/UploadPanel";
@@ -67,7 +68,8 @@ export function ReviewTaskBaseline({
   const [taskLookupPending, setTaskLookupPending] = useState(
     UUID_PATTERN.test(resourceId),
   );
-  const [recoveringSession, setRecoveringSession] = useState(false);
+  const [pollError, setPollError] = useState("");
+  const taskRevision = useRef(0);
   const [correctingContract, setCorrectingContract] = useState(false);
   const [contractCorrectionError, setContractCorrectionError] = useState("");
   const realClassroomId = realTask?.classroom_id ?? (UUID_PATTERN.test(resourceId) ? resourceId : "");
@@ -78,8 +80,8 @@ export function ReviewTaskBaseline({
       realTask.last_error_code ?? "",
     );
 
-  useEffect(() => setClassroom(sessionStorage.getItem("classroomName") || "演示课堂 · 尚未保存到后端"), []);
   const applyTask = useCallback((task: TaskRead) => {
+    taskRevision.current += 1;
     setRealTask(task);
     setTaskLoadError(null);
   }, []);
@@ -88,10 +90,8 @@ export function ReviewTaskBaseline({
     setTaskLookupPending(true);
     setTaskLoadError(null);
     try {
-      const isKnownClassroom =
-        resourceKind === "classroom" ||
-        sessionStorage.getItem("classroomId") === resourceId;
-      if (isKnownClassroom) {
+      if (resourceKind === "classroom") {
+        setClassroom((await getClassroom(resourceId)).title);
         const [latestTask] = await listTasksForClassroom(resourceId);
         if (latestTask) {
           applyTask(latestTask);
@@ -99,9 +99,11 @@ export function ReviewTaskBaseline({
         }
         return;
       }
-      applyTask(await getTask(resourceId));
+      const task = await getTask(resourceId);
+      setClassroom((await getClassroom(task.classroom_id)).title);
+      applyTask(task);
     } catch (error) {
-      if (error instanceof ApiClientError && error.status !== 404) {
+      if (error instanceof ApiClientError) {
         setTaskLoadError({
           message: error.message,
           traceId: error.traceId,
@@ -110,8 +112,6 @@ export function ReviewTaskBaseline({
       } else if (!(error instanceof ApiClientError)) {
         setTaskLoadError({ message: "真实任务暂时无法读取，请确认前后端服务已启动。" });
       }
-      // A UUID can also identify a newly created classroom, so a task 404 is
-      // expected here and must not be presented as a broken task.
     } finally {
       setTaskLookupPending(false);
     }
@@ -123,15 +123,25 @@ export function ReviewTaskBaseline({
     if (!realTask || ["succeeded", "failed", "cancelled"].includes(realTask.status)) {
       return;
     }
-    const timer = window.setInterval(() => {
-      getTask(realTask.id)
-        .then(setRealTask)
-        .catch(() => undefined);
-    }, 2_000);
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      const revision = taskRevision.current;
+      try {
+        const task = await getTask(realTask!.id);
+        if (active && revision === taskRevision.current) { setRealTask(task); setPollError(""); }
+      } catch (error) {
+        if (active) setPollError(error instanceof ApiClientError ? error.message : "连接中断，显示的是上次收到的状态。正在重新连接…");
+      } finally {
+        if (active) timer = setTimeout(() => void poll(), 2_000);
+      }
+    }
+    timer = setTimeout(() => void poll(), 2_000);
     return () => {
-      window.clearInterval(timer);
+      active = false;
+      clearTimeout(timer);
     };
-  }, [realTask]);
+  }, [realTask?.id, realTask?.status]);
   async function send(event: FormEvent) {
     event.preventDefault();
     const teacherMessage = goal.trim();
@@ -181,22 +191,6 @@ export function ReviewTaskBaseline({
     );
     setConfirmed(false);
     setUploadOpen(false);
-  }
-  async function recoverTaskSession() {
-    setRecoveringSession(true);
-    setTaskLoadError(null);
-    try {
-      await startDemoSession();
-      await loadTask();
-    } catch (error) {
-      setTaskLoadError(
-        error instanceof ApiClientError
-          ? { message: error.message, traceId: error.traceId, status: error.status }
-          : { message: "安全演示会话暂时无法建立，请确认后端和数据库已启动。" },
-      );
-    } finally {
-      setRecoveringSession(false);
-    }
   }
   async function recreateAsChineseOnly(task: TaskRead) {
     setCorrectingContract(true);
@@ -250,15 +244,14 @@ export function ReviewTaskBaseline({
         <section className="real-evidence-state error session-recovery-state" role="alert">
           <span className="eyebrow">{sessionExpired ? "SESSION REQUIRED · 安全访问" : "TASK SERVICE · 任务读取"}</span>
           <strong>{sessionExpired ? "浏览器会话尚未建立" : "真实任务暂时无法读取"}</strong>
-          <p>{sessionExpired ? "当前浏览器没有有效的演示会话。建立会话后，系统会自动重新读取这项真实复盘任务。" : taskLoadError.message}</p>
+          <p>{sessionExpired ? "请使用原教师账号登录，登录后将返回当前课堂任务。" : taskLoadError.message}</p>
           {taskLoadError.traceId && <small>追踪编号：{taskLoadError.traceId}</small>}
           <button
             className="button primary"
             type="button"
-            disabled={recoveringSession}
-            onClick={() => void (sessionExpired ? recoverTaskSession() : loadTask())}
+            onClick={() => void (sessionExpired ? redirectToLogin() : loadTask())}
           >
-            {recoveringSession ? "正在建立安全会话…" : sessionExpired ? "建立演示会话并重试" : "重新读取任务"}
+            {sessionExpired ? "登录并返回" : "重新读取任务"}
           </button>
         </section>
       </SiteChrome>
@@ -272,15 +265,16 @@ export function ReviewTaskBaseline({
             <header className="workspace-header" data-reveal>
               <div>
                 <p className="eyebrow">REAL TASK · 步骤 3 / 3</p>
-                <h1 id="restored-task-title">课堂资料已提交</h1>
+                <h1 id="restored-task-title">{classroom}</h1>
                 <p>页面已恢复真实任务状态；刷新或重新打开此地址都不会要求重复上传。</p>
               </div>
               <div className="classroom-context">
                 <small>任务状态</small>
-                <strong>{realTask.status === "succeeded" ? "待教师复核" : "后台处理中"}</strong>
+                <strong>{realTask.status === "succeeded" ? "待教师复核" : realTask.status === "failed" ? "处理失败" : realTask.status === "cancelled" ? "已取消" : "处理中"}</strong>
               </div>
             </header>
-            <TaskStatusPanel task={realTask} />
+            {pollError && <div className="upload-error" role="alert"><p>{pollError}</p><button className="button secondary" type="button" onClick={redirectToLogin}>重新登录</button></div>}
+            <TaskStatusPanel task={realTask} onTaskUpdated={applyTask} />
             {needsBilingualRecovery && (
               <section className="contract-correction-card" role="note" aria-labelledby="bilingual-correction-title">
                 <div>

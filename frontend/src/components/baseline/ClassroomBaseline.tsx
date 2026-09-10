@@ -11,7 +11,7 @@ import {
   deleteClassroom,
   listClassrooms,
   listCourses,
-  startDemoSession,
+  requireSession,
 } from "@/lib/api";
 import type { ClassroomRead, CourseRead } from "@/types/contracts";
 
@@ -22,22 +22,22 @@ export function ClassroomBaseline() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [courses, setCourses] = useState<CourseRead[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
   const [classrooms, setClassrooms] = useState<ClassroomRead[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [managementMessage, setManagementMessage] = useState("");
 
   const refreshOwnedClassrooms = useCallback(async () => {
     try {
-      await startDemoSession();
+      await requireSession();
       const ownedCourses = await listCourses();
       const classroomGroups = await Promise.all(
         ownedCourses.map((course) => listClassrooms(course.id)),
       );
       setCourses(ownedCourses);
       setClassrooms(classroomGroups.flat());
-    } catch {
-      // Visitors may be logged out and production can disable the demo account.
-      // The creation form shows the actionable authentication error on submit.
+    } catch (error) {
+      setManagementMessage(error instanceof Error ? error.message : "课堂列表读取失败，请重新加载。");
     }
   }, []);
 
@@ -70,7 +70,7 @@ export function ClassroomBaseline() {
     const classDate = String(data.get("classDate") ?? "");
     const next: Record<string, string> = {};
 
-    if (!courseName) next.course = "请填写课程名称";
+    if (!selectedCourseId && !courseName) next.course = "请选择已有课程或填写新课程名称";
     if (!classroomName) next.classroom = "请填写本节课堂名称";
     if (data.get("permission") !== "on") {
       next.permission = "请先确认资料权利与隐私边界";
@@ -80,14 +80,13 @@ export function ClassroomBaseline() {
 
     setSubmitting(true);
     try {
-      await startDemoSession();
-      const course = await createCourse(courseName);
+      await requireSession();
+      const course = selectedCourseId ? courses.find(item => item.id === selectedCourseId) : await createCourse(courseName);
+      if (!course) throw new Error("所选课程已不存在，请重新加载课程列表。");
       const classroom = await createClassroom(course.id, {
         title: classroomName,
         description: [classDate, language].filter(Boolean).join(" · "),
       });
-      sessionStorage.setItem("classroomName", classroom.title);
-      sessionStorage.setItem("classroomId", classroom.id);
       router.push(`/tasks/${classroom.id}?from=classroom`);
     } catch (error) {
       const message =
@@ -125,15 +124,21 @@ export function ClassroomBaseline() {
                 <span>课程信息</span>
                 <small>必填</small>
               </div>
-              <label>
-                课程名称
+              <label>所属课程
+                <select aria-label="所属课程" value={selectedCourseId} onChange={event => setSelectedCourseId(event.target.value)}>
+                  <option value="">创建新课程</option>
+                  {courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}
+                </select>
+              </label>
+              {!selectedCourseId && <label>
+                新课程名称
                 <input
                   name="courseName"
                   placeholder="例如：人工智能导论"
                   autoComplete="off"
                 />
                 <span className="field-error">{errors.course}</span>
-              </label>
+              </label>}
               <label>
                 本节课堂名称
                 <input
@@ -174,7 +179,7 @@ export function ClassroomBaseline() {
                 type="submit"
                 disabled={submitting}
               >
-                {submitting ? "正在建立安全会话并保存…" : "保存并说明复盘目标"}
+                {submitting ? "正在保存课堂…" : "保存并说明复盘目标"}
                 <span aria-hidden>→</span>
               </button>
               <p className="form-security-note">

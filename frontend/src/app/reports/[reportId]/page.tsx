@@ -1,4 +1,4 @@
-import { ReportEditor } from "@/components/reports/ReportEditor";
+import { RealReportEditor } from "@/components/reports/RealReportEditor";
 import { SiteChrome } from "@/components/baseline/SiteChrome";
 import { redirect } from "next/navigation";
 
@@ -17,7 +17,7 @@ export default async function ReportPage({ params }: ReportPageProps) {
   return (
     <SiteChrome>
       <main className="report-page">
-        <ReportEditor classroomId={reportId} />
+        <RealReportEditor classroomId={reportId} />
       </main>
     </SiteChrome>
   );

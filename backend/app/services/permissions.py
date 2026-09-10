@@ -21,12 +21,15 @@ async def get_owned_or_404[OwnedModel: Base](
     model: type[OwnedModel],
     resource_id: UUID,
     owner_id: UUID,
+    *,
+    for_update: bool = False,
 ) -> OwnedModel:
     if not hasattr(model, "owner_id"):
         raise TypeError(f"{model.__name__} is not an owner-scoped model")
-    result = await session.scalar(
-        select(model).where(model.id == resource_id, model.owner_id == owner_id)  # type: ignore[attr-defined]
-    )
+    statement = select(model).where(model.id == resource_id, model.owner_id == owner_id)  # type: ignore[attr-defined]
+    if for_update:
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    result = await session.scalar(statement)
     if result is None:
         raise NotFoundError()
     return result

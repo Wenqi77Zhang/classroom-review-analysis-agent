@@ -24,12 +24,13 @@ from backend.app.schemas.analysis_report import (
     ReportUpdate,
     ReviewStatus,
 )
+from backend.app.schemas.analysis_report import AnalysisConclusion as ConclusionRead
 from backend.app.services.audit import record_audit_event
 from backend.app.services.report_exports import render_report_export, report_export_metadata
 from backend.app.services.storage import ObjectStorage, get_object_storage
 
 router = APIRouter(tags=["reports"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Storage = Annotated[ObjectStorage, Depends(get_object_storage)]
 AppSettings = Annotated[Settings, Depends(get_app_settings)]
@@ -64,6 +65,7 @@ def _report_read(report: Report) -> ReportRead:
         title=report.title,
         content=report.content,
         included_conclusion_ids=included_ids,
+        conclusions=[ConclusionRead.model_validate(item) for item in report.conclusions if item.id in included_ids],
         updated_at=report.updated_at,
     )
 

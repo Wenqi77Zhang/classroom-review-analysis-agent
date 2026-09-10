@@ -17,7 +17,7 @@ from backend.app.schemas.courseware import CoursewarePageRead, InternalCoursewar
 from backend.app.schemas.task import ServiceIdentity, TaskStage, TaskStatus
 
 router = APIRouter(tags=["courseware"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 WorkerWriter = Annotated[
     ServiceIdentity,

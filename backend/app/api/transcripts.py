@@ -32,7 +32,7 @@ from backend.app.services.audit import record_audit_event
 from backend.app.services.permissions import get_owned_or_404
 
 router = APIRouter(tags=["transcripts"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 WorkerWriter = Annotated[
     ServiceIdentity,

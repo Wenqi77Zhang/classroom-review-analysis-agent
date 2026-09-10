@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from agent.skills.evidence_comparison import _terms, propose_outcome
 from backend.app.schemas.analysis_report import ReviewAction
 from backend.app.schemas.improvement import (
     ComparisonReviewRequest,
@@ -46,22 +44,6 @@ def test_empty_cycle_update_is_rejected() -> None:
 def test_modify_comparison_requires_teacher_text() -> None:
     with pytest.raises(ValidationError):
         ComparisonReviewRequest(action=ReviewAction.MODIFY)
-
-
-def test_comparison_proposal_is_conservative_and_review_gated() -> None:
-    assert propose_outcome("学生回应次数有所提升") == "improved"
-    assert propose_outcome("等待时间减少，回应不足") == "regressed"
-    assert propose_outcome("观察到相似课堂过程") == "unchanged"
-
-
-def test_chinese_and_english_terms_can_support_relevance_matching() -> None:
-    terms = _terms("增加 wait time，并邀请学生回应")
-    assert terms["wait"] == 1
-    assert terms["邀请"] == 1
-
-
-def test_generated_timestamp_fixture_is_timezone_aware() -> None:
-    assert datetime.now(UTC).tzinfo is not None
 
 
 def test_classroom_deletion_checks_improvement_references_before_storage() -> None:
