@@ -1,3 +1,4 @@
+import { redirectToLogin } from "@/lib/session-path";
 import type {
   AnalysisContract,
   AnalysisConclusion,
@@ -84,20 +85,13 @@ export async function getBackendHealth(
   return (await response.json()) as BackendHealthResponse;
 }
 
-export async function startDemoSession(): Promise<{ user: UserRef }> {
+export async function requireSession(): Promise<UserRef> {
   try {
-    const user = await requestJson<UserRef>("/api/session/me");
-    return { user };
+    return await requestJson<UserRef>("/api/session/me");
   } catch (error) {
-    if (!(error instanceof ApiClientError) || error.status !== 401) throw error;
+    if (error instanceof ApiClientError && error.status === 401) redirectToLogin();
+    throw error;
   }
-  const session = await requestJson<{ user: UserRef }>("/api/session/demo", {
-    method: "POST",
-  });
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("classroom-session-changed"));
-  }
-  return session;
 }
 
 export async function createCourse(name: string): Promise<CourseRead> {
@@ -113,6 +107,10 @@ export async function listCourses(): Promise<CourseRead[]> {
 
 export async function listClassrooms(courseId: string): Promise<ClassroomRead[]> {
   return requestJson(`/api/courses/${encodeURIComponent(courseId)}/classrooms`);
+}
+
+export async function getClassroom(classroomId: string): Promise<ClassroomRead> {
+  return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}`);
 }
 
 export async function deleteClassroom(classroomId: string): Promise<void> {
@@ -276,6 +274,10 @@ export async function cancelTask(taskId: string): Promise<TaskRead> {
   });
 }
 
+export async function retryTask(taskId: string): Promise<TaskRead> {
+  return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/retry`, { method: "POST" });
+}
+
 export async function getTaskAssets(taskId: string): Promise<AssetRead[]> {
   return requestJson(`/api/tasks/${encodeURIComponent(taskId)}/assets`);
 }
@@ -343,7 +345,7 @@ export async function getReport(classroomId: string): Promise<ReportRead> {
 
 export async function updateReport(
   classroomId: string,
-  input: { title: string },
+  input: { title: string; conclusion_edits?: Array<{ id: string; content: string; previous_content: string }> },
 ): Promise<ReportRead> {
   return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}/report`, {
     method: "PUT",

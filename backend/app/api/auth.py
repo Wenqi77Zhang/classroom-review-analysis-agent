@@ -42,7 +42,7 @@ def _token_response(user: User, settings: Settings) -> AccessTokenResponse:
 @router.post("/auth/login", response_model=AccessTokenResponse)
 async def login(
     body: LoginRequest,
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db, scope="function")],
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> AccessTokenResponse:
     user = await find_user_by_email(session, body.email)
@@ -61,7 +61,7 @@ async def login(
 @router.post("/auth/demo", response_model=AccessTokenResponse)
 async def demo_login(
     request: Request,
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db, scope="function")],
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> AccessTokenResponse:
     if settings.demo_account_password is None:

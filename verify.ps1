@@ -1,4 +1,7 @@
-﻿$ErrorActionPreference = "Stop"
+﻿[CmdletBinding()]
+param([switch]$ScaffoldOnly)
+
+$ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $ProjectRoot
 $missing = @()
@@ -79,6 +82,11 @@ if (Test-Path -LiteralPath ".git") {
         Write-Error ("Forbidden source files: " + (($forbidden | ForEach-Object FullName) -join ", "))
         exit 1
     }
+}
+
+if ($ScaffoldOnly) {
+    Write-Host "阶段 0 骨架、环境基线与敏感文件路径检查通过。"
+    exit 0
 }
 
 $previousTemp = $env:TEMP

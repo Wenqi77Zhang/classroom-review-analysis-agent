@@ -12,7 +12,7 @@ import {
   getImprovementCycle,
   listClassrooms,
   reviewImprovementComparison,
-  startDemoSession,
+  requireSession,
   updateImprovementAction,
   updateImprovementCycle,
 } from "@/lib/api";
@@ -69,7 +69,7 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
   useEffect(() => {
     void (async () => {
       try {
-        await startDemoSession();
+        await requireSession();
         await reload();
       } catch (caught) {
         setError(describe(caught));
@@ -169,7 +169,7 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
                   <label>具体行动<textarea name="actionText" required rows={3} /></label>
                   <label>可观察的成功标准<textarea name="successCriterion" required rows={3} placeholder="例如：关键提问后保留至少 5 秒等待，并在逐字稿中出现学生回应。" /></label>
                   <label>优先级<select name="priority" defaultValue="2"><option value="1">P1 高</option><option value="2">P2 中</option><option value="3">P3 低</option></select></label>
-                  <button className="button primary compact" disabled={busy}>保存行动</button>
+                  <button className="button primary compact" disabled={busy || cycle.comparisons.length > 0}>保存行动</button>
                 </form>
               ) : <p className="boundary-note">没有更多可转化的建议。只有第一轮中经教师接受或修改确认的建议会出现在这里。</p>}
             </section>
@@ -179,24 +179,27 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
               <p>第二轮须单独上传并完成 M1 处理。不同课程不能放进同一个改进循环。</p>
               <form className="followup-form" onSubmit={linkFollowup}>
                 <select name="followupClassroomId" required defaultValue={cycle.followup_classroom_id ?? ""}><option value="">选择第二轮课堂</option>{followupChoices.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select>
-                <button className="button secondary compact" disabled={busy}>保存关联</button>
+                <button className="button secondary compact" disabled={busy || cycle.comparisons.length > 0}>保存关联</button>
                 <Link className="button secondary compact" href="/classrooms">创建新课堂</Link>
               </form>
             </section>
 
             <section className="workflow-card comparison-stage" data-reveal>
               <header><span>03</span><div><small>COMPARE & REVIEW</small><h2>核对两轮证据，再确认是否发生变化</h2></div></header>
-              <div className="comparison-gate"><p>生成按钮只在已有行动、已关联第二轮且第二轮真实处理成功后通过后端门禁。</p><button className="button primary compact" onClick={() => void generate()} disabled={busy || !cycle.actions.length || !cycle.followup_classroom_id}>生成或重新生成证据对比</button></div>
+              <div className="comparison-gate"><p>生成按钮只在已有行动、已关联第二轮且第二轮真实处理成功后通过后端门禁。</p><button className="button primary compact" onClick={() => void generate()} disabled={busy || cycle.comparisons.length > 0 || !cycle.actions.length || !cycle.followup_classroom_id}>生成证据对比</button></div>
+              {cycle.comparisons.length > 0 && <p className="boundary-note">已保留本轮分析标准和人工复核记录。需要更换资料或重新分析时，请创建新的改进循环。</p>}
               {!cycle.comparisons.length && <div className="empty-state"><strong>尚无对比结论</strong><p>系统不会因为关联了课堂就假定教学已经改进。</p></div>}
               <div className="comparison-list">
                 {cycle.comparisons.map((comparison, index) => (
                   <article className="comparison-card" key={comparison.id}>
+                    {(!comparison.model_name || !comparison.sources_current) && <p className="upload-error" role="alert">此对比属于旧版规则或原始依据已变化，当前仅保留作历史记录，不计入教学成效汇总；请新建循环重新分析。</p>}
+                    {comparison.model_name && <p className="boundary-note">分析模型：{comparison.model_name} · {comparison.prompt_version}</p>}
                     <div className="comparison-title"><span>{String(index + 1).padStart(2, "0")}</span><div><small>{outcomeText[comparison.proposed_outcome]} · 待教师判断</small><h3>{comparison.summary}</h3></div></div>
                     <EvidenceCount comparison={comparison} />
                     <textarea id={`comparison-${comparison.id}`} defaultValue={comparison.reviewed_summary || comparison.summary} aria-label={`第 ${index + 1} 条对比结论修改稿`} rows={4} />
                     <div className="review-actions">
-                      <button className="button review-accept compact" disabled={busy} onClick={() => void review(comparison, "accept")}>接受候选判断</button>
-                      <button className="button review-modify compact" disabled={busy} onClick={() => { const field = document.getElementById(`comparison-${comparison.id}`) as HTMLTextAreaElement; void review(comparison, "modify", field.value); }}>修改确认</button>
+                      <button className="button review-accept compact" disabled={busy || !comparison.sources_current} onClick={() => void review(comparison, "accept")}>接受候选判断</button>
+                      <button className="button review-modify compact" disabled={busy || !comparison.sources_current} onClick={() => { const field = document.getElementById(`comparison-${comparison.id}`) as HTMLTextAreaElement; void review(comparison, "modify", field.value); }}>修改确认</button>
                       <button className="button review-reject compact" disabled={busy} onClick={() => void review(comparison, "reject")}>驳回</button>
                     </div>
                     <footer>复核状态：{comparison.review_status} · Trace {comparison.trace_id} · {comparison.skill}/{comparison.prompt_version}</footer>

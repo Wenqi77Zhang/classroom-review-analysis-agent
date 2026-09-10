@@ -9,10 +9,10 @@ const portfolio = read("src/components/portfolio/PortfolioDashboard.tsx");
 const api = read("src/lib/api.ts");
 const chrome = read("src/components/baseline/SiteChrome.tsx");
 
-assert.match(hub, /合成轮次只验证系统机制，永不进入真实教学成效汇总/);
+assert.match(hub, /历史合成验证仍单独标注，不进入教学成效汇总/);
 assert.match(cycle, /系统不会自动认定教学效果/);
 assert.match(cycle, /只有第一轮中经教师接受或修改确认的建议/);
-assert.match(cycle, /生成或重新生成证据对比/);
+assert.match(cycle, /生成证据对比/);
 assert.match(cycle, /接受候选判断/);
 assert.match(portfolio, /不是自动评分或全校管理平台/);
 assert.match(portfolio, /导出 Markdown/);

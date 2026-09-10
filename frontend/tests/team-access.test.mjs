@@ -56,7 +56,7 @@ assert.doesNotMatch(
   /localStorage|sessionStorage/,
   "访问码或访问会话不得写入浏览器存储",
 );
-assert.match(page, /value\.startsWith\("\/\/"\)/, "返回路径必须拦截协议相对开放重定向");
+assert.match(page, /safeNextPath/, "返回路径必须使用统一的安全路径校验");
 assert.match(page, /未经授权的信息/, "联调入口必须显示隐私提醒");
 assert.match(
   script,

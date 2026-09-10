@@ -9,13 +9,24 @@ from collections.abc import AsyncIterator
 
 import httpx
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app.config import Settings
 from backend.app.dependencies import get_db
 from backend.app.main import create_app
-from backend.app.models import AuditEvent, User
+from backend.app.models import (
+    AnalysisConclusion,
+    Asset,
+    AuditEvent,
+    EvidenceReference,
+    ProcessingTask,
+    Report,
+    ReviewDecision,
+    User,
+    report_conclusions,
+    task_assets,
+)
 from backend.app.schemas.review_dialogue import ReviewDialogueResponse
 from backend.app.schemas.task import AnalysisContract
 from backend.app.services.authentication import hash_password
@@ -247,6 +258,20 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
             assert cross_account_delete.status_code == 404
             assert cross_account_delete.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
 
+            # A classroom with a reviewed report has cross-linked assets and
+            # conclusions. This graph previously returned 204 then failed commit.
+            task_id, asset_id, conclusion_id, report_id = [uuid.uuid4() for _ in range(4)]
+            async with factory.begin() as session:
+                session.add(ProcessingTask(id=task_id, owner_id=first_id, classroom_id=uuid.UUID(classroom_id), status="succeeded"))
+                session.add(Asset(id=asset_id, owner_id=first_id, classroom_id=uuid.UUID(classroom_id), kind="video", filename="fixture.mp4", content_type="video/mp4", size_bytes=1, object_key=f"owners/{first_id}/classrooms/{classroom_id}/fixture.mp4"))
+                await session.flush()
+                await session.execute(insert(task_assets).values(task_id=task_id, asset_id=asset_id, owner_id=first_id))
+                session.add(AnalysisConclusion(id=conclusion_id, owner_id=first_id, classroom_id=uuid.UUID(classroom_id), task_id=task_id, type="fact", content="labelled fixture", review_status="modified", reviewed_content="reviewed fixture", trace_id="deletion-fixture", evidence_refs=[EvidenceReference(owner_id=first_id, source_type="transcript", asset_id=asset_id, start_ms=0, end_ms=1000, quote="fixture quote")]))
+                session.add(Report(id=report_id, owner_id=first_id, classroom_id=uuid.UUID(classroom_id), title="Fixture report", content="reviewed fixture"))
+                await session.flush()
+                session.add(ReviewDecision(owner_id=first_id, conclusion_id=conclusion_id, action="modify", resulting_status="modified", edited_content="reviewed fixture", decided_by_id=first_id))
+                await session.execute(insert(report_conclusions).values(report_id=report_id, conclusion_id=conclusion_id, owner_id=first_id))
+
             deleted = await client.delete(
                 f"/api/classrooms/{classroom_id}", headers=first_headers
             )
@@ -259,6 +284,9 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
                 f"/api/classrooms/{classroom_id}", headers=first_headers
             )
             assert no_longer_exists.status_code == 404
+            async with factory() as session:
+                for model, identifier in [(Report, report_id), (Asset, asset_id), (AnalysisConclusion, conclusion_id), (ProcessingTask, task_id)]:
+                    assert await session.get(model, identifier) is None
 
         async with factory() as session:
             events = list(

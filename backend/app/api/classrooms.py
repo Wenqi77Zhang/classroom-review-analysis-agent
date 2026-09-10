@@ -4,12 +4,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.dependencies import get_current_user, get_db
 from backend.app.errors import StateConflictError
-from backend.app.models import Classroom, ImprovementCycle, ProcessingTask, User
+from backend.app.models import Classroom, ImprovementCycle, ProcessingTask, Report, User
 from backend.app.repositories.identity import (
     create_classroom,
     create_course,
@@ -29,7 +29,7 @@ from backend.app.services.permissions import get_owned_or_404
 from backend.app.services.storage import ObjectStorage, get_object_storage
 
 router = APIRouter(tags=["classrooms"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Storage = Annotated[ObjectStorage, Depends(get_object_storage)]
 
@@ -125,7 +125,7 @@ async def delete_classroom(
     user: CurrentUser,
     storage: Storage,
 ) -> None:
-    classroom = await get_owned_or_404(session, Classroom, classroom_id, user.id)
+    classroom = await get_owned_or_404(session, Classroom, classroom_id, user.id, for_update=True)
     active_count = await session.scalar(
         select(func.count(ProcessingTask.id)).where(
             ProcessingTask.owner_id == user.id,
@@ -150,6 +150,17 @@ async def delete_classroom(
     if improvement_reference_count:
         raise StateConflictError("课堂已被改进循环引用，请先处理对应改进循环后再删除。")
 
+    # Report links restrict conclusion deletion. Remove only this classroom's
+    # reports before the task/conclusion cascade, and validate SQL before storage.
+    await session.execute(delete(Report).where(
+        Report.owner_id == user.id, Report.classroom_id == classroom_id,
+    ))
+    # Let PostgreSQL cascade the whole classroom graph in one statement;
+    # per-child ORM deletes can violate cross-links between assets and evidence.
+    await session.execute(delete(Classroom).where(
+        Classroom.id == classroom_id, Classroom.owner_id == user.id,
+    ))
+    await session.flush()
     prefix = f"owners/{user.id}/classrooms/{classroom_id}/"
     deleted_object_count = await storage.delete_prefix(prefix)
     await record_audit_event(
@@ -161,4 +172,3 @@ async def delete_classroom(
         resource_id=classroom.id,
         details={"deleted_object_count": deleted_object_count},
     )
-    await session.delete(classroom)

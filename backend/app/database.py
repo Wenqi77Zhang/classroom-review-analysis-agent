@@ -38,6 +38,7 @@ def create_engine(settings: Settings | None = None) -> AsyncEngine:
         settings.database_url.get_secret_value(),
         # 不打印 SQL：语句里会带上教师逐字稿内容与令牌等参数，日志不该收这些。
         echo=False,
+        hide_parameters=True,  # Failed statements must not expose classroom text in tracebacks.
         pool_pre_ping=True,  # Worker 空闲较久，连接可能已被数据库回收
         pool_size=10,
         max_overflow=5,

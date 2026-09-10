@@ -198,6 +198,7 @@ export type ReportRead = {
   title: string;
   content: string;
   included_conclusion_ids: string[];
+  conclusions: AnalysisConclusion[];
   updated_at?: string | null;
 };
 export type ReportExportFormat = "markdown" | "html" | "pdf";
@@ -245,6 +246,8 @@ export type ImprovementComparisonRead = {
   trace_id: string;
   skill: string;
   prompt_version: string;
+  model_name?: string | null;
+  sources_current?: boolean;
   created_at: string;
   updated_at?: string | null;
 };

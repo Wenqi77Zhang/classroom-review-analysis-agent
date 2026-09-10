@@ -59,7 +59,7 @@ from backend.app.services.permissions import get_owned_or_404
 from backend.app.services.storage import ObjectStorage, get_object_storage
 
 router = APIRouter(tags=["tasks"])
-Db = Annotated[AsyncSession, Depends(get_db)]
+Db = Annotated[AsyncSession, Depends(get_db, scope="function")]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Worker = Annotated[
     ServiceIdentity,
@@ -197,7 +197,7 @@ async def get_events(task_id: UUID, session: Db, user: CurrentUser) -> list[Task
 
 @router.post("/tasks/{task_id}/retry", response_model=TaskRead)
 async def post_retry(task_id: UUID, session: Db, user: CurrentUser) -> TaskRead:
-    task = await get_owned_or_404(session, ProcessingTask, task_id, user.id)
+    task = await get_owned_or_404(session, ProcessingTask, task_id, user.id, for_update=True)
     if TaskStatus(task.status) is not TaskStatus.FAILED:
         raise StateConflictError("只有失败任务可以重试。")
     task.status = TaskStatus.QUEUED
@@ -226,7 +226,7 @@ async def post_retry(task_id: UUID, session: Db, user: CurrentUser) -> TaskRead:
 
 @router.post("/tasks/{task_id}/cancel", response_model=TaskRead)
 async def post_cancel(task_id: UUID, session: Db, user: CurrentUser) -> TaskRead:
-    task = await get_owned_or_404(session, ProcessingTask, task_id, user.id)
+    task = await get_owned_or_404(session, ProcessingTask, task_id, user.id, for_update=True)
     current = TaskStatus(task.status)
     if TaskStatus.CANCELLED not in ALLOWED_STATUS_TRANSITIONS[current]:
         raise StateConflictError("当前任务状态不允许取消。")

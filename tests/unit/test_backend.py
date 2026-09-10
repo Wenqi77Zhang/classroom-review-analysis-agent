@@ -264,7 +264,8 @@ def test_empty_transcript_patch_is_rejected() -> None:
     "missing",
     ["database_url", "jwt_secret", "worker_service_token", "object_storage_bucket"],
 )
-def test_missing_required_setting_fails_at_startup(missing: str) -> None:
+def test_missing_required_setting_fails_at_startup(missing: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(missing.upper(), raising=False)
     values = {k: v for k, v in TEST_SETTINGS_VALUES.items() if k != missing}
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **values)  # type: ignore[arg-type]

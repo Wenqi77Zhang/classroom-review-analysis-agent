@@ -100,7 +100,7 @@ export async function proxyAuthenticatedJson(
 ): Promise<Response> {
   const token = (await cookies()).get(AUTH_COOKIE_NAME)?.value;
   if (!token) {
-    return frontendError(401, "UNAUTHENTICATED", "请先建立安全演示会话。");
+    return frontendError(401, "UNAUTHENTICATED", "请先登录教师账号。");
   }
 
   const body =

@@ -886,10 +886,12 @@ async def test_shortest_processing_chain_and_retry() -> None:
                 headers=worker_headers,
             )
             assert failed.status_code == 200
-            retried = await client.post(
-                f"/api/tasks/{retry_task_id}/retry",
-                headers=first_headers,
-            )
+            retries = await asyncio.gather(*[
+                client.post(f"/api/tasks/{retry_task_id}/retry", headers=first_headers)
+                for _ in range(2)
+            ])
+            assert sorted(response.status_code for response in retries) == [200, 409]
+            retried = next(response for response in retries if response.status_code == 200)
             assert retried.status_code == 200
             assert retried.json()["status"] == "queued"
             assert retried.json()["retry_count"] == 1

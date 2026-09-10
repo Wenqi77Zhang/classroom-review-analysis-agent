@@ -36,7 +36,7 @@ export function VideoPlayer({
         <p>
           {loadFailed
             ? "请检查授权地址是否有效后重试。"
-            : "演示数据 · 尚未连接对象存储授权地址。"}
+            : "尚未取得课堂视频的授权地址，请重新载入证据工作台。"}
         </p>
       </section>
     );

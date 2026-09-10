@@ -1,65 +1,24 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ApiClientError,
   cancelTask,
   clarifyReviewGoal,
   createTask,
+  getClassroom,
   getTask,
   getTaskAssets,
   listTasksForClassroom,
-  startDemoSession,
 } from "@/lib/api";
-import { saveDemoReportDraft } from "@/lib/demo-report-draft";
+import { redirectToLogin } from "@/lib/session-path";
 import type { AnalysisContract, ReviewDialogueResponse, TaskRead } from "@/types/contracts";
-import { EvidenceCard } from "../evidence/EvidenceCard";
 import { RealEvidenceWorkbench } from "../evidence/RealEvidenceWorkbench";
-import {
-  ReviewControls,
-  type ReviewStatus,
-} from "../evidence/ReviewControls";
-import {
-  TranscriptTimeline,
-  type TranscriptItem,
-} from "../evidence/TranscriptTimeline";
-import { VideoPlayer } from "../evidence/VideoPlayer";
 import { UploadPanel } from "../upload/UploadPanel";
 import { SupplementalTranslationUpload } from "../upload/SupplementalTranslationUpload";
-import {
-  TaskStatusPanel,
-  type TaskPreviewState,
-} from "../tasks/TaskStatusPanel";
+import { TaskStatusPanel } from "../tasks/TaskStatusPanel";
 import { SiteChrome } from "./SiteChrome";
-
-const demoTranscript: TranscriptItem[] = [
-  {
-    id: "demo-1",
-    startMs: 12_000,
-    endMs: 18_000,
-    speaker: "Teacher",
-    originalText: "What evidence supports your answer?",
-    translatedText: "什么证据可以支持你的答案？",
-  },
-  {
-    id: "demo-2",
-    startMs: 18_000,
-    endMs: 23_000,
-    speaker: "Class",
-    originalText: "[Five seconds of classroom silence]",
-    translatedText: "[课堂沉默五秒]",
-  },
-  {
-    id: "demo-3",
-    startMs: 23_000,
-    endMs: 31_000,
-    speaker: "Student",
-    originalText: "The repeated phrase shows the character is uncertain.",
-    translatedText: "反复出现的短语说明人物并不确定。",
-  },
-];
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -100,12 +59,6 @@ export function ReviewTaskBaseline({
   const [confirmed, setConfirmed] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
-  const [preview, setPreview] = useState<TaskPreviewState>("empty");
-  const [currentVideoTimeMs, setCurrentVideoTimeMs] = useState(12_000);
-  const [seekToMs, setSeekToMs] = useState(12_000);
-  const [reviewStatus, setReviewStatus] =
-    useState<ReviewStatus>("pending");
-  const [reviewNote, setReviewNote] = useState("");
   const [realTask, setRealTask] = useState<TaskRead | null>(null);
   const [taskLoadError, setTaskLoadError] = useState<{
     message: string;
@@ -115,7 +68,8 @@ export function ReviewTaskBaseline({
   const [taskLookupPending, setTaskLookupPending] = useState(
     UUID_PATTERN.test(resourceId),
   );
-  const [recoveringSession, setRecoveringSession] = useState(false);
+  const [pollError, setPollError] = useState("");
+  const taskRevision = useRef(0);
   const [correctingContract, setCorrectingContract] = useState(false);
   const [contractCorrectionError, setContractCorrectionError] = useState("");
   const realClassroomId = realTask?.classroom_id ?? (UUID_PATTERN.test(resourceId) ? resourceId : "");
@@ -126,27 +80,18 @@ export function ReviewTaskBaseline({
       realTask.last_error_code ?? "",
     );
 
-  useEffect(() => setClassroom(sessionStorage.getItem("classroomName") || "演示课堂 · 尚未保存到后端"), []);
   const applyTask = useCallback((task: TaskRead) => {
+    taskRevision.current += 1;
     setRealTask(task);
     setTaskLoadError(null);
-    setPreview(
-      task.status === "succeeded"
-        ? "ready"
-        : task.status === "failed"
-          ? "failure"
-          : "processing",
-    );
   }, []);
   const loadTask = useCallback(async () => {
     if (!UUID_PATTERN.test(resourceId)) return;
     setTaskLookupPending(true);
     setTaskLoadError(null);
     try {
-      const isKnownClassroom =
-        resourceKind === "classroom" ||
-        sessionStorage.getItem("classroomId") === resourceId;
-      if (isKnownClassroom) {
+      if (resourceKind === "classroom") {
+        setClassroom((await getClassroom(resourceId)).title);
         const [latestTask] = await listTasksForClassroom(resourceId);
         if (latestTask) {
           applyTask(latestTask);
@@ -154,9 +99,11 @@ export function ReviewTaskBaseline({
         }
         return;
       }
-      applyTask(await getTask(resourceId));
+      const task = await getTask(resourceId);
+      setClassroom((await getClassroom(task.classroom_id)).title);
+      applyTask(task);
     } catch (error) {
-      if (error instanceof ApiClientError && error.status !== 404) {
+      if (error instanceof ApiClientError) {
         setTaskLoadError({
           message: error.message,
           traceId: error.traceId,
@@ -165,8 +112,6 @@ export function ReviewTaskBaseline({
       } else if (!(error instanceof ApiClientError)) {
         setTaskLoadError({ message: "真实任务暂时无法读取，请确认前后端服务已启动。" });
       }
-      // A UUID can also identify a newly created classroom, so a task 404 is
-      // expected here and must not be presented as a broken task.
     } finally {
       setTaskLookupPending(false);
     }
@@ -178,15 +123,25 @@ export function ReviewTaskBaseline({
     if (!realTask || ["succeeded", "failed", "cancelled"].includes(realTask.status)) {
       return;
     }
-    const timer = window.setInterval(() => {
-      getTask(realTask.id)
-        .then(setRealTask)
-        .catch(() => undefined);
-    }, 2_000);
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      const revision = taskRevision.current;
+      try {
+        const task = await getTask(realTask!.id);
+        if (active && revision === taskRevision.current) { setRealTask(task); setPollError(""); }
+      } catch (error) {
+        if (active) setPollError(error instanceof ApiClientError ? error.message : "连接中断，显示的是上次收到的状态。正在重新连接…");
+      } finally {
+        if (active) timer = setTimeout(() => void poll(), 2_000);
+      }
+    }
+    timer = setTimeout(() => void poll(), 2_000);
     return () => {
-      window.clearInterval(timer);
+      active = false;
+      clearTimeout(timer);
     };
-  }, [realTask]);
+  }, [realTask?.id, realTask?.status]);
   async function send(event: FormEvent) {
     event.preventDefault();
     const teacherMessage = goal.trim();
@@ -236,22 +191,6 @@ export function ReviewTaskBaseline({
     );
     setConfirmed(false);
     setUploadOpen(false);
-  }
-  async function recoverTaskSession() {
-    setRecoveringSession(true);
-    setTaskLoadError(null);
-    try {
-      await startDemoSession();
-      await loadTask();
-    } catch (error) {
-      setTaskLoadError(
-        error instanceof ApiClientError
-          ? { message: error.message, traceId: error.traceId, status: error.status }
-          : { message: "安全演示会话暂时无法建立，请确认后端和数据库已启动。" },
-      );
-    } finally {
-      setRecoveringSession(false);
-    }
   }
   async function recreateAsChineseOnly(task: TaskRead) {
     setCorrectingContract(true);
@@ -305,15 +244,14 @@ export function ReviewTaskBaseline({
         <section className="real-evidence-state error session-recovery-state" role="alert">
           <span className="eyebrow">{sessionExpired ? "SESSION REQUIRED · 安全访问" : "TASK SERVICE · 任务读取"}</span>
           <strong>{sessionExpired ? "浏览器会话尚未建立" : "真实任务暂时无法读取"}</strong>
-          <p>{sessionExpired ? "当前浏览器没有有效的演示会话。建立会话后，系统会自动重新读取这项真实复盘任务。" : taskLoadError.message}</p>
+          <p>{sessionExpired ? "请使用原教师账号登录，登录后将返回当前课堂任务。" : taskLoadError.message}</p>
           {taskLoadError.traceId && <small>追踪编号：{taskLoadError.traceId}</small>}
           <button
             className="button primary"
             type="button"
-            disabled={recoveringSession}
-            onClick={() => void (sessionExpired ? recoverTaskSession() : loadTask())}
+            onClick={() => void (sessionExpired ? redirectToLogin() : loadTask())}
           >
-            {recoveringSession ? "正在建立安全会话…" : sessionExpired ? "建立演示会话并重试" : "重新读取任务"}
+            {sessionExpired ? "登录并返回" : "重新读取任务"}
           </button>
         </section>
       </SiteChrome>
@@ -327,20 +265,16 @@ export function ReviewTaskBaseline({
             <header className="workspace-header" data-reveal>
               <div>
                 <p className="eyebrow">REAL TASK · 步骤 3 / 3</p>
-                <h1 id="restored-task-title">课堂资料已提交</h1>
+                <h1 id="restored-task-title">{classroom}</h1>
                 <p>页面已恢复真实任务状态；刷新或重新打开此地址都不会要求重复上传。</p>
               </div>
               <div className="classroom-context">
                 <small>任务状态</small>
-                <strong>{realTask.status === "succeeded" ? "待教师复核" : "后台处理中"}</strong>
+                <strong>{realTask.status === "succeeded" ? "待教师复核" : realTask.status === "failed" ? "处理失败" : realTask.status === "cancelled" ? "已取消" : "处理中"}</strong>
               </div>
             </header>
-            <TaskStatusPanel
-              enabled
-              state={preview}
-              onStateChange={setPreview}
-              task={realTask}
-            />
+            {pollError && <div className="upload-error" role="alert"><p>{pollError}</p><button className="button secondary" type="button" onClick={redirectToLogin}>重新登录</button></div>}
+            <TaskStatusPanel task={realTask} onTaskUpdated={applyTask} />
             {needsBilingualRecovery && (
               <section className="contract-correction-card" role="note" aria-labelledby="bilingual-correction-title">
                 <div>
@@ -388,7 +322,7 @@ export function ReviewTaskBaseline({
   );
   return <SiteChrome><section className="view active" aria-labelledby="workspace-title"><div className="workspace-shell">
     <div className="workspace-header" data-reveal><div><p className="eyebrow">DEFINE THE REVIEW · 步骤 2 / 3</p><h1 id="workspace-title">说清这次想复盘什么</h1></div><div className="classroom-context"><small>当前课堂</small><strong>{classroom}</strong></div></div>
-    <div className="workspace-grid"><section className="conversation-panel" data-reveal aria-label="与 Agent 对话"><div className="panel-heading"><div><span className="agent-avatar">A</span><span><strong>复盘 Agent</strong><small>真实本地模型 · 仅协助，不替代教师判断</small></span></div><span className="mock-pill backend-reachable">目标澄清</span></div>
+    <div className="workspace-grid"><section className="conversation-panel" data-reveal aria-label="与 Agent 对话"><div className="panel-heading"><div><span className="agent-avatar">A</span><span><strong>复盘 Agent</strong><small>真实本地模型 · 仅协助，不替代教师判断</small></span></div><span className="status-pill backend-reachable">目标澄清</span></div>
       <div className="messages" aria-live="polite">
         <article className="message agent"><div className="message-label">系统引导</div><p>请用自然语言说明这次最想复盘的问题。发送后，本地模型会根据你的实际目标决定是否追问，并生成可修改的分析契约草案。</p></article>
         {dialogueEntries.map((entry, index) => <article className={`message ${entry.role}`} key={`${entry.role}-${index}`}><div className="message-label">{entry.role === "teacher" ? "教师" : "Agent"}</div><p>{entry.content}</p>{entry.role === "agent" && <small className="agent-response-meta">{entry.modelName} · Trace {entry.traceId}</small>}</article>)}
@@ -411,7 +345,7 @@ export function ReviewTaskBaseline({
         {latestAgentEntry && <div className="contract-provenance"><span>{latestAgentEntry.modelName}</span><span>clarification-v1</span><span>Trace {latestAgentEntry.traceId}</span></div>}
         {clarificationNeeded && <p className="contract-guidance">Agent 仍需一项关键信息。请先回答左侧追问，再确认契约。</p>}
         <label className="permission-check compact-check"><input type="checkbox" checked={confirmed} disabled={!contractReady} onChange={(event) => { setConfirmed(event.target.checked); if (!event.target.checked) setUploadOpen(false); }} /><span>我已核对并修改分析范围、证据条件和隐私边界</span></label>
-        <button className="button primary wide" type="button" disabled={!confirmed || !contractReady} onClick={() => { setUploadOpen(true); setPreview("empty"); requestAnimationFrame(() => document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>确认真实契约，进入资料上传</button>
+        <button className="button primary wide" type="button" disabled={!confirmed || !contractReady} onClick={() => { setUploadOpen(true); requestAnimationFrame(() => document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>确认真实契约，进入资料上传</button>
       </form>}
     </aside></div>
     {uploadOpen && (
@@ -421,93 +355,16 @@ export function ReviewTaskBaseline({
         onVideoReadinessChange={setHasVideo}
         onTaskCreated={(task) => {
           setRealTask(task);
-          setPreview("processing");
           router.replace(`/tasks/${task.id}`);
         }}
       />
     )}
-    <TaskStatusPanel
-      enabled={uploadOpen && hasVideo}
-      state={preview}
-      onStateChange={setPreview}
-      task={null}
-    />
-    {preview === "ready" && (
-      <section
-        className="evidence-workbench"
-        aria-labelledby="evidence-workbench-title"
-      >
-        <header className="evidence-workbench-heading">
-          <div>
-            <span className="mock-pill">Mock 证据工作台</span>
-            <h2 id="evidence-workbench-title">逐条核对证据，再决定是否进入报告</h2>
-          </div>
-          <p>以下内容全部是交互演示数据，不代表真实课堂处理已经完成。</p>
-        </header>
-        <div className="evidence-workbench-grid">
-          <div className="evidence-media-column">
-            <VideoPlayer
-              seekToMs={seekToMs}
-              onTimeUpdate={setCurrentVideoTimeMs}
-            />
-            <TranscriptTimeline
-              items={demoTranscript}
-              currentTimeMs={currentVideoTimeMs}
-              onSeek={(timeMs) => {
-                setSeekToMs(timeMs);
-                setCurrentVideoTimeMs(timeMs);
-              }}
-            />
-          </div>
-          <div className="evidence-review-column">
-            <EvidenceCard
-              fact="教师提出证据追问后，课堂出现约五秒等待时间，随后学生给出文本依据。"
-              judgment="该片段可作为“提问后留出思考时间”的候选证据，但仍需教师结合完整上下文判断。"
-              suggestion="复核前后片段并确认时间边界；若上下文一致，可保留等待时间并继续追问证据。"
-              sourceLabel="演示逐字稿 00:12–00:31"
-              reviewStatus={reviewStatus}
-              isDemo
-              onSeekEvidence={() => {
-                const evidenceStartMs = demoTranscript[0].startMs;
-                setSeekToMs(evidenceStartMs);
-                setCurrentVideoTimeMs(evidenceStartMs);
-              }}
-            />
-            <ReviewControls
-              status={reviewStatus}
-              note={reviewNote}
-              onStatusChange={(nextStatus) => {
-                setReviewStatus(nextStatus);
-                if (nextStatus === "accepted") {
-                  setReviewNote("");
-                }
-              }}
-              onNoteChange={setReviewNote}
-            />
-            {(reviewStatus === "accepted" || reviewStatus === "modified") && (
-              <Link
-                className="button primary wide"
-                href="/reports/demo"
-                aria-disabled={reviewStatus === "modified" && !reviewNote.trim()}
-                onClick={(event) => {
-                  if (reviewStatus === "modified" && !reviewNote.trim()) {
-                    event.preventDefault();
-                    return;
-                  }
-                  saveDemoReportDraft(reviewStatus, reviewNote);
-                }}
-              >
-                查看报告编辑与预览
-              </Link>
-            )}
-            {reviewStatus === "modified" && !reviewNote.trim() && (
-              <p className="review-transfer-note" role="alert">
-                请先填写教师修改说明，再将修改后的内容带入报告。
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
+    {uploadOpen && !realTask && (
+      <p className="task-creation-boundary" role="status">
+        {hasVideo
+          ? "课堂视频已通过本地门禁；完成真实上传并创建任务后，这里才会显示后台处理进度。"
+          : "选择并上传课堂视频后，系统才会创建真实处理任务；任务创建前不会展示模拟进度或分析结果。"}
+      </p>
     )}
   </div></section></SiteChrome>;
 }

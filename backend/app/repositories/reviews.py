@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.app.errors import NotFoundError
+from agent.reporting.composer import compose_report_body
+from backend.app.errors import NotFoundError, StateConflictError
 from backend.app.models import (
     AnalysisConclusion,
     Classroom,
@@ -23,6 +24,7 @@ from backend.app.schemas.analysis_report import (
     ReviewRequest,
     ReviewStatus,
 )
+from backend.app.schemas.analysis_report import AnalysisConclusion as ConclusionRead
 from backend.app.services.audit import record_audit_event
 from backend.app.services.permissions import get_owned_or_404
 
@@ -45,6 +47,7 @@ async def apply_review(
         session, AnalysisConclusion, conclusion_id, owner_id
     )
     await _lock_classroom(session, owner_id, conclusion.classroom_id)
+    await session.refresh(conclusion)
     current_status = ReviewStatus(conclusion.review_status)
     previous_content = (
         conclusion.reviewed_content
@@ -118,7 +121,7 @@ async def get_report(
     owner_id: UUID,
     classroom_id: UUID,
 ) -> Report:
-    await get_owned_or_404(session, Classroom, classroom_id, owner_id)
+    await _lock_classroom(session, owner_id, classroom_id)
     report = await session.scalar(
         select(Report)
         .options(selectinload(Report.conclusions))
@@ -129,6 +132,7 @@ async def get_report(
     )
     if report is None:
         raise NotFoundError("报告尚未创建。")
+    await _sync_report_content(session, report, owner_id, classroom_id)
     return report
 
 
@@ -183,6 +187,7 @@ async def _reportable_conclusions(
     return list(
         await session.scalars(
             select(AnalysisConclusion)
+            .options(selectinload(AnalysisConclusion.evidence_refs))
             .where(
                 AnalysisConclusion.owner_id == owner_id,
                 AnalysisConclusion.classroom_id == classroom_id,
@@ -194,18 +199,7 @@ async def _reportable_conclusions(
 
 
 def _compose_report_content(conclusions: list[AnalysisConclusion]) -> str:
-    parts: list[str] = []
-    for conclusion in conclusions:
-        status = ReviewStatus(conclusion.review_status)
-        content = (
-            conclusion.reviewed_content
-            if status is ReviewStatus.MODIFIED
-            else conclusion.content
-        )
-        if not (content or "").strip():
-            raise ValueError("可报告结论缺少正文。")
-        parts.append(f"- {(content or '').strip()}")
-    return "\n".join(parts)
+    return compose_report_body([ConclusionRead.model_validate(item) for item in conclusions])
 
 
 async def _sync_report_content(
@@ -217,6 +211,7 @@ async def _sync_report_content(
     reportable = await _reportable_conclusions(session, owner_id, classroom_id)
     _replace_report_content(report, reportable)
     await session.flush()
+    await session.refresh(report, attribute_names=["updated_at"])
 
 
 def _replace_report_content(
@@ -240,6 +235,19 @@ async def upsert_report(
     body: ReportUpdate,
 ) -> Report:
     await _lock_classroom(session, owner_id, classroom_id)
+    for edit in body.conclusion_edits:
+        conclusion = await get_owned_or_404(session, AnalysisConclusion, edit.id, owner_id)
+        if conclusion.classroom_id != classroom_id:
+            raise NotFoundError()
+        if conclusion.review_status not in REPORTABLE_REVIEW_STATUSES:
+            raise StateConflictError("该结论已不在报告中，请刷新复核结果后再编辑。")
+        current = conclusion.reviewed_content if conclusion.review_status == ReviewStatus.MODIFIED else conclusion.content
+        if current != edit.previous_content:
+            raise StateConflictError("结论已在其他页面修改。请保留草稿并刷新后再保存。")
+    for edit in body.conclusion_edits:
+        if edit.content != edit.previous_content:
+            await apply_review(session, owner_id=owner_id, user=user, conclusion_id=edit.id,
+                               body=ReviewRequest(action=ReviewAction.MODIFY, edited_content=edit.content))
     report = await _find_report(session, owner_id, classroom_id)
     reportable = await _reportable_conclusions(session, owner_id, classroom_id)
     created = report is None
@@ -269,7 +277,7 @@ async def upsert_report(
         resource_type="report",
         resource_id=report.id,
         details={
-            "updated_fields": ["title"],
+            "updated_fields": ["title", "conclusion_edits"] if body.conclusion_edits else ["title"],
             "included_conclusion_count": len(report.conclusions),
         },
     )

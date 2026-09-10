@@ -31,6 +31,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from agent.clarifier import ReviewClarificationAgent
 from agent.providers.local import LocalModelProvider
+from agent.skills.evidence_comparison import EvidenceComparisonAgent
 from backend.app.api.analyses import router as analyses_router
 from backend.app.api.audit import router as audit_router
 from backend.app.api.auth import router as auth_router
@@ -281,6 +282,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             model=settings.local_model_name,
             reasoning_effort=settings.local_model_reasoning_effort,
         )
+    )
+    app.state.evidence_comparer = EvidenceComparisonAgent(
+        LocalModelProvider(endpoint=settings.local_model_chat_completions_url,
+                           model=settings.local_model_name,
+                           reasoning_effort=settings.local_model_reasoning_effort)
     )
 
     app.add_middleware(

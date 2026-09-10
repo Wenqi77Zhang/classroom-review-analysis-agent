@@ -2,17 +2,13 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { safeNextPath } from "@/lib/session-path";
 
 type SessionResponse = {
   user?: { display_name?: string };
   detail?: string;
   error?: { message?: string };
 };
-
-function safeNextPath(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/classrooms";
-  return value;
-}
 
 async function readMessage(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => null)) as SessionResponse | null;

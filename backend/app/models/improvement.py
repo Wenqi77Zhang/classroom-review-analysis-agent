@@ -98,6 +98,8 @@ class ImprovementComparison(Base):
     trace_id: Mapped[str] = mapped_column(String(128), index=True)
     skill: Mapped[str] = mapped_column(String(64), default="evidence-comparison")
     prompt_version: Mapped[str] = mapped_column(String(64), default="comparison-v1")
+    model_name: Mapped[str | None] = mapped_column(String(128))
+    source_fingerprint: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now())
 

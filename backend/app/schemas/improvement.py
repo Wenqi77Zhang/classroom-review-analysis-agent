@@ -58,6 +58,8 @@ class ImprovementCycleUpdate(ApiModel):
     def require_change(self) -> ImprovementCycleUpdate:
         if not self.model_fields_set:
             raise ValueError("至少提供一个需要修改的字段。")
+        if any(getattr(self, key) is None for key in self.model_fields_set if key != "followup_classroom_id"):
+            raise ValueError("名称与目标不能为空。")
         return self
 
 
@@ -78,6 +80,8 @@ class ImprovementActionUpdate(ApiModel):
     def require_change(self) -> ImprovementActionUpdate:
         if not self.model_fields_set:
             raise ValueError("至少提供一个需要修改的字段。")
+        if any(getattr(self, key) is None for key in self.model_fields_set):
+            raise ValueError("行动字段不能为空。")
         return self
 
 
@@ -106,6 +110,8 @@ class ImprovementComparisonRead(OrmModel):
     trace_id: str
     skill: str
     prompt_version: str
+    model_name: str | None = None
+    sources_current: bool = False
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -119,6 +125,8 @@ class ComparisonReviewRequest(ApiModel):
     def validate_review(self) -> ComparisonReviewRequest:
         if self.action is ReviewAction.MODIFY and not (self.edited_summary or "").strip():
             raise ValueError("修改确认时必须提供 edited_summary。")
+        if self.action is not ReviewAction.MODIFY and self.edited_summary is not None:
+            raise ValueError("只有修改确认可以携带 edited_summary。")
         return self
 
 

@@ -331,7 +331,7 @@ export function UploadPanel({
       <div className="upload-heading">
         <div>
           <span
-            className={`mock-pill backend-${backendHealth}`}
+            className={`status-pill backend-${backendHealth}`}
             aria-live="polite"
           >
             {backendHealth === "checking"

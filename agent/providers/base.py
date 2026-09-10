@@ -6,14 +6,35 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from ipaddress import ip_address
 from time import perf_counter
 from typing import Any, Literal
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 class ModelProviderError(RuntimeError):
     """可安全向上层记录的模型错误；消息不包含密钥或响应正文。"""
+
+
+class _NoModelRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ModelProviderError("模型端点发生重定向，已阻止发送课堂内容；请核对配置。")
+
+
+def urlopen(request: Request, *, timeout: float):
+    """Local classroom payloads must not follow redirects or system proxy settings."""
+    host = urlparse(request.full_url).hostname
+    local = host == "localhost"
+    try:
+        local = local or ip_address(host or "").is_loopback
+    except ValueError:
+        pass
+    handlers = [_NoModelRedirect()]
+    if local:
+        handlers.append(ProxyHandler({}))
+    return build_opener(*handlers).open(request, timeout=timeout)
 
 
 @dataclass(frozen=True, slots=True)

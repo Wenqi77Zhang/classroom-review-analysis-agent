@@ -8,7 +8,7 @@ import {
   ApiClientError,
   getAggregateReport,
   getPortfolioOverview,
-  startDemoSession,
+  requireSession,
 } from "@/lib/api";
 import type { AggregateReportRead, PortfolioOverview } from "@/types/contracts";
 
@@ -26,7 +26,7 @@ export function PortfolioDashboard() {
   useEffect(() => {
     void (async () => {
       try {
-        await startDemoSession();
+        await requireSession();
         const [overviewRow, reportRow] = await Promise.all([
           getPortfolioOverview(),
           getAggregateReport(),
