@@ -7,7 +7,7 @@ import os
 from agent.runner import build_provider_router_from_env, build_trace_sink_from_env
 from backend.app.config import Settings
 from backend.app.schemas.task import PrivacyMode
-from worker.runner import build_translation_adapter_from_env
+from worker.adapters.translation_factory import build_translation_adapter_from_env
 
 
 def main() -> int:

@@ -76,6 +76,13 @@ def test_production_preflight_runs_as_a_module() -> None:
     assert "python scripts/production_preflight.py" not in compose
 
 
+def test_runtime_preflight_does_not_import_worker_runtime() -> None:
+    source = (ROOT / "scripts" / "runtime_preflight.py").read_text(encoding="utf-8")
+
+    assert "from worker.runner" not in source
+    assert "from worker.adapters.translation_factory" in source
+
+
 def test_runtime_http_client_is_a_core_dependency() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 
