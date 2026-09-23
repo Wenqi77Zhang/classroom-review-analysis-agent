@@ -10,7 +10,12 @@ from backend.app.api.auth import DEMO_ACCOUNT_EMAIL, login_identity_is_enabled
 from backend.app.config import Settings
 from backend.app.dependencies import identify_service
 from backend.app.errors import UnauthenticatedError
-from backend.app.schemas.identity import ClassroomCreate, ClassroomUpdate, CourseCreate
+from backend.app.schemas.identity import (
+    ClassroomCreate,
+    ClassroomUpdate,
+    CourseCreate,
+    RegistrationRequest,
+)
 from backend.app.schemas.task import ServiceIdentity
 from backend.app.services.authentication import (
     create_access_token,
@@ -45,6 +50,23 @@ def test_disabled_demo_row_cannot_use_formal_login_path() -> None:
         make_settings(demo_account_password="local-demo-password"),
     )
     assert login_identity_is_enabled("teacher@example.edu", make_settings())
+
+
+def test_registration_normalizes_identity_and_requires_a_strong_password() -> None:
+    request = RegistrationRequest(
+        email="  Teacher@Example.EDU ",
+        display_name="  验收教师  ",
+        password="classroom2026",
+    )
+    assert request.email == "teacher@example.edu"
+    assert request.display_name == "验收教师"
+    for password in ("short1", "onlyletterslong", "123456789012"):
+        with pytest.raises(ValidationError):
+            RegistrationRequest(
+                email="teacher@example.edu",
+                display_name="教师",
+                password=password,
+            )
 
 
 def test_password_hash_does_not_contain_plaintext() -> None:

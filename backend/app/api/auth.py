@@ -5,15 +5,17 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.config import Settings
 from backend.app.dependencies import get_app_settings, get_current_user, get_db
-from backend.app.errors import PermissionDeniedError, UnauthenticatedError
+from backend.app.errors import PermissionDeniedError, StateConflictError, UnauthenticatedError
 from backend.app.models import User
 from backend.app.repositories.identity import find_user_by_email
 from backend.app.schemas.common import UserRef
-from backend.app.schemas.identity import AccessTokenResponse, LoginRequest
+from backend.app.schemas.identity import AccessTokenResponse, LoginRequest, RegistrationRequest
+from backend.app.services.audit import record_audit_event
 from backend.app.services.authentication import (
     create_access_token,
     hash_password,
@@ -37,6 +39,40 @@ def _token_response(user: User, settings: Settings) -> AccessTokenResponse:
         expires_in_seconds=settings.access_token_expire_minutes * 60,
         user=UserRef.model_validate(user),
     )
+
+
+@router.post("/auth/register", response_model=AccessTokenResponse, status_code=201)
+async def register(
+    body: RegistrationRequest,
+    session: Annotated[AsyncSession, Depends(get_db, scope="function")],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> AccessTokenResponse:
+    if not settings.public_registration_enabled:
+        raise PermissionDeniedError("当前环境未开放账号注册。")
+    if body.email == DEMO_ACCOUNT_EMAIL:
+        raise StateConflictError("该邮箱不可用于注册。")
+    if await find_user_by_email(session, body.email) is not None:
+        raise StateConflictError("该邮箱已注册，请直接登录。")
+
+    user = User(
+        email=body.email,
+        display_name=body.display_name,
+        password_hash=hash_password(body.password),
+    )
+    session.add(user)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise StateConflictError("该邮箱已注册，请直接登录。") from exc
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="account.registered",
+        resource_type="user",
+        resource_id=user.id,
+    )
+    return _token_response(user, settings)
 
 
 @router.post("/auth/login", response_model=AccessTokenResponse)

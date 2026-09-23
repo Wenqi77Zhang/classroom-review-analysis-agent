@@ -3,7 +3,7 @@
 > 生产网站：**[https://15.134.73.60.sslip.io](https://15.134.73.60.sslip.io)**
 >
 > 最后核验：2026-09-23；区域：`ap-southeast-2`；CloudFormation 栈：`classroom-review-agent`。
-> 当前应用部署提交：`cb60b3f04e0bcb38b839901dd0c4de1b58cda04a`。
+> 当前应用发布包含公开注册与受控演示入口；精确提交以生产容器部署记录和 GitHub `main` 为准。
 
 本方案把真实上传、Whisper 转写、本地翻译、证据分析、人工复核和报告导出部署在一台
 Ubuntu 24.04 EC2 上。PostgreSQL、后端、Worker、Agent 和 Ollama 都只在 Docker 私有网络中
@@ -27,7 +27,8 @@ Free Plan 默认使用悉尼区当前允许的 `m7i-flex.large`（2 vCPU、8 GiB
   规则运行，数据库与内部服务不直接暴露；
 - 对象存储：私有 Backblaze B2，生产 Origin 的 CORS 预检已通过；
 - 正式账号显示名为“验收教师”，凭据只保存在 AWS SecureString 与受限运维文件中；
-- 演示账号已关闭，`POST /api/session/demo` 返回 HTTP 403；
+- 公开注册已开启：每个注册账号拥有独立数据空间，入口有同源校验、限流、强密码和重复邮箱保护；
+- 受控演示账号已开启：访客无需口令即可进入共享演示空间，页面要求只使用无隐私测试材料；
 - `GET /api/backend-health` 返回 database=`ok`、object_storage=`ok`。
 
 这是一套低并发技术验收环境。2 vCPU 上的本地 `qwen3.5:4b` 响应可能需要数分钟；生产环境已把
@@ -48,6 +49,9 @@ Free Plan 默认使用悉尼区当前允许的 `m7i-flex.large`（2 vCPU、8 GiB
 `.env.production`。将 `PUBLIC_HOST` 与 `FRONTEND_ORIGIN` 改成 CloudFormation 输出，并填入
 既有 B2 私有 bucket 的受限应用密钥。所有随机口令应使用独立的 32 字节以上随机值，文件权限
 必须设为 `600`。
+
+公网自助注册必须显式设置 `PUBLIC_REGISTRATION_ENABLED=true`；共享演示入口还需设置一个至少 16 位的
+随机 `DEMO_ACCOUNT_PASSWORD`。该随机值只作为服务器端启用门禁，不会提供给浏览器或访客。
 
 ```sh
 cd /opt/classroom-review-agent
