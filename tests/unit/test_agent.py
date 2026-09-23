@@ -28,7 +28,7 @@ from agent.providers import base as provider_base
 from agent.providers.base import ModelProvider, ModelRequest, ModelResponse
 from agent.providers.cloud import CloudModelProvider
 from agent.providers.local import LocalModelProvider
-from agent.runner import run_claimed_once
+from agent.runner import build_provider_router_from_env, run_claimed_once
 from agent.skills import computer_ai as computer_ai_skill_module
 from agent.skills import humanities as humanities_skill_module
 from agent.skills import load_domain_skills
@@ -406,6 +406,21 @@ def test_provider_endpoint_security_rules() -> None:
         model="m",
     )
     assert docker_provider.model_name == "m"
+
+
+def test_provider_router_reads_local_timeout_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "LOCAL_MODEL_CHAT_COMPLETIONS_URL",
+        "http://127.0.0.1:11434/v1/chat/completions",
+    )
+    monkeypatch.setenv("LOCAL_MODEL_NAME", "qwen3.5:4b")
+    monkeypatch.setenv("LOCAL_MODEL_TIMEOUT_SECONDS", "600")
+
+    provider = build_provider_router_from_env().select(PrivacyMode.LOCAL)
+
+    assert provider._timeout_seconds == 600  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio

@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     local_model_chat_completions_url: str = "http://127.0.0.1:11434/v1/chat/completions"
     local_model_name: str = "qwen3.5:4b"
     local_model_reasoning_effort: Literal["none", "low", "medium", "high"] = "none"
+    local_model_timeout_seconds: float = Field(
+        default=120.0,
+        ge=1,
+        le=600,
+        description="本地结构化模型调用超时；CPU 部署可提高到 600 秒。",
+    )
 
     # ---------------- Object storage ----------------
     # M1 默认 Backblaze B2（成员 1 确定），走其 S3 兼容 API。变量名保持通用，

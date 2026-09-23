@@ -86,6 +86,12 @@ def make_settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, **values)  # type: ignore[arg-type]
 
 
+def test_local_model_timeout_is_configurable_and_bounded() -> None:
+    assert make_settings(local_model_timeout_seconds=600).local_model_timeout_seconds == 600
+    with pytest.raises(ValidationError, match="local_model_timeout_seconds"):
+        make_settings(local_model_timeout_seconds=601)
+
+
 @pytest.fixture
 async def client() -> AsyncIterator[httpx.AsyncClient]:
     app = create_app(make_settings())
