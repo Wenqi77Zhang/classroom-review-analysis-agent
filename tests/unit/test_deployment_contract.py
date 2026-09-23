@@ -68,6 +68,13 @@ def test_storage_readiness_sentinel_is_provisioned_before_serving() -> None:
     assert "OBJECT_STORAGE_SECRET_ACCESS_KEY" not in provisioner
 
 
+def test_production_preflight_runs_as_a_module() -> None:
+    compose = (ROOT / "deploy/compose.production.yml").read_text(encoding="utf-8")
+
+    assert "python -m scripts.production_preflight" in compose
+    assert "python scripts/production_preflight.py" not in compose
+
+
 def test_database_backup_and_restore_are_private_and_guarded() -> None:
     backup = (ROOT / "deploy/backup-database.sh").read_text(encoding="utf-8")
     restore = (ROOT / "deploy/restore-database.sh").read_text(encoding="utf-8")
