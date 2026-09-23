@@ -8,15 +8,16 @@ HTTPS origin。
 
 ## 规格与免费额度边界
 
-默认 `t3a.xlarge`（4 vCPU、16 GiB）用于同时容纳 `qwen3.5:4b`、Whisper tiny、PostgreSQL
-及应用容器。`t3a.large`（2 vCPU、8 GiB）可以降低费用，但转写和模型推理会明显变慢，且在
-并发处理时更容易出现内存压力。AWS 新账户额度是限期抵扣，不等于实例永久免费；上线后必须
-在 Billing 中设置预算告警，并在复核结束后停止或删除不用的资源。
+Free Plan 默认使用悉尼区当前允许的 `m7i-flex.large`（2 vCPU、8 GiB），并配置 8 GiB
+加密主机上的 swap、单模型和单推理并发，以容纳 `qwen3.5:4b`、Whisper tiny、PostgreSQL 及
+应用容器。该规格适合低并发验收，转写和模型推理会明显慢于推荐的 `t3a.xlarge`（4 vCPU、
+16 GiB）。AWS 新账户额度是限期抵扣，不等于实例永久免费；上线后必须在 Billing 中设置预算
+告警，并在复核结束后停止或删除不用的资源。
 
 ## 创建基础设施
 
 1. 在 AWS CloudFormation 控制台上传 `deploy/cloudformation.aws.yml`。
-2. 默认实例规格选择 `t3a.xlarge`，分支保持 `main`。
+2. Free Plan 保持默认 `m7i-flex.large`；升级 Paid plan 后可改为 `t3a.xlarge`。分支保持 `main`。
 3. 模板会创建独立 VPC、公网子网、加密 100 GiB gp3 根盘、Elastic IP、仅开放 80/443 的
    安全组，以及带最小 SSM 管理策略的实例角色。
 4. 栈完成后记录 `PublicHost` 输出，例如 `203.0.113.10.sslip.io`。该地址在 Elastic IP 保留

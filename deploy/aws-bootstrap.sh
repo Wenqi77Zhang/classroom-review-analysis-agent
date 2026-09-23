@@ -27,6 +27,17 @@ apt-get install --no-install-recommends -y \
   docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 systemctl enable --now docker
 
+# The largest Sydney Free Plan instance currently has 8 GiB RAM.  A private
+# swap file prevents an Ollama/Whisper memory spike from killing PostgreSQL or
+# the API, while the single-worker topology keeps normal requests in RAM.
+if ! swapon --show=NAME --noheadings | grep -q '^/swapfile$'; then
+  fallocate -l 8G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  printf '%s\n' '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash "$SERVICE_USER"
 fi

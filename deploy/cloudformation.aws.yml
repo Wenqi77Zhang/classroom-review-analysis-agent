@@ -4,11 +4,12 @@ Description: Single-host production candidate for Classroom Review Analysis Agen
 Parameters:
   InstanceType:
     Type: String
-    Default: t3a.xlarge
+    Default: m7i-flex.large
     AllowedValues:
+      - m7i-flex.large
       - t3a.large
       - t3a.xlarge
-    Description: t3a.xlarge is recommended for local Ollama plus Whisper; t3a.large is slower.
+    Description: m7i-flex.large is Free Plan eligible in Sydney; larger paid-plan types are faster.
   RepositoryUrl:
     Type: String
     Default: https://github.com/Wenqi77Zhang/classroom-review-analysis-agent.git
