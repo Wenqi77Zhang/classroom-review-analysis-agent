@@ -28,5 +28,10 @@ assert.doesNotMatch(
   "创建任务不得继续提交固定关注维度",
 );
 assert.match(api, /teacher_messages: teacherMessages/, "多轮教师输入必须进入后端请求");
+assert.match(component, /parsePersistedReviewDraft/, "页面必须安全解析服务端保存的契约草稿");
+assert.match(component, /updateClassroomAnalysisContract\(/, "模型契约草稿和教师确认必须写入课堂资源");
+assert.match(component, /draft_version: 1/, "持久化草稿必须具备可迁移的版本号");
+assert.doesNotMatch(component, /localStorage|sessionStorage/, "分析契约不得依赖单一浏览器存储恢复");
+assert.match(api, /updateClassroomAnalysisContract[\s\S]*method: "PATCH"/, "课堂契约更新必须调用真实 PATCH 接口");
 
 console.log("REAL_REVIEW_DIALOGUE_CONTRACT_OK");
