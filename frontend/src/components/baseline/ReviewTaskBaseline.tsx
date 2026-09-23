@@ -11,6 +11,7 @@ import {
   getTask,
   getTaskAssets,
   listTasksForClassroom,
+  updateClassroomAnalysisContract,
 } from "@/lib/api";
 import { redirectToLogin } from "@/lib/session-path";
 import type { AnalysisContract, ReviewDialogueResponse, TaskRead } from "@/types/contracts";
@@ -29,6 +30,80 @@ type DialogueEntry = {
   modelName?: string;
   traceId?: string;
 };
+
+type PersistedReviewDraft = {
+  draft_version: 1;
+  teacher_messages: string[];
+  dialogue_entries: DialogueEntry[];
+  analysis_contract: AnalysisContract;
+  clarification_needed: boolean;
+  confirmed: boolean;
+};
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function parsePersistedReviewDraft(value: Record<string, unknown>): PersistedReviewDraft | null {
+  if (value.draft_version !== 1 || !isStringArray(value.teacher_messages)) return null;
+  if (!Array.isArray(value.dialogue_entries)) return null;
+  const dialogueEntries = value.dialogue_entries;
+  if (!dialogueEntries.every((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+    const candidate = entry as Record<string, unknown>;
+    return (
+      (candidate.role === "teacher" || candidate.role === "agent") &&
+      typeof candidate.content === "string" &&
+      (candidate.modelName === undefined || typeof candidate.modelName === "string") &&
+      (candidate.traceId === undefined || typeof candidate.traceId === "string")
+    );
+  })) return null;
+  const contract = value.analysis_contract;
+  if (!contract || typeof contract !== "object") return null;
+  const candidate = contract as Record<string, unknown>;
+  if (
+    typeof candidate.goal !== "string" ||
+    !["full_lesson", "time_range"].includes(String(candidate.scope)) ||
+    !isStringArray(candidate.focus_areas) ||
+    !isStringArray(candidate.judgment_criteria) ||
+    !isStringArray(candidate.evidence_requirements) ||
+    typeof candidate.bilingual_required !== "boolean" ||
+    !["local", "cloud"].includes(String(candidate.privacy_mode)) ||
+    !["general", "computer_ai", "humanities"].includes(String(candidate.course_domain)) ||
+    typeof candidate.confirmed !== "boolean" ||
+    typeof value.clarification_needed !== "boolean" ||
+    typeof value.confirmed !== "boolean"
+  ) return null;
+  if (
+    candidate.scope === "time_range" &&
+    (typeof candidate.start_ms !== "number" || typeof candidate.end_ms !== "number")
+  ) return null;
+  return {
+    draft_version: 1,
+    teacher_messages: value.teacher_messages,
+    dialogue_entries: dialogueEntries as DialogueEntry[],
+    analysis_contract: candidate as AnalysisContract,
+    clarification_needed: value.clarification_needed,
+    confirmed: value.confirmed,
+  };
+}
+
+function reviewDraftPayload(
+  teacherMessages: string[],
+  dialogueEntries: DialogueEntry[],
+  analysisContract: AnalysisContract,
+  clarificationNeeded: boolean,
+  confirmed: boolean,
+): PersistedReviewDraft {
+  return {
+    draft_version: 1,
+    teacher_messages: teacherMessages,
+    dialogue_entries: dialogueEntries,
+    analysis_contract: { ...analysisContract, confirmed },
+    clarification_needed: clarificationNeeded,
+    confirmed,
+  };
+}
 
 function linesFromEditor(value: string): string[] {
   return value
@@ -52,6 +127,7 @@ export function ReviewTaskBaseline({
   const [contractDraft, setContractDraft] = useState<AnalysisContract | null>(null);
   const [clarificationNeeded, setClarificationNeeded] = useState(true);
   const [agentPending, setAgentPending] = useState(false);
+  const [draftSavePending, setDraftSavePending] = useState(false);
   const [dialogueError, setDialogueError] = useState<{
     message: string;
     traceId?: string;
@@ -91,11 +167,21 @@ export function ReviewTaskBaseline({
     setTaskLoadError(null);
     try {
       if (resourceKind === "classroom") {
-        setClassroom((await getClassroom(resourceId)).title);
+        const loadedClassroom = await getClassroom(resourceId);
+        setClassroom(loadedClassroom.title);
         const [latestTask] = await listTasksForClassroom(resourceId);
         if (latestTask) {
           applyTask(latestTask);
           router.replace(`/tasks/${latestTask.id}`);
+        } else {
+          const draft = parsePersistedReviewDraft(loadedClassroom.analysis_contract);
+          if (draft) {
+            setTeacherMessages(draft.teacher_messages);
+            setDialogueEntries(draft.dialogue_entries);
+            setContractDraft(draft.analysis_contract);
+            setClarificationNeeded(draft.clarification_needed);
+            setConfirmed(draft.confirmed);
+          }
         }
         return;
       }
@@ -159,9 +245,8 @@ export function ReviewTaskBaseline({
         realClassroomId,
         nextTeacherMessages,
       );
-      setTeacherMessages(nextTeacherMessages);
-      setDialogueEntries((entries) => [
-        ...entries,
+      const nextDialogueEntries: DialogueEntry[] = [
+        ...dialogueEntries,
         { role: "teacher", content: teacherMessage },
         {
           role: "agent",
@@ -169,11 +254,32 @@ export function ReviewTaskBaseline({
           modelName: response.model_name,
           traceId: response.trace_id,
         },
-      ]);
+      ];
+      setTeacherMessages(nextTeacherMessages);
+      setDialogueEntries(nextDialogueEntries);
       setContractDraft(response.analysis_contract);
       setClarificationNeeded(response.clarification_needed);
       setConfirmed(false);
       setUploadOpen(false);
+      try {
+        await updateClassroomAnalysisContract(
+          realClassroomId,
+          reviewDraftPayload(
+            nextTeacherMessages,
+            nextDialogueEntries,
+            response.analysis_contract,
+            response.clarification_needed,
+            false,
+          ),
+        );
+      } catch (error) {
+        setDialogueError({
+          message: error instanceof ApiClientError
+            ? `契约已生成，但草稿保存失败：${error.message}`
+            : "契约已生成，但草稿暂时无法保存。请保持当前页面，并在核对后重新确认契约。",
+          traceId: error instanceof ApiClientError ? error.traceId : undefined,
+        });
+      }
     } catch (error) {
       setGoal(teacherMessage);
       setDialogueError(
@@ -191,6 +297,39 @@ export function ReviewTaskBaseline({
     );
     setConfirmed(false);
     setUploadOpen(false);
+  }
+  async function openUploadPanel() {
+    if (!contractDraft || !UUID_PATTERN.test(realClassroomId) || !contractReady) return;
+    setDraftSavePending(true);
+    setDialogueError(null);
+    const confirmedContract = { ...contractDraft, confirmed: true };
+    try {
+      await updateClassroomAnalysisContract(
+        realClassroomId,
+        reviewDraftPayload(
+          teacherMessages,
+          dialogueEntries,
+          confirmedContract,
+          false,
+          true,
+        ),
+      );
+      setContractDraft(confirmedContract);
+      setConfirmed(true);
+      setUploadOpen(true);
+      requestAnimationFrame(() =>
+        document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      );
+    } catch (error) {
+      setDialogueError({
+        message: error instanceof ApiClientError
+          ? `确认契约保存失败：${error.message}`
+          : "确认契约暂时无法保存，请稍后重试。",
+        traceId: error instanceof ApiClientError ? error.traceId : undefined,
+      });
+    } finally {
+      setDraftSavePending(false);
+    }
   }
   async function recreateAsChineseOnly(task: TaskRead) {
     setCorrectingContract(true);
@@ -344,8 +483,8 @@ export function ReviewTaskBaseline({
         <div className="contract-rule"><span>隐私与来源</span><strong>{confirmed ? "课堂内容仅路由到本机模型；教师已确认当前契约" : "课堂内容仅路由到本机模型；草案尚未经教师确认"}</strong></div>
         {latestAgentEntry && <div className="contract-provenance"><span>{latestAgentEntry.modelName}</span><span>clarification-v1</span><span>Trace {latestAgentEntry.traceId}</span></div>}
         {clarificationNeeded && <p className="contract-guidance">Agent 仍需一项关键信息。请先回答左侧追问，再确认契约。</p>}
-        <label className="permission-check compact-check"><input type="checkbox" checked={confirmed} disabled={!contractReady} onChange={(event) => { setConfirmed(event.target.checked); if (!event.target.checked) setUploadOpen(false); }} /><span>我已核对并修改分析范围、证据条件和隐私边界</span></label>
-        <button className="button primary wide" type="button" disabled={!confirmed || !contractReady} onClick={() => { setUploadOpen(true); requestAnimationFrame(() => document.getElementById("upload-title")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}>确认真实契约，进入资料上传</button>
+        <label className="permission-check compact-check"><input type="checkbox" checked={confirmed} disabled={!contractReady || draftSavePending} onChange={(event) => { setConfirmed(event.target.checked); if (!event.target.checked) setUploadOpen(false); }} /><span>我已核对并修改分析范围、证据条件和隐私边界</span></label>
+        <button className="button primary wide" type="button" disabled={!confirmed || !contractReady || draftSavePending} onClick={() => void openUploadPanel()}>{draftSavePending ? "正在保存已确认契约…" : "确认真实契约，进入资料上传"}</button>
       </form>}
     </aside></div>
     {uploadOpen && (

@@ -113,6 +113,16 @@ export async function getClassroom(classroomId: string): Promise<ClassroomRead> 
   return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}`);
 }
 
+export async function updateClassroomAnalysisContract(
+  classroomId: string,
+  analysisContract: Record<string, unknown>,
+): Promise<ClassroomRead> {
+  return requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ analysis_contract: analysisContract }),
+  });
+}
+
 export async function deleteClassroom(classroomId: string): Promise<void> {
   await requestJson(`/api/classrooms/${encodeURIComponent(classroomId)}`, {
     method: "DELETE",

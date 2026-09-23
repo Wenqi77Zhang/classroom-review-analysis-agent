@@ -12,6 +12,7 @@ const presignRoute = read(
 const reviewDialogueRoute = read(
   "src/app/api/classrooms/[classroomId]/review-dialogue/route.ts",
 );
+const classroomRoute = read("src/app/api/classrooms/[classroomId]/route.ts");
 const assetRoute = read("src/app/api/assets/[assetId]/route.ts");
 const downloadRoute = read(
   "src/app/api/assets/[assetId]/download-url/route.ts",
@@ -58,6 +59,11 @@ assert.match(
   reviewDialogueRoute,
   /\/review-dialogue/,
   "复盘 Agent BFF 必须代理真实澄清接口",
+);
+assert.match(
+  classroomRoute,
+  /export async function PATCH/,
+  "课堂 BFF 必须支持服务端契约草稿更新",
 );
 assert.match(
   api,
