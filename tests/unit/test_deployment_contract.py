@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -73,6 +74,12 @@ def test_production_preflight_runs_as_a_module() -> None:
 
     assert "python -m scripts.production_preflight" in compose
     assert "python scripts/production_preflight.py" not in compose
+
+
+def test_runtime_http_client_is_a_core_dependency() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+
+    assert any(dependency.startswith("httpx") for dependency in project["dependencies"])
 
 
 def test_database_backup_and_restore_are_private_and_guarded() -> None:
