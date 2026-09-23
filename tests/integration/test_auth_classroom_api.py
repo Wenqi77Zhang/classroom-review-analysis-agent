@@ -347,8 +347,11 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
             assert [event.details for event in deleted_events] == [{"deleted_object_count": 3}]
     finally:
         async with factory.begin() as session:
+            cleanup_owner_ids = [first_id, second_id]
+            if registered_id is not None:
+                cleanup_owner_ids.append(registered_id)
             await session.execute(
-                delete(AuditEvent).where(AuditEvent.owner_id.in_([first_id, second_id]))
+                delete(AuditEvent).where(AuditEvent.owner_id.in_(cleanup_owner_ids))
             )
             for user_id in (first_id, second_id, registered_id):
                 if user_id is None:
