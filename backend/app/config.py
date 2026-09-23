@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # ---------------- Authentication ----------------
     jwt_secret: SecretStr
     access_token_expire_minutes: int = Field(default=120, ge=5, le=1440)
+    public_registration_enabled: bool = Field(
+        default=False,
+        description="是否允许访客自助注册独立教师账号；公网部署必须显式开启。",
+    )
     demo_account_password: SecretStr | None = Field(
         default=None,
         description="演示账号口令。为空时不注册演示账号——绝不回退到硬编码默认口令。",

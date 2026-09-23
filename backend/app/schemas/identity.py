@@ -19,6 +19,46 @@ class LoginRequest(ApiModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class RegistrationRequest(ApiModel):
+    email: str = Field(min_length=3, max_length=320)
+    display_name: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        local, separator, domain = normalized.partition("@")
+        if (
+            separator != "@"
+            or normalized.count("@") != 1
+            or not local
+            or "." not in domain
+            or domain.startswith(".")
+            or domain.endswith(".")
+            or any(character.isspace() for character in normalized)
+        ):
+            raise ValueError("请输入有效的邮箱地址。")
+        return normalized
+
+    @field_validator("display_name")
+    @classmethod
+    def _normalize_display_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("显示名称不能为空。")
+        return normalized
+
+    @field_validator("password")
+    @classmethod
+    def _require_strong_password(cls, value: str) -> str:
+        if not any(character.isalpha() for character in value) or not any(
+            character.isdigit() for character in value
+        ):
+            raise ValueError("密码必须同时包含字母和数字。")
+        return value
+
+
 class AccessTokenResponse(OrmModel):
     access_token: str
     token_type: str = "bearer"

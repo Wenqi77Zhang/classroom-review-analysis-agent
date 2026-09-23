@@ -415,6 +415,34 @@ body::before {
   width: min(100%, 620px);
 }
 
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 24px;
+  padding: 5px;
+  border: 1px solid rgba(55, 79, 84, 0.16);
+  border-radius: var(--radius-sm);
+  background: rgba(226, 233, 233, 0.54);
+}
+
+.team-access-card .auth-mode-switch button {
+  min-height: 42px;
+  margin: 0;
+  color: var(--ink-soft);
+  background: transparent;
+}
+
+.team-access-card .auth-mode-switch button.active {
+  color: var(--indigo-deep);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 14px rgba(43, 52, 47, 0.08);
+}
+
+.auth-field-help {
+  margin-top: -4px;
+}
+
 .auth-divider {
   display: flex;
   align-items: center;

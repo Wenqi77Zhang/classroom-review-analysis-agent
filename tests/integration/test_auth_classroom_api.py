@@ -66,6 +66,7 @@ def api_settings(database_url: str) -> Settings:
         app_env="test",
         database_url=database_url,
         jwt_secret="api-test-jwt-secret-at-least-thirty-two-characters",
+        public_registration_enabled=True,
         demo_account_password=None,
         worker_service_token="api-test-worker-token",
         agent_service_token="api-test-agent-token",
@@ -86,6 +87,7 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     first_id, second_id = uuid.uuid4(), uuid.uuid4()
+    registered_id: uuid.UUID | None = None
 
     async def test_db() -> AsyncIterator:
         async with factory() as session:
@@ -125,6 +127,34 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            registration = await client.post(
+                "/api/auth/register",
+                json={
+                    "email": " New-Teacher@Example.invalid ",
+                    "display_name": "  New Teacher  ",
+                    "password": "independent2026",
+                },
+            )
+            assert registration.status_code == 201
+            assert registration.json()["user"]["display_name"] == "New Teacher"
+            registered_token = registration.json()["access_token"]
+            registered_me = await client.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {registered_token}"},
+            )
+            assert registered_me.status_code == 200
+            registered_id = uuid.UUID(registered_me.json()["id"])
+            duplicate_registration = await client.post(
+                "/api/auth/register",
+                json={
+                    "email": "new-teacher@example.invalid",
+                    "display_name": "Duplicate",
+                    "password": "independent2026",
+                },
+            )
+            assert duplicate_registration.status_code == 409
+            assert duplicate_registration.json()["error"]["code"] == "STATE_CONFLICT"
+
             bad_login = await client.post(
                 "/api/auth/login",
                 json={"email": "first-api@example.invalid", "password": "wrong"},
@@ -317,10 +347,15 @@ async def test_login_and_owner_scoped_classroom_flow() -> None:
             assert [event.details for event in deleted_events] == [{"deleted_object_count": 3}]
     finally:
         async with factory.begin() as session:
+            cleanup_owner_ids = [first_id, second_id]
+            if registered_id is not None:
+                cleanup_owner_ids.append(registered_id)
             await session.execute(
-                delete(AuditEvent).where(AuditEvent.owner_id.in_([first_id, second_id]))
+                delete(AuditEvent).where(AuditEvent.owner_id.in_(cleanup_owner_ids))
             )
-            for user_id in (first_id, second_id):
+            for user_id in (first_id, second_id, registered_id):
+                if user_id is None:
+                    continue
                 user = await session.get(User, user_id)
                 if user is not None:
                     await session.delete(user)

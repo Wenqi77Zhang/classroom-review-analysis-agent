@@ -6,8 +6,9 @@
 
 **[打开 AWS 生产网站：15.134.73.60.sslip.io](https://15.134.73.60.sslip.io)**
 
-当前生产环境位于 AWS 悉尼区，使用 HTTPS、正式教师账号、私有 Backblaze B2、PostgreSQL、
-Whisper、Ollama `qwen3.5:4b`、Worker 与 Agent。生产基线最后核验于 2026-09-23；演示账号已关闭。
+当前生产环境位于 AWS 悉尼区，使用 HTTPS、独立教师账号、私有 Backblaze B2、PostgreSQL、
+Whisper、Ollama `qwen3.5:4b`、Worker 与 Agent。访客可注册独立账号，也可免注册进入共享演示
+工作区；共享空间只能使用无隐私且已获授权的测试材料。
 部署拓扑、验收证据与仍未完成的真实教师试用边界见
 [AWS 部署说明](docs/aws-deployment.md)和[测试与验收记录](tests/test-and-acceptance-record.md)。
 
@@ -33,7 +34,8 @@ Whisper、Ollama `qwen3.5:4b`、Worker 与 Agent。生产基线最后核验于 2
 浏览器及导出验证细节统一见[测试与验收记录](tests/test-and-acceptance-record.md)。
 
 正式教师会话使用 HttpOnly Cookie，媒体进入私有对象存储，长期服务密钥不进入浏览器。
-受控演示账号只在管理员启用且用户显式选择后建立真实后端会话。
+注册账号之间按后端资源所有权隔离；受控演示账号只在用户显式选择后建立真实后端会话，所有演示
+访客共享同一工作区，因此页面明确禁止上传真实课堂隐私数据。
 产品入口已移除前端手动进度、固定证据和浏览器临时报告。
 
 稳定 HTTPS 入口与 AWS 受控主机已经完成；公开展示真实课程内容仍需获授权媒体，产品效果仍需
@@ -131,14 +133,16 @@ docker compose --env-file .env.production -f deploy/compose.production.yml up -d
 docker compose --env-file .env.production -f deploy/compose.production.yml ps
 ```
 
-首次部署由服务器管理员在受信任终端创建正式教师账号；口令采用隐藏输入，不进入命令历史：
+当 `PUBLIC_REGISTRATION_ENABLED=true` 时，访客可在 `/login` 自助注册独立教师工作区；公网注册
+入口有同源校验与按来源限流，密码至少 12 位并同时包含字母和数字。管理员仍可在受信任终端创建、
+重置或停用正式教师账号；口令采用隐藏输入，不进入命令历史：
 
 ```bash
 docker compose --env-file .env.production -f deploy/compose.production.yml exec backend \
   python scripts/manage_teacher_accounts.py create --email teacher@example.edu --display-name "教师姓名"
 ```
 
-长期服务器默认不配置 `DEMO_ACCOUNT_PASSWORD`。教师忘记口令时使用同一脚本的
+共享演示入口由 `DEMO_ACCOUNT_PASSWORD` 显式启用，演示口令不发送到浏览器。教师忘记口令时使用同一脚本的
 `reset-password`，系统会立即撤销该账号已有登录令牌。数据库备份和受确认保护的恢复脚本位于
 `deploy/backup-database.sh` 与 `deploy/restore-database.sh`；备份包含私密课堂元数据，必须加密
 保存且不得提交 Git。
