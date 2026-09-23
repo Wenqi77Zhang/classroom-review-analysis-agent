@@ -281,12 +281,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             endpoint=settings.local_model_chat_completions_url,
             model=settings.local_model_name,
             reasoning_effort=settings.local_model_reasoning_effort,
+            timeout_seconds=settings.local_model_timeout_seconds,
         )
     )
     app.state.evidence_comparer = EvidenceComparisonAgent(
         LocalModelProvider(endpoint=settings.local_model_chat_completions_url,
                            model=settings.local_model_name,
-                           reasoning_effort=settings.local_model_reasoning_effort)
+                           reasoning_effort=settings.local_model_reasoning_effort,
+                           timeout_seconds=settings.local_model_timeout_seconds)
     )
 
     app.add_middleware(

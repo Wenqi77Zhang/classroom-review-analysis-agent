@@ -178,6 +178,9 @@ def build_provider_router_from_env() -> ProviderRouter:
     local_reasoning_effort = (
         os.getenv("LOCAL_MODEL_REASONING_EFFORT", "none").strip() or "none"
     )
+    local_timeout_seconds = float(
+        os.getenv("LOCAL_MODEL_TIMEOUT_SECONDS", "120").strip() or "120"
+    )
     cloud_endpoint = os.getenv("CLOUD_MODEL_CHAT_COMPLETIONS_URL", "").strip()
     cloud_model = os.getenv("CLOUD_MODEL_NAME", "").strip()
     cloud_key = os.getenv("CLOUD_MODEL_API_KEY", "").strip()
@@ -186,6 +189,7 @@ def build_provider_router_from_env() -> ProviderRouter:
             endpoint=local_endpoint,
             model=local_model,
             reasoning_effort=local_reasoning_effort,
+            timeout_seconds=local_timeout_seconds,
         )
         if local_endpoint and local_model
         else None
