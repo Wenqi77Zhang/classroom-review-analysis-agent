@@ -401,6 +401,11 @@ def test_provider_endpoint_security_rules() -> None:
         LocalModelProvider(endpoint="http://models.example/v1", model="m")
     provider = LocalModelProvider(endpoint="http://127.0.0.1:11434/v1/chat/completions", model="m")
     assert provider.model_name == "m"
+    docker_provider = LocalModelProvider(
+        endpoint="http://ollama:11434/v1/chat/completions",
+        model="m",
+    )
+    assert docker_provider.model_name == "m"
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !deploy/.env.production.example
+!deploy/.env.aws.example
 *.pem
 *.key
 

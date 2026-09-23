@@ -106,6 +106,9 @@ Cloudflare Quick Tunnel。组员无需安装项目环境，使用浏览器打开
 
 ### 生产部署
 
+AWS 单机生产候选方案见 [`docs/aws-deployment.md`](docs/aws-deployment.md)。它提供 CloudFormation、
+自动 HTTPS、私有 Docker 网络、本地 Ollama、精确 B2 CORS 和 Session Manager 管理入口。
+
 仓库现提供 `deploy/compose.production.yml`、前后端独立 Dockerfile 和生产配置预检。
 部署拓扑只向公网映射 Next.js 前端；FastAPI、Worker、Agent 与 PostgreSQL 位于容器私网，
 浏览器不会接触服务令牌或数据库。复制 `deploy/.env.production.example` 为根目录

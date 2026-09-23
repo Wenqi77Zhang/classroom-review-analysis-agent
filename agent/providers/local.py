@@ -8,7 +8,9 @@ from agent.providers.base import OpenAICompatibleProvider
 
 
 def _is_loopback(hostname: str | None) -> bool:
-    if hostname == "localhost":
+    # ``ollama`` is the exact Docker Compose service name on the host-local,
+    # non-published private network used by the production deployment.
+    if hostname in {"localhost", "ollama"}:
         return True
     if hostname is None:
         return False
@@ -29,7 +31,9 @@ class LocalModelProvider(OpenAICompatibleProvider):
     ) -> None:
         parsed = urlparse(endpoint)
         if parsed.scheme not in {"http", "https"} or not _is_loopback(parsed.hostname):
-            raise ValueError("本地模型 endpoint 必须指向 localhost 或 loopback 地址。")
+            raise ValueError(
+                "本地模型 endpoint 必须指向 localhost、loopback 或内部 ollama 服务。"
+            )
         super().__init__(
             endpoint=endpoint,
             model=model,

@@ -53,7 +53,7 @@ WORKER_CLAIM_STAGES = [
 
 
 def build_translation_adapter_from_env() -> TranslationAdapter | None:
-    """Build a loopback-only automatic translator; teacher VTT still takes priority."""
+    """Build a host-local automatic translator; teacher VTT still takes priority."""
 
     provider = os.getenv("TRANSLATION_PROVIDER", "local_model").strip().lower()
     if provider in {"", "none", "disabled"}:

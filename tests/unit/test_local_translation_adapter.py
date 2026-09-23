@@ -59,12 +59,17 @@ def _single_model_response(translation: str) -> bytes:
     ).encode()
 
 
-def test_local_translation_is_loopback_only() -> None:
+def test_local_translation_is_host_local_only() -> None:
     with pytest.raises(ValueError, match="loopback"):
         LocalModelTranslationAdapter(
             endpoint="https://models.example/v1/chat/completions",
             model="qwen",
         )
+    adapter = LocalModelTranslationAdapter(
+        endpoint="http://ollama:11434/v1/chat/completions",
+        model="qwen",
+    )
+    assert adapter.model_name == "qwen"
 
 
 def test_local_translation_chunks_and_restores_id_order(
