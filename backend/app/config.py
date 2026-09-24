@@ -116,6 +116,10 @@ class Settings(BaseSettings):
     # 换供应商不必改前端、数据库与 Worker。
     object_storage_provider: ObjectStorageProvider = ObjectStorageProvider.BACKBLAZE_B2
     object_storage_endpoint: str
+    object_storage_public_endpoint: str | None = Field(
+        default=None,
+        description="浏览器预签名 URL 的 HTTPS 端点；为空时复用服务端对象存储端点。",
+    )
     object_storage_region: str = "us-east-1"
     object_storage_bucket: str
     object_storage_access_key_id: SecretStr
@@ -177,8 +181,14 @@ class Settings(BaseSettings):
             if frontend.scheme != "https" or not frontend.netloc:
                 raise ValueError("生产环境 FRONTEND_ORIGIN 必须是完整 HTTPS 地址。")
             storage = urlparse(self.object_storage_endpoint)
-            if storage.scheme != "https" or not storage.netloc:
-                raise ValueError("生产环境对象存储端点必须使用 HTTPS。")
+            public_storage = urlparse(
+                self.object_storage_public_endpoint or self.object_storage_endpoint
+            )
+            internal_minio = storage.scheme == "http" and storage.hostname == "minio"
+            if (storage.scheme != "https" or not storage.netloc) and not internal_minio:
+                raise ValueError("生产环境对象存储端点必须使用 HTTPS，或限定为内部 minio 服务。")
+            if public_storage.scheme != "https" or not public_storage.netloc:
+                raise ValueError("生产环境对象存储公开端点必须使用 HTTPS。")
             if self.demo_account_password is not None and len(
                 self.demo_account_password.get_secret_value()
             ) < 16:

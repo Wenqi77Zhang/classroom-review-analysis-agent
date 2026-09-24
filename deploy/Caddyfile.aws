@@ -6,3 +6,14 @@
 		format console
 	}
 }
+
+{$OBJECT_STORAGE_PUBLIC_HOST} {
+	request_body {
+		max_size 2GB
+	}
+	reverse_proxy minio:9000
+	log {
+		output stdout
+		format console
+	}
+}
