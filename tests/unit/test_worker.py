@@ -396,6 +396,26 @@ def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
     assert all(segment.speaker is None for segment in transcript.segments)
 
 
+def test_transcribe_normalizes_minor_whisper_boundary_drift(tmp_path: Path) -> None:
+    audio = tmp_path / "audio.wav"
+    _silent_wav(audio, seconds=2)
+    adapter = FakeAsr(
+        AsrResult(
+            language="en",
+            segments=(
+                AsrSegment(0.0, 1.001, "first"),
+                AsrSegment(1.0, 2.2, "second"),
+            ),
+        )
+    )
+
+    transcript = transcribe_audio(audio, adapter)
+
+    assert [
+        (segment.start_ms, segment.end_ms) for segment in transcript.segments
+    ] == [(0, 1001), (1001, 2000)]
+
+
 @pytest.mark.parametrize(
     ("segments", "reason"),
     [
@@ -404,10 +424,10 @@ def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
         ((AsrSegment(-0.1, 0.5, "x"),), "负数"),
         ((AsrSegment(0.5, 0.5, "x"),), "空区间"),
         ((AsrSegment(0.8, 0.2, "x"),), "倒序"),
-        ((AsrSegment(0.5, 1.1, "x"),), "超出音频"),
+        ((AsrSegment(0.5, 1.3, "x"),), "超出音频"),
         (
             (
-                AsrSegment(0.0, 0.6, "first"),
+                AsrSegment(0.0, 0.8, "first"),
                 AsrSegment(0.5, 0.9, "overlap"),
             ),
             "非单调",
