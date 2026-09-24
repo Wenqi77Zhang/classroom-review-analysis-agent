@@ -132,6 +132,13 @@ def main() -> None:
     values = load_values(args.env_file)
     client = create_client(values)
     bucket = values["OBJECT_STORAGE_BUCKET"]
+
+    if args.action == "verify":
+        if not args.origin:
+            raise SystemExit("verify 必须提供 --origin。")
+        verify_preflight(client, bucket, validate_origin(args.origin))
+        return
+
     rules = get_rules(client, bucket)
     other_rules = [rule for rule in rules if rule.get("ID") != RULE_ID]
     production_rules = [rule for rule in rules if rule.get("ID") == RULE_ID]
@@ -141,12 +148,6 @@ def main() -> None:
             "B2_PRODUCTION_CORS_STATUS "
             f"total_rules={len(rules)} production_rule={bool(production_rules)}"
         )
-        return
-
-    if args.action == "verify":
-        if not args.origin:
-            raise SystemExit("verify 必须提供 --origin。")
-        verify_preflight(client, bucket, validate_origin(args.origin))
         return
 
     if args.action == "apply":

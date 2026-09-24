@@ -21,6 +21,7 @@ LOCAL_MODEL_CHAT_COMPLETIONS_URL=$(
   sed -n 's/^LOCAL_MODEL_CHAT_COMPLETIONS_URL=//p' "$ENV_FILE" | tail -n 1
 )
 OBJECT_STORAGE_ENDPOINT=$(sed -n 's/^OBJECT_STORAGE_ENDPOINT=//p' "$ENV_FILE" | tail -n 1)
+OBJECT_STORAGE_PROVIDER=$(sed -n 's/^OBJECT_STORAGE_PROVIDER=//p' "$ENV_FILE" | tail -n 1)
 OBJECT_STORAGE_PUBLIC_HOST=$(sed -n 's/^OBJECT_STORAGE_PUBLIC_HOST=//p' "$ENV_FILE" | tail -n 1)
 OBJECT_STORAGE_PUBLIC_ENDPOINT=$(
   sed -n 's/^OBJECT_STORAGE_PUBLIC_ENDPOINT=//p' "$ENV_FILE" | tail -n 1
@@ -50,9 +51,11 @@ docker compose --env-file "$ENV_FILE" \
   -f "$BASE_COMPOSE" -f "$AWS_COMPOSE" config --quiet
 docker compose --env-file "$ENV_FILE" \
   -f "$BASE_COMPOSE" -f "$AWS_COMPOSE" up -d --build
-docker compose --env-file "$ENV_FILE" \
-  -f "$BASE_COMPOSE" -f "$AWS_COMPOSE" run --rm --no-deps backend \
-  python scripts/configure_production_cors.py apply --origin "$FRONTEND_ORIGIN"
+if [ "$OBJECT_STORAGE_PROVIDER" != "minio" ]; then
+  docker compose --env-file "$ENV_FILE" \
+    -f "$BASE_COMPOSE" -f "$AWS_COMPOSE" run --rm --no-deps backend \
+    python scripts/configure_production_cors.py apply --origin "$FRONTEND_ORIGIN"
+fi
 docker compose --env-file "$ENV_FILE" \
   -f "$BASE_COMPOSE" -f "$AWS_COMPOSE" run --rm --no-deps backend \
   python scripts/configure_production_cors.py verify --origin "$FRONTEND_ORIGIN"
