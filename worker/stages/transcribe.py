@@ -13,6 +13,11 @@ from backend.app.schemas.transcript import (
 from worker.adapters.asr import AsrAdapter
 from worker.errors import WorkerError, WorkerErrorCode
 
+# Whisper timestamps are quantized and may cross a neighbouring segment or the
+# decoded WAV boundary by a few milliseconds.  Normalise only that small model
+# drift; larger discrepancies remain evidence-integrity failures.
+ASR_TIMESTAMP_DRIFT_TOLERANCE_MS = 250
+
 
 def _milliseconds(seconds: float) -> int:
     return round(seconds * 1000)
@@ -71,14 +76,25 @@ def transcribe_audio(
                 "ASR 时间戳转换为毫秒后形成空区间。",
             )
         if start_ms < previous_end_ms:
-            raise WorkerError(
-                WorkerErrorCode.INVALID_TIMESTAMP,
-                "ASR 片段必须按时间单调且不能重叠。",
-            )
+            overlap_ms = previous_end_ms - start_ms
+            if overlap_ms > ASR_TIMESTAMP_DRIFT_TOLERANCE_MS:
+                raise WorkerError(
+                    WorkerErrorCode.INVALID_TIMESTAMP,
+                    "ASR 片段必须按时间单调且不能重叠。",
+                )
+            start_ms = previous_end_ms
         if end_ms > duration_ms:
+            overshoot_ms = end_ms - duration_ms
+            if overshoot_ms > ASR_TIMESTAMP_DRIFT_TOLERANCE_MS:
+                raise WorkerError(
+                    WorkerErrorCode.INVALID_TIMESTAMP,
+                    "ASR 片段超出真实音频时长。",
+                )
+            end_ms = duration_ms
+        if end_ms <= start_ms:
             raise WorkerError(
                 WorkerErrorCode.INVALID_TIMESTAMP,
-                "ASR 片段超出真实音频时长。",
+                "ASR 时间戳归一化后形成空区间。",
             )
         segments.append(
             InternalTranscriptSegmentWrite(
