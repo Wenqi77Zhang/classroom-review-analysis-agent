@@ -1,6 +1,6 @@
 services:
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     command: ["server", "/data"]
     env_file:
       - ../.env.production
@@ -20,7 +20,7 @@ services:
     networks: [private]
 
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     env_file:
       - ../.env.production
     entrypoint: ["/bin/sh", "-ec"]
