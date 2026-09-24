@@ -1,4 +1,4 @@
-"""Maintain one exact HTTPS origin for the production B2 browser upload path."""
+"""Maintain one exact HTTPS origin for the production object-storage upload path."""
 
 from __future__ import annotations
 
@@ -20,19 +20,21 @@ REQUIRED_ENV = (
     "OBJECT_STORAGE_ACCESS_KEY_ID",
     "OBJECT_STORAGE_SECRET_ACCESS_KEY",
 )
+OPTIONAL_ENV = ("OBJECT_STORAGE_USE_PATH_STYLE",)
 
 
 def load_values(path: Path | None) -> dict[str, str]:
-    values = {name: os.getenv(name, "").strip() for name in REQUIRED_ENV}
+    known_env = (*REQUIRED_ENV, *OPTIONAL_ENV)
+    values = {name: os.getenv(name, "").strip() for name in known_env}
     if path is not None:
         for raw_line in path.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             name, value = line.split("=", 1)
-            if name.strip() in REQUIRED_ENV:
+            if name.strip() in known_env:
                 values[name.strip()] = value.strip().strip("\"'")
-    missing = [name for name, value in values.items() if not value]
+    missing = [name for name in REQUIRED_ENV if not values[name]]
     if missing:
         raise SystemExit(f"环境缺少对象存储变量：{', '.join(missing)}")
     return values
@@ -54,6 +56,12 @@ def validate_origin(origin: str) -> str:
 
 
 def create_client(values: dict[str, str]):
+    use_path_style = values.get("OBJECT_STORAGE_USE_PATH_STYLE", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     return boto3.client(
         "s3",
         endpoint_url=values["OBJECT_STORAGE_ENDPOINT"],
@@ -62,7 +70,7 @@ def create_client(values: dict[str, str]):
         aws_secret_access_key=values["OBJECT_STORAGE_SECRET_ACCESS_KEY"],
         config=Config(
             signature_version="s3v4",
-            s3={"addressing_style": "virtual"},
+            s3={"addressing_style": "path" if use_path_style else "virtual"},
             connect_timeout=5,
             read_timeout=10,
             retries={"max_attempts": 3, "mode": "standard"},
