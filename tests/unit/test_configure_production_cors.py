@@ -1,3 +1,5 @@
+import sys
+
 from scripts import configure_production_cors
 
 
@@ -38,3 +40,36 @@ def test_create_client_keeps_virtual_style_by_default(monkeypatch) -> None:
     configure_production_cors.create_client(_values())
 
     assert captured["config"].s3["addressing_style"] == "virtual"
+
+
+def test_verify_uses_preflight_without_reading_bucket_cors(monkeypatch) -> None:
+    client = object()
+    observed: dict[str, object] = {}
+    monkeypatch.setattr(
+        configure_production_cors,
+        "load_values",
+        lambda _path: _values(use_path_style="true"),
+    )
+    monkeypatch.setattr(configure_production_cors, "create_client", lambda _values: client)
+    monkeypatch.setattr(
+        configure_production_cors,
+        "verify_preflight",
+        lambda actual_client, bucket, origin: observed.update(
+            client=actual_client,
+            bucket=bucket,
+            origin=origin,
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["configure_production_cors.py", "verify", "--origin", "https://example.com"],
+    )
+
+    configure_production_cors.main()
+
+    assert observed == {
+        "client": client,
+        "bucket": "classroom-review",
+        "origin": "https://example.com",
+    }
