@@ -20,6 +20,11 @@ FRONTEND_ORIGIN=$(sed -n 's/^FRONTEND_ORIGIN=//p' "$ENV_FILE" | tail -n 1)
 LOCAL_MODEL_CHAT_COMPLETIONS_URL=$(
   sed -n 's/^LOCAL_MODEL_CHAT_COMPLETIONS_URL=//p' "$ENV_FILE" | tail -n 1
 )
+OBJECT_STORAGE_ENDPOINT=$(sed -n 's/^OBJECT_STORAGE_ENDPOINT=//p' "$ENV_FILE" | tail -n 1)
+OBJECT_STORAGE_PUBLIC_HOST=$(sed -n 's/^OBJECT_STORAGE_PUBLIC_HOST=//p' "$ENV_FILE" | tail -n 1)
+OBJECT_STORAGE_PUBLIC_ENDPOINT=$(
+  sed -n 's/^OBJECT_STORAGE_PUBLIC_ENDPOINT=//p' "$ENV_FILE" | tail -n 1
+)
 
 : "${PUBLIC_HOST:?PUBLIC_HOST is required}"
 : "${FRONTEND_ORIGIN:?FRONTEND_ORIGIN is required}"
@@ -30,6 +35,15 @@ esac
 case "$LOCAL_MODEL_CHAT_COMPLETIONS_URL" in
   http://ollama:11434/v1/chat/completions) ;;
   *) echo "AWS local-model deployment requires the internal Ollama endpoint." >&2; exit 1 ;;
+esac
+case "$OBJECT_STORAGE_ENDPOINT" in
+  http://minio:9000) ;;
+  *) echo "AWS deployment requires the internal MinIO endpoint." >&2; exit 1 ;;
+esac
+: "${OBJECT_STORAGE_PUBLIC_HOST:?OBJECT_STORAGE_PUBLIC_HOST is required}"
+case "$OBJECT_STORAGE_PUBLIC_ENDPOINT" in
+  "https://$OBJECT_STORAGE_PUBLIC_HOST") ;;
+  *) echo "OBJECT_STORAGE_PUBLIC_ENDPOINT must equal https://OBJECT_STORAGE_PUBLIC_HOST." >&2; exit 1 ;;
 esac
 
 docker compose --env-file "$ENV_FILE" \

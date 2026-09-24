@@ -49,19 +49,30 @@ class S3ObjectStorage:
         self._bucket = settings.object_storage_bucket
         self._ttl_seconds = settings.object_storage_presigned_url_ttl_seconds
         addressing_style = "path" if settings.object_storage_use_path_style else "virtual"
-        self._client = boto3.client(
-            "s3",
-            endpoint_url=settings.object_storage_endpoint,
-            region_name=settings.object_storage_region,
-            aws_access_key_id=settings.object_storage_access_key_id.get_secret_value(),
-            aws_secret_access_key=settings.object_storage_secret_access_key.get_secret_value(),
-            config=Config(
+        client_kwargs = {
+            "region_name": settings.object_storage_region,
+            "aws_access_key_id": settings.object_storage_access_key_id.get_secret_value(),
+            "aws_secret_access_key": settings.object_storage_secret_access_key.get_secret_value(),
+            "config": Config(
                 signature_version="s3v4",
                 s3={"addressing_style": addressing_style},
                 retries={"max_attempts": 3, "mode": "standard"},
                 connect_timeout=5,
                 read_timeout=10,
             ),
+        }
+        self._client = boto3.client(
+            "s3",
+            endpoint_url=settings.object_storage_endpoint,
+            **client_kwargs,
+        )
+        self._presign_client = boto3.client(
+            "s3",
+            endpoint_url=(
+                settings.object_storage_public_endpoint
+                or settings.object_storage_endpoint
+            ),
+            **client_kwargs,
         )
 
     async def presign_upload(self, object_key: str, content_type: str) -> str:
@@ -109,7 +120,7 @@ class S3ObjectStorage:
 
     def _presign(self, operation: str, params: dict[str, str]) -> str:
         try:
-            return self._client.generate_presigned_url(
+            return self._presign_client.generate_presigned_url(
                 operation,
                 Params=params,
                 ExpiresIn=self._ttl_seconds,

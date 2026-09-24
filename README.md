@@ -6,7 +6,7 @@
 
 **[打开 AWS 生产网站：15.134.73.60.sslip.io](https://15.134.73.60.sslip.io)**
 
-当前生产环境位于 AWS 悉尼区，使用 HTTPS、独立教师账号、私有 Backblaze B2、PostgreSQL、
+当前生产环境位于 AWS 悉尼区，使用 HTTPS、独立教师账号、实例内私有 MinIO、PostgreSQL、
 Whisper、Ollama `qwen3.5:4b`、Worker 与 Agent。访客可注册独立账号，也可免注册进入共享演示
 工作区；共享空间只能使用无隐私且已获授权的测试材料。
 部署拓扑、验收证据与仍未完成的真实教师试用边界见
@@ -121,12 +121,13 @@ Cloudflare Quick Tunnel。组员无需安装项目环境，使用浏览器打开
 
 当前 AWS 生产站点为 **[https://15.134.73.60.sslip.io](https://15.134.73.60.sslip.io)**。
 实际部署与复现方案见 [`docs/aws-deployment.md`](docs/aws-deployment.md)：CloudFormation、自动 HTTPS、
-私有 Docker 网络、本地 Ollama、精确 B2 CORS 和 Session Manager 管理入口均已落地。
+私有 Docker 网络、本地 Ollama、非公网 MinIO 和 Session Manager 管理入口均已落地。
 
 仓库现提供 `deploy/compose.production.yml`、前后端独立 Dockerfile 和生产配置预检。
 部署拓扑只向公网映射 Next.js 前端；FastAPI、Worker、Agent 与 PostgreSQL 位于容器私网，
 浏览器不会接触服务令牌或数据库。复制 `deploy/.env.production.example` 为根目录
-`.env.production`，替换其中所有占位值并配置 B2 对精确 HTTPS 域名的 CORS 后运行：
+`.env.production`，替换其中所有占位值后运行。AWS Compose 会创建只在 Docker 私网可见的
+MinIO bucket，无须开放对象存储端口或配置跨域规则：
 
 ```bash
 docker compose --env-file .env.production -f deploy/compose.production.yml up -d --build

@@ -46,6 +46,25 @@ def test_production_rejects_non_https_storage() -> None:
         )
 
 
+def test_production_accepts_internal_minio_with_public_https_endpoint() -> None:
+    settings = make_settings(
+        app_env=AppEnv.PRODUCTION,
+        frontend_origin="https://classroom.example",
+        object_storage_endpoint="http://minio:9000",
+        object_storage_public_endpoint="https://storage.classroom.example",
+    )
+    assert settings.object_storage_public_endpoint == "https://storage.classroom.example"
+
+
+def test_production_rejects_internal_minio_without_public_https_endpoint() -> None:
+    with pytest.raises(ValidationError, match="公开端点"):
+        make_settings(
+            app_env=AppEnv.PRODUCTION,
+            frontend_origin="https://classroom.example",
+            object_storage_endpoint="http://minio:9000",
+        )
+
+
 def test_production_rejects_weak_demo_password() -> None:
     with pytest.raises(ValidationError, match="至少 16"):
         make_settings(
@@ -82,6 +101,37 @@ def test_demo_and_extra_entrance_gate_are_optional(monkeypatch: pytest.MonkeyPat
     monkeypatch.delenv("TEAM_TUNNEL_ACCESS_CODE", raising=False)
     assert _optional("DEMO_ACCOUNT_PASSWORD", minimum=16) is None
     assert _optional("TEAM_TUNNEL_ACCESS_CODE", minimum=16) is None
+
+
+def test_storage_separates_internal_io_from_public_presigned_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    endpoints: list[str] = []
+
+    class Client:
+        def __init__(self, endpoint: str) -> None:
+            self.endpoint = endpoint
+
+        def generate_presigned_url(self, *_: object, **__: object) -> str:
+            return f"{self.endpoint}/signed"
+
+    def client(_: str, *, endpoint_url: str, **__: object) -> Client:
+        endpoints.append(endpoint_url)
+        return Client(endpoint_url)
+
+    monkeypatch.setattr("backend.app.services.storage.boto3.client", client)
+    storage = S3ObjectStorage(
+        make_settings(
+            object_storage_endpoint="http://minio:9000",
+            object_storage_public_endpoint="https://storage.classroom.example",
+            object_storage_use_path_style=True,
+        )
+    )
+
+    assert endpoints == ["http://minio:9000", "https://storage.classroom.example"]
+    assert storage._presign("put_object", {"Bucket": "bucket", "Key": "key"}) == (
+        "https://storage.classroom.example/signed"
+    )
 
 
 @pytest.mark.asyncio

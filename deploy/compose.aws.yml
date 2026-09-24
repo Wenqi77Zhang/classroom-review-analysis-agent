@@ -1,4 +1,47 @@
 services:
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data"]
+    env_file:
+      - ../.env.production
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_ACCESS_KEY}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${FRONTEND_ORIGIN}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 15s
+    restart: unless-stopped
+    networks: [private]
+
+  minio-init:
+    image: minio/mc:latest
+    env_file:
+      - ../.env.production
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - >-
+        until mc alias set classroom http://minio:9000
+        "$${OBJECT_STORAGE_ACCESS_KEY_ID}" "$${OBJECT_STORAGE_SECRET_ACCESS_KEY}";
+        do sleep 2; done;
+        mc mb --ignore-existing "classroom/$${OBJECT_STORAGE_BUCKET}";
+        mc anonymous set none "classroom/$${OBJECT_STORAGE_BUCKET}"
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    networks: [private]
+
+  backend:
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
   ollama:
     image: ollama/ollama:latest
     environment:
@@ -52,6 +95,7 @@ services:
     image: caddy:2-alpine
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST}
+      OBJECT_STORAGE_PUBLIC_HOST: ${OBJECT_STORAGE_PUBLIC_HOST}
     ports:
       - "80:80"
       - "443:443"
@@ -64,9 +108,10 @@ services:
       frontend:
         condition: service_healthy
     restart: unless-stopped
-    networks: [public]
+    networks: [public, private]
 
 volumes:
+  minio_data:
   ollama_data:
   caddy_data:
   caddy_config:
