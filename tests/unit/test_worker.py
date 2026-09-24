@@ -396,7 +396,9 @@ def test_transcribe_converts_seconds_to_frozen_schema(tmp_path: Path) -> None:
     assert all(segment.speaker is None for segment in transcript.segments)
 
 
-def test_transcribe_normalizes_minor_whisper_boundary_drift(tmp_path: Path) -> None:
+def test_transcribe_normalizes_whisper_boundary_and_final_window_padding(
+    tmp_path: Path,
+) -> None:
     audio = tmp_path / "audio.wav"
     _silent_wav(audio, seconds=2)
     adapter = FakeAsr(
@@ -404,7 +406,7 @@ def test_transcribe_normalizes_minor_whisper_boundary_drift(tmp_path: Path) -> N
             language="en",
             segments=(
                 AsrSegment(0.0, 1.001, "first"),
-                AsrSegment(1.0, 2.2, "second"),
+                AsrSegment(1.0, 12.0, "second"),
             ),
         )
     )
@@ -424,7 +426,14 @@ def test_transcribe_normalizes_minor_whisper_boundary_drift(tmp_path: Path) -> N
         ((AsrSegment(-0.1, 0.5, "x"),), "负数"),
         ((AsrSegment(0.5, 0.5, "x"),), "空区间"),
         ((AsrSegment(0.8, 0.2, "x"),), "倒序"),
-        ((AsrSegment(0.5, 1.3, "x"),), "超出音频"),
+        (
+            (
+                AsrSegment(0.5, 1.3, "non-final-overshoot"),
+                AsrSegment(0.9, 0.95, "later"),
+            ),
+            "非末段超出音频",
+        ),
+        ((AsrSegment(0.5, 31.3, "far-beyond-final"),), "末段过度超出音频"),
         (
             (
                 AsrSegment(0.0, 0.8, "first"),

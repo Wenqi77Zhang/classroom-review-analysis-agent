@@ -17,6 +17,10 @@ from worker.errors import WorkerError, WorkerErrorCode
 # decoded WAV boundary by a few milliseconds.  Normalise only that small model
 # drift; larger discrepancies remain evidence-integrity failures.
 ASR_TIMESTAMP_DRIFT_TOLERANCE_MS = 250
+# Whisper decodes padded 30-second windows.  Its final segment can therefore
+# end at the window boundary after the real WAV has ended.  Only the final
+# segment receives this wider clamp; earlier segments keep the strict limit.
+ASR_FINAL_SEGMENT_OVERSHOOT_TOLERANCE_MS = 30_000
 
 
 def _milliseconds(seconds: float) -> int:
@@ -52,7 +56,7 @@ def transcribe_audio(
     result = adapter.transcribe(audio_path)
     segments: list[InternalTranscriptSegmentWrite] = []
     previous_end_ms = 0
-    for item in result.segments:
+    for item_index, item in enumerate(result.segments):
         if not math.isfinite(item.start_seconds) or not math.isfinite(item.end_seconds):
             raise WorkerError(
                 WorkerErrorCode.INVALID_TIMESTAMP,
@@ -85,10 +89,19 @@ def transcribe_audio(
             start_ms = previous_end_ms
         if end_ms > duration_ms:
             overshoot_ms = end_ms - duration_ms
-            if overshoot_ms > ASR_TIMESTAMP_DRIFT_TOLERANCE_MS:
+            is_final_segment = item_index == len(result.segments) - 1
+            overshoot_tolerance_ms = (
+                ASR_FINAL_SEGMENT_OVERSHOOT_TOLERANCE_MS
+                if is_final_segment
+                else ASR_TIMESTAMP_DRIFT_TOLERANCE_MS
+            )
+            if overshoot_ms > overshoot_tolerance_ms:
                 raise WorkerError(
                     WorkerErrorCode.INVALID_TIMESTAMP,
-                    "ASR 片段超出真实音频时长。",
+                    (
+                        "ASR 片段超出真实音频时长："
+                        f"超出 {overshoot_ms} 毫秒，允许 {overshoot_tolerance_ms} 毫秒。"
+                    ),
                 )
             end_ms = duration_ms
         if end_ms <= start_ms:
