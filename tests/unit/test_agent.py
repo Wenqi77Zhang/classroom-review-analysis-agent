@@ -539,6 +539,7 @@ async def test_orchestrator_generates_frozen_backend_conclusion_contract() -> No
     assert "$defs" not in serialized_schema
     assert '"format"' not in serialized_schema
     assert '"maxLength"' not in serialized_schema
+    assert grammar_schema["properties"]["conclusions"]["maxItems"] == 3
     assert (
         grammar_schema["properties"]["conclusions"]["items"]["properties"]["type"]["enum"]
         == ["fact", "judgment", "suggestion"]

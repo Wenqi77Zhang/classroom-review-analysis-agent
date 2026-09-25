@@ -94,7 +94,7 @@ class ModelConclusion(ApiModel):
 
 
 class ModelAnalysis(ApiModel):
-    conclusions: list[ModelConclusion] = Field(min_length=1, max_length=100)
+    conclusions: list[ModelConclusion] = Field(min_length=1, max_length=3)
 
 
 class AgentRunResult(ApiModel):
