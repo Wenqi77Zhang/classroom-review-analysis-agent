@@ -19,7 +19,9 @@ from agent.providers.base import ModelProviderError
 from agent.skills.evidence_comparison import (
     PROMPT_VERSION,
     SKILL_NAME,
+    ComparisonOutput,
     EvidenceComparisonAgent,
+    GroundedComparison,
 )
 from backend.app.dependencies import get_current_user, get_db
 from backend.app.errors import (
@@ -48,6 +50,7 @@ from backend.app.schemas.analysis_report import (
 )
 from backend.app.schemas.improvement import (
     AggregateReportRead,
+    ComparisonOutcome,
     ComparisonReviewRequest,
     CycleStatus,
     ImprovementActionCreate,
@@ -374,11 +377,26 @@ async def generate_comparisons(
                 baseline = baselines.get(action.source_conclusion_id)
                 if baseline is None or not baseline.evidence_refs or baseline.review_status not in REPORTABLE_REVIEW_STATUSES:
                     raise StateConflictError("基线建议缺少已确认且可定位的证据，请先完成复核。")
-                proposal = await comparer.compare(
-                    action_text=action.action_text, success_criterion=action.success_criterion,
-                    baseline=_comparison_input(baseline), candidates=[_comparison_input(item) for item in candidates],
-                    trace_id=trace_id,
-                )
+                if not candidates:
+                    baseline_evidence = _evidence_payload(baseline)[:12]
+                    quoted = next((item["quote"] for item in baseline_evidence if item.get("quote")), None)
+                    proposal = GroundedComparison(
+                        output=ComparisonOutput(
+                            followup_conclusion_id=None,
+                            baseline_evidence_ids=[item["id"] for item in baseline_evidence],
+                            followup_evidence_ids=[],
+                            baseline_quote=quoted,
+                            followup_quote=None,
+                            outcome=ComparisonOutcome.INSUFFICIENT_EVIDENCE,
+                        ),
+                        model_name="policy:no-reviewed-followup-v1",
+                    )
+                else:
+                    proposal = await comparer.compare(
+                        action_text=action.action_text, success_criterion=action.success_criterion,
+                        baseline=_comparison_input(baseline), candidates=[_comparison_input(item) for item in candidates],
+                        trace_id=trace_id,
+                    )
                 followup = next((item for item in candidates if str(item.id) == proposal.output.followup_conclusion_id), None)
                 proposals.append((action, baseline, followup, proposal))
     except (ModelProviderError, TimeoutError) as exc:
