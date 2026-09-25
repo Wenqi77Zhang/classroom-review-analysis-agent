@@ -416,6 +416,7 @@ def test_provider_router_reads_local_generation_limits_from_environment(
         "http://127.0.0.1:11434/v1/chat/completions",
     )
     monkeypatch.setenv("LOCAL_MODEL_NAME", "qwen3.5:4b")
+    monkeypatch.setenv("AGENT_LOCAL_MODEL_NAME", "qwen3.5:0.8b")
     monkeypatch.setenv("LOCAL_MODEL_TIMEOUT_SECONDS", "600")
     monkeypatch.setenv("LOCAL_MODEL_MAX_TOKENS", "1024")
 
@@ -423,6 +424,7 @@ def test_provider_router_reads_local_generation_limits_from_environment(
 
     assert provider._timeout_seconds == 600  # type: ignore[attr-defined]
     assert provider._max_tokens == 1024  # type: ignore[attr-defined]
+    assert provider.model_name == "qwen3.5:0.8b"
 
 
 @pytest.mark.asyncio
