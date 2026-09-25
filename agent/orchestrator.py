@@ -38,6 +38,19 @@ _PROMPT_PATH = Path(__file__).with_name("prompts") / "analysis.md"
 _GRAMMAR_SCHEMA_KEYS = frozenset(
     {"type", "properties", "required", "items", "enum", "additionalProperties"}
 )
+_MAX_MODEL_EVIDENCE_ITEMS = 48
+
+
+def _evenly_spaced(items: Sequence[EvidenceItem], limit: int) -> list[EvidenceItem]:
+    """Keep coverage across a lesson without always favoring its opening minutes."""
+
+    if limit <= 0 or not items:
+        return []
+    if len(items) <= limit:
+        return list(items)
+    if limit == 1:
+        return [items[len(items) // 2]]
+    return [items[index * (len(items) - 1) // (limit - 1)] for index in range(limit)]
 
 
 def _model_grammar_schema(
@@ -401,7 +414,39 @@ class AgentOrchestrator:
                 "教师确认的分析范围内没有可定位证据。",
             )
         self._validate_evidence_policy(evidence, analysis_input.contract)
-        return evidence[:200]
+        # A local 4B model cannot safely receive hundreds of UUID-enumerated items in a
+        # 4096-token context. Sample every source across the full lesson, then fill any
+        # unused quota from the remaining ordered evidence. The full index remains in
+        # PostgreSQL; this only bounds one model request.
+        quotas = {
+            EvidenceSourceType.TRANSCRIPT: 32,
+            EvidenceSourceType.COURSEWARE: 12,
+        }
+        selected_ids: set[object] = set()
+        selected: list[EvidenceItem] = []
+        for source_type, limit in quotas.items():
+            source_items = [
+                item for item in evidence if item.reference.source_type is source_type
+            ]
+            for item in _evenly_spaced(source_items, limit):
+                if item.id not in selected_ids:
+                    selected.append(item)
+                    selected_ids.add(item.id)
+        other_items = [
+            item
+            for item in evidence
+            if item.reference.source_type
+            not in {EvidenceSourceType.TRANSCRIPT, EvidenceSourceType.COURSEWARE}
+        ]
+        for item in _evenly_spaced(other_items, 4):
+            if item.id not in selected_ids:
+                selected.append(item)
+                selected_ids.add(item.id)
+        remaining_slots = _MAX_MODEL_EVIDENCE_ITEMS - len(selected)
+        remaining = [item for item in evidence if item.id not in selected_ids]
+        selected.extend(_evenly_spaced(remaining, remaining_slots))
+        order = {item.id: index for index, item in enumerate(evidence)}
+        return sorted(selected, key=lambda item: order[item.id])
 
     def _validate_evidence_policy(
         self,
