@@ -1471,6 +1471,46 @@ def test_courseware_is_prefetched_before_long_media_pipeline(
     ]
 
 
+def test_non_bilingual_contract_skips_automatic_translation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "claimed.wav"
+    _silent_wav(source)
+    claim = _claim()
+    store = FakeClaimingStore(claim)
+
+    @contextmanager
+    def claimed_path(*_: object):
+        yield source
+
+    def run_without_translation(*_: object, **kwargs: object) -> PipelineResult:
+        assert kwargs["translation_adapter"] is None
+        return PipelineResult(
+            task_id=claim.task_id,
+            transcript_segments=1,
+            translated_segments=0,
+            duration_ms=1000,
+        )
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+    monkeypatch.setattr("worker.runner.run_pipeline", run_without_translation)
+
+    _process_claimed_media(
+        claim,
+        threading.Event(),
+        store,  # type: ignore[arg-type]
+        FakeAsr(AsrResult(language="en", segments=())),
+        None,
+        "worker-no-translation",
+        translation_adapter=FakePipelineTranslation(),
+    )
+
+    assert store.handoffs == [
+        (claim.task_id, InternalAgentHandoff(worker_id="worker-no-translation"))
+    ]
+
+
 def test_reclaimed_transcribe_cleanup_failure_stays_at_transcribe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -374,6 +374,9 @@ def _process_claimed_media(
     worker_id: str,
     translation_adapter: TranslationAdapter | None = None,
 ) -> PipelineResult:
+    effective_translation_adapter = (
+        translation_adapter if claim.analysis_contract.bilingual_required else None
+    )
     courseware_stack = ExitStack()
     active_failure: WorkerError | None = None
     pipeline_started = False
@@ -417,7 +420,7 @@ def _process_claimed_media(
                     adapter,
                     store,
                     stop_event=stop,
-                    translation_adapter=translation_adapter,
+                    translation_adapter=effective_translation_adapter,
                     supplemental_translation_path=translation_path,
                     reported_stage_floor=claim.stage,
                 )
@@ -507,7 +510,7 @@ def _process_claimed_media(
             elif claim.stage in {TaskStage.TRANSCRIBE, TaskStage.TRANSLATE}:
                 stage = claim.stage
             elif media_pipeline_completed and (
-                translation_adapter is not None or used_supplemental_translation
+                effective_translation_adapter is not None or used_supplemental_translation
             ):
                 stage = TaskStage.TRANSLATE
             else:
