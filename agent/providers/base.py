@@ -134,6 +134,7 @@ class OpenAICompatibleProvider(ModelProvider):
         }
         if self._reasoning_effort is not None:
             payload["reasoning_effort"] = self._reasoning_effort
+        self._customize_payload(payload)
         headers = {
             "Content-Type": "application/json",
             "X-Trace-Id": request.trace_id,
@@ -162,6 +163,9 @@ class OpenAICompatibleProvider(ModelProvider):
         if not isinstance(decoded, dict):
             raise ModelProviderError("模型服务响应不是 JSON object。")
         return decoded
+
+    def _customize_payload(self, payload: dict[str, Any]) -> None:
+        """Allow a provider to add endpoint-specific generation controls."""
 
     def _prepare_response_schema(self, schema: dict[str, Any]) -> dict[str, Any]:
         """Allow provider-specific generation schemas; callers still validate the full schema."""

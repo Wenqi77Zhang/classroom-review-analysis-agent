@@ -471,6 +471,10 @@ async def test_local_provider_defaults_to_disabled_reasoning_for_structured_outp
     )
 
     assert captured["reasoning_effort"] == "none"
+    assert captured["stream"] is False
+    assert captured["think"] is False
+    assert captured["max_tokens"] == 4096
+    assert captured["messages"][0]["content"].startswith("/no_think")
     sent_schema = captured["response_format"]["json_schema"]["schema"]
     assert "title" not in sent_schema
     assert "description" not in sent_schema["properties"]["ok"]
