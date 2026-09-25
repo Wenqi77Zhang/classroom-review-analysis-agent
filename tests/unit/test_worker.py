@@ -1412,6 +1412,59 @@ def test_reclaimed_transcribe_completes_without_backward_state_and_hands_off(
     ]
 
 
+def test_courseware_is_prefetched_before_long_media_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "claimed.wav"
+    _silent_wav(source)
+    claim = _claim().model_copy(update={"stage": TaskStage.TRANSCRIBE})
+    store = FakeClaimingStore(claim)
+    courseware_open = False
+
+    @contextmanager
+    def claimed_path(*_: object):
+        yield source
+
+    @contextmanager
+    def prefetched_courseware(*_: object):
+        nonlocal courseware_open
+        courseware_open = True
+        try:
+            yield ()
+        finally:
+            courseware_open = False
+
+    def run_while_courseware_is_local(*_: object, **__: object) -> PipelineResult:
+        assert courseware_open
+        return PipelineResult(
+            task_id=claim.task_id,
+            transcript_segments=1,
+            translated_segments=1,
+            duration_ms=1000,
+        )
+
+    monkeypatch.setattr("worker.runner._claimed_input_path", claimed_path)
+    monkeypatch.setattr(
+        "worker.runner._claimed_courseware_paths", prefetched_courseware
+    )
+    monkeypatch.setattr("worker.runner.run_pipeline", run_while_courseware_is_local)
+
+    _process_claimed_media(
+        claim,
+        threading.Event(),
+        store,  # type: ignore[arg-type]
+        FakeAsr(AsrResult(language="zh", segments=())),
+        None,
+        "worker-prefetch",
+    )
+
+    assert not courseware_open
+    assert store.handoffs == [
+        (claim.task_id, InternalAgentHandoff(worker_id="worker-prefetch"))
+    ]
+
+
 def test_reclaimed_transcribe_cleanup_failure_stays_at_transcribe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
