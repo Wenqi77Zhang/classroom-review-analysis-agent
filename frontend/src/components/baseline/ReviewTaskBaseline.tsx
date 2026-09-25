@@ -331,7 +331,10 @@ export function ReviewTaskBaseline({
       setDraftSavePending(false);
     }
   }
-  async function recreateAsChineseOnly(task: TaskRead) {
+  async function recreateFromExisting(
+    task: TaskRead,
+    analysisContract: AnalysisContract = task.analysis_contract,
+  ) {
     setCorrectingContract(true);
     setContractCorrectionError("");
     try {
@@ -345,11 +348,7 @@ export function ReviewTaskBaseline({
       const replacement = await createTask(
         task.classroom_id,
         assets.map((asset) => asset.id),
-        {
-          ...task.analysis_contract,
-          bilingual_required: false,
-          confirmed: true,
-        },
+        { ...analysisContract, confirmed: true },
       );
       applyTask(replacement);
       router.replace(`/tasks/${replacement.id}`);
@@ -364,6 +363,14 @@ export function ReviewTaskBaseline({
     } finally {
       setCorrectingContract(false);
     }
+  }
+
+  async function recreateAsChineseOnly(task: TaskRead) {
+    await recreateFromExisting(task, {
+      ...task.analysis_contract,
+      bilingual_required: false,
+      confirmed: true,
+    });
   }
   if (taskLookupPending) {
     return (
@@ -414,6 +421,24 @@ export function ReviewTaskBaseline({
             </header>
             {pollError && <div className="upload-error" role="alert"><p>{pollError}</p><button className="button secondary" type="button" onClick={redirectToLogin}>重新登录</button></div>}
             <TaskStatusPanel task={realTask} onTaskUpdated={applyTask} />
+            {realTask.status === "cancelled" && (
+              <section className="contract-correction-card" role="note" aria-labelledby="cancelled-recovery-title">
+                <div>
+                  <span className="eyebrow">REUSE VERIFIED INPUTS · 复用原资料</span>
+                  <h2 id="cancelled-recovery-title">从已核验资料创建新任务</h2>
+                  <p>原视频、课件和已确认分析契约仍保留在私有存储中；新任务会生成独立任务 ID、Trace 与审计记录。</p>
+                </div>
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={correctingContract}
+                  onClick={() => void recreateFromExisting(realTask)}
+                >
+                  {correctingContract ? "正在创建新任务…" : "使用原资料创建新任务"}
+                </button>
+                {contractCorrectionError && <p className="upload-error" role="alert">{contractCorrectionError}</p>}
+              </section>
+            )}
             {needsBilingualRecovery && (
               <section className="contract-correction-card" role="note" aria-labelledby="bilingual-correction-title">
                 <div>
