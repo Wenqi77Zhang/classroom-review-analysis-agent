@@ -436,6 +436,20 @@ export function ReviewTaskBaseline({
                 >
                   {correctingContract ? "正在创建新任务…" : "使用原资料创建新任务"}
                 </button>
+                {realTask.analysis_contract.bilingual_required && (
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={correctingContract}
+                    onClick={() => void recreateFromExisting(realTask, {
+                      ...realTask.analysis_contract,
+                      bilingual_required: false,
+                      confirmed: true,
+                    })}
+                  >
+                    保留英文原文，跳过逐句中文翻译
+                  </button>
+                )}
                 {contractCorrectionError && <p className="upload-error" role="alert">{contractCorrectionError}</p>}
               </section>
             )}

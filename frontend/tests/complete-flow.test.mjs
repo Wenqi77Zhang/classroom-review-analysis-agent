@@ -79,6 +79,8 @@ test("已取消任务可复用原资料创建带独立审计链的新任务", ()
   assert.match(task, /await getTaskAssets\(task\.id\)/);
   assert.match(task, /使用原资料创建新任务/);
   assert.match(task, /独立任务 ID、Trace 与审计记录/);
+  assert.match(task, /保留英文原文，跳过逐句中文翻译/);
+  assert.match(task, /bilingual_required: false/);
 });
 
 test("双语要求必须显式选择且选错后可复用原资料修正", () => {
