@@ -36,7 +36,16 @@ from backend.app.schemas.analysis_report import (
 PROMPT_VERSION = "analysis-v2"
 _PROMPT_PATH = Path(__file__).with_name("prompts") / "analysis.md"
 _GRAMMAR_SCHEMA_KEYS = frozenset(
-    {"type", "properties", "required", "items", "enum", "additionalProperties"}
+    {
+        "type",
+        "properties",
+        "required",
+        "items",
+        "enum",
+        "additionalProperties",
+        "minItems",
+        "maxItems",
+    }
 )
 _MAX_MODEL_EVIDENCE_ITEMS = 48
 

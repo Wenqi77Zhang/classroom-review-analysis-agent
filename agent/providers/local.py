@@ -67,9 +67,7 @@ class LocalModelProvider(OpenAICompatibleProvider):
         unsupported = {
             "description",
             "format",
-            "maxItems",
             "maxLength",
-            "minItems",
             "minLength",
             "title",
         }
