@@ -164,6 +164,16 @@ def run_pipeline(
                 transcript,
                 translation_adapter,
                 stop_event=stop_event,
+                progress_callback=lambda progress: store.update_state(
+                    task.task_id,
+                    _state(
+                        current_stage,
+                        TaskStatus.RUNNING,
+                        min(progress, 0.99),
+                        task.trace_id,
+                        message="正在逐句翻译",
+                    ),
+                ),
             )
         )
         _raise_if_stopped(stop_event)

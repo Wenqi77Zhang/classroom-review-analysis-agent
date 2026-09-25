@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from threading import Event
 
 from backend.app.schemas.transcript import InternalTranscriptWrite
@@ -42,6 +43,7 @@ def translate_transcript(
     adapter: TranslationAdapter | None,
     *,
     stop_event: Event | None = None,
+    progress_callback: Callable[[float], None] | None = None,
 ) -> InternalTranscriptWrite:
     """Return a validated copy with Chinese translations aligned by segment."""
 
@@ -81,11 +83,19 @@ def translate_transcript(
 
     texts = tuple(transcript.segments[index].text for index in target_indexes)
     try:
-        batch = adapter.translate_batch(
-            texts,
-            source_language="en",
-            target_language="zh",
-        )
+        if progress_callback is None:
+            batch = adapter.translate_batch(
+                texts,
+                source_language="en",
+                target_language="zh",
+            )
+        else:
+            batch = adapter.translate_batch(
+                texts,
+                source_language="en",
+                target_language="zh",
+                progress_callback=progress_callback,
+            )
     except WorkerError:
         raise
     except TimeoutError:
