@@ -6,6 +6,7 @@ import shutil
 import threading
 import time
 import wave
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -116,9 +117,12 @@ class FakePipelineTranslation:
         *,
         source_language: str,
         target_language: str,
+        progress_callback: Callable[[float], None] | None = None,
     ) -> TranslationBatch:
         assert source_language == "en"
         assert target_language == "zh"
+        if progress_callback is not None:
+            progress_callback(1.0)
         return TranslationBatch(
             translations=tuple(f"[测试译文]{text}" for text in texts),
             model_name=self.model_name,
@@ -684,11 +688,13 @@ def test_pipeline_stop_during_translation_keeps_only_original_write(tmp_path: Pa
             *,
             source_language: str,
             target_language: str,
+            progress_callback: Callable[[float], None] | None = None,
         ) -> TranslationBatch:
             result = super().translate_batch(
                 texts,
                 source_language=source_language,
                 target_language=target_language,
+                progress_callback=progress_callback,
             )
             stop.set()
             return result
@@ -711,7 +717,7 @@ def test_pipeline_stop_during_translation_keeps_only_original_write(tmp_path: Pa
     assert len(store.transcript_writes) == 1
     assert store.transcript_writes[0].segments[0].translation is None
     assert store.events[task.task_id][-1].stage is TaskStage.TRANSLATE
-    assert store.events[task.task_id][-1].progress == 0.0
+    assert store.events[task.task_id][-1].progress == 0.99
 
 
 def test_claim_204_equivalent_does_not_start_heartbeat() -> None:

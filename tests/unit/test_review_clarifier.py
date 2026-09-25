@@ -140,13 +140,24 @@ async def test_clarifier_fails_closed_after_invalid_repair() -> None:
 
 
 @pytest.mark.asyncio
-async def test_six_teacher_turns_end_clarification_loop() -> None:
+async def test_three_teacher_turns_end_clarification_loop() -> None:
     provider = SequenceProvider(
         [_dialogue(clarification_needed=True, message="还想继续追问。")]
     )
 
-    result = await _clarify(provider, [f"第 {index} 轮" for index in range(1, 7)])
+    result = await _clarify(provider, [f"第 {index} 轮" for index in range(1, 4)])
 
     assert result.clarification_needed is False
     assert result.assistant_message == "已根据现有信息形成分析契约草案；请核对并修改右侧内容。"
     assert result.analysis_contract.confirmed is False
+
+
+@pytest.mark.asyncio
+async def test_clarifier_prompt_uses_uploaded_media_timeline() -> None:
+    provider = AdaptiveProvider()
+
+    await _clarify(provider, ["上传的是原始课程第 10 到 20 分钟的完整截取片段"])
+
+    prompt = provider.requests[0].system_prompt
+    assert "上传文件自身的时间轴" in prompt
+    assert "使用 `scope=full_lesson`" in prompt

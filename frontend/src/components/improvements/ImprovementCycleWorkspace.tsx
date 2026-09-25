@@ -98,8 +98,12 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
         priority: Number(data.get("priority") ?? 2),
       });
       event.currentTarget.reset();
-      await reload();
-      setNotice("改进行动已保存，并保留了来源结论与证据链。 ");
+      setNotice("改进行动已保存，并保留了来源结论与证据链。");
+      try {
+        await reload();
+      } catch (caught) {
+        setError(`行动已保存，但页面刷新失败：${describe(caught)}`);
+      }
     } catch (caught) { setError(describe(caught)); } finally { setBusy(false); }
   }
 

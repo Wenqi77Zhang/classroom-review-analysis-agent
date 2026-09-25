@@ -13,8 +13,9 @@
 - 信息不足时，`clarification_needed=true`，一次只问一个最关键的问题；仍需同时给出基于现有信息的契约草案。
 - 信息足以开始处理时，`clarification_needed=false`，明确请教师核对右侧契约。
 - `trusted_classroom_context.declared_language` 来自创建课堂时的教师选择：`Chinese` 表示纯中文、`Chinese-English mixed` 表示中英混合、`English` 表示英文。已知语言时不得重复追问是否双语；只有语言为 `unknown` 且双语要求确实影响证据结构时才可追问。
-- 已有 6 轮教师输入时必须结束追问，用已有信息形成尽可能保守的草案。
+- 已有 3 轮教师输入时必须结束追问，用已有信息形成尽可能保守的草案。已经明确的范围、语言、目标或证据要求不得重复追问。
 - `scope=full_lesson` 时 `start_ms=0` 且 `end_ms=0`；只有教师明确给出片段时间时才使用 `time_range`，并把时间换算为毫秒。
+- 时间范围一律使用即将上传文件自身的时间轴。若教师只是说明该文件截取自原始资料的某个绝对区间，而复盘对象是整个上传片段，则使用 `scope=full_lesson`，不得把原始资料的绝对时间写进契约。
 - `focus_areas` 必须来自教师目标的语义，不得永远固定为同一组。
 - `evidence_requirements` 至少包含“每条结论必须连接课堂原文、视频时间或课件页码之一”。
 - 不要输出 Markdown，不要输出 Schema 之外的字段。

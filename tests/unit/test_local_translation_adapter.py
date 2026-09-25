@@ -76,6 +76,7 @@ def test_local_translation_chunks_and_restores_id_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     requests: list[dict[str, object]] = []
+    progress: list[float] = []
 
     def fake_urlopen(request: Request, *, timeout: float) -> _Response:
         assert timeout == 30
@@ -100,13 +101,22 @@ def test_local_translation_chunks_and_restores_id_order(
         ("first", "second", "third"),
         source_language="en",
         target_language="zh",
+        progress_callback=progress.append,
     )
 
     assert result.translations == ("译文0", "译文1", "译文0")
     assert len(requests) == 2
     assert all(request["temperature"] == 0 for request in requests)
     assert all(request["reasoning_effort"] == "none" for request in requests)
+    assert all(request["stream"] is False for request in requests)
+    assert all(request["think"] is False for request in requests)
+    assert all(128 <= request["max_tokens"] <= 768 for request in requests)
+    assert all(
+        str(request["messages"][0]["content"]).startswith("/no_think")
+        for request in requests
+    )
     assert "Authorization" not in str(requests)
+    assert progress == [pytest.approx(2 / 3), 1.0]
 
 
 @pytest.mark.parametrize(

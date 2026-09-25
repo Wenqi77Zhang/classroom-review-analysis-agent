@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from worker.types import TranslationBatch
@@ -18,4 +19,5 @@ class TranslationAdapter(Protocol):
         *,
         source_language: str,
         target_language: str,
+        progress_callback: Callable[[float], None] | None = None,
     ) -> TranslationBatch: ...

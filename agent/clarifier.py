@@ -101,7 +101,7 @@ class ReviewClarificationAgent:
                 evidence_requirements.append(_REQUIRED_EVIDENCE_RULE)
             contract = contract.model_copy(update={"evidence_requirements": evidence_requirements})
 
-        reached_turn_limit = len(teacher_messages) >= 6
+        reached_turn_limit = len(teacher_messages) >= 3
         clarification_needed = generated.clarification_needed and not reached_turn_limit
         assistant_message = generated.assistant_message
         if reached_turn_limit and generated.clarification_needed:
