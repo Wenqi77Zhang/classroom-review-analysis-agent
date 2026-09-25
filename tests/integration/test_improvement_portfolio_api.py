@@ -58,8 +58,8 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
     owner_email = f"m2-owner-{owner_id}@example.invalid"
     outsider_email = f"m2-outsider-{outsider_id}@example.invalid"
     course_id, other_course_id = uuid.uuid4(), uuid.uuid4()
-    baseline_id, followup_id, wrong_followup_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    baseline_task_id, followup_task_id = uuid.uuid4(), uuid.uuid4()
+    baseline_id, followup_id, empty_followup_id, wrong_followup_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    baseline_task_id, followup_task_id, empty_followup_task_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     baseline_conclusion_id, followup_conclusion_id = uuid.uuid4(), uuid.uuid4()
 
     async def database() -> AsyncIterator:
@@ -105,12 +105,14 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             session.add_all([
                 Classroom(id=baseline_id, owner_id=owner_id, course_id=course_id, title="Round One"),
                 Classroom(id=followup_id, owner_id=owner_id, course_id=course_id, title="Round Two"),
+                Classroom(id=empty_followup_id, owner_id=owner_id, course_id=course_id, title="Round Two Without Reviewed Findings"),
                 Classroom(id=wrong_followup_id, owner_id=owner_id, course_id=other_course_id, title="Wrong Course"),
             ])
             await session.flush()
             session.add_all([
                 ProcessingTask(id=baseline_task_id, owner_id=owner_id, classroom_id=baseline_id, status=TaskStatus.SUCCEEDED, stage=TaskStage.ANALYZE, progress=1.0),
                 ProcessingTask(id=followup_task_id, owner_id=owner_id, classroom_id=followup_id, status=TaskStatus.SUCCEEDED, stage=TaskStage.ANALYZE, progress=1.0),
+                ProcessingTask(id=empty_followup_task_id, owner_id=owner_id, classroom_id=empty_followup_id, status=TaskStatus.SUCCEEDED, stage=TaskStage.ANALYZE, progress=1.0),
             ])
             await session.flush()
             session.add_all([
@@ -169,6 +171,21 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             assert report.status_code == 200
             assert report.json()["included_cycle_ids"] == [cycle_id]
             assert "教师核对两轮证据后" in report.json()["content"]
+
+            empty_cycle = await client.post("/api/improvement-cycles", headers=owner_headers, json={"baseline_classroom_id": str(baseline_id), "title": "Empty Follow-up Cycle", "objective": "Do not infer improvement without reviewed follow-up findings", "validation_mode": "real"})
+            assert empty_cycle.status_code == 201, empty_cycle.text
+            empty_cycle_id = empty_cycle.json()["id"]
+            empty_action = await client.post(f"/api/improvement-cycles/{empty_cycle_id}/actions", headers=owner_headers, json={"source_conclusion_id": str(baseline_conclusion_id), "action_text": "检查第二轮证据", "success_criterion": "第二轮须有教师保留的可定位证据", "priority": 1})
+            assert empty_action.status_code == 201, empty_action.text
+            empty_link = await client.patch(f"/api/improvement-cycles/{empty_cycle_id}", headers=owner_headers, json={"followup_classroom_id": str(empty_followup_id)})
+            assert empty_link.status_code == 200, empty_link.text
+            empty_compared = await client.post(f"/api/improvement-cycles/{empty_cycle_id}/comparisons", headers=owner_headers, json={})
+            assert empty_compared.status_code == 201, empty_compared.text
+            empty_comparison = empty_compared.json()[0]
+            assert empty_comparison["proposed_outcome"] == "insufficient_evidence"
+            assert empty_comparison["followup_evidence"] == []
+            assert empty_comparison["model_name"] == "policy:no-reviewed-followup-v1"
+
             regenerated = await client.post(f"/api/improvement-cycles/{cycle_id}/comparisons", headers=owner_headers, json={})
             assert regenerated.status_code == 409
             relinked = await client.patch(f"/api/improvement-cycles/{cycle_id}", headers=owner_headers, json={"followup_classroom_id": None})
