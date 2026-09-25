@@ -68,7 +68,10 @@ services:
     command:
       - >-
         until ollama list >/dev/null 2>&1; do sleep 2; done;
-        ollama pull "$${LOCAL_MODEL_NAME}"
+        ollama pull "$${LOCAL_MODEL_NAME}";
+        if [ -n "$${AGENT_LOCAL_MODEL_NAME:-}" ] &&
+        [ "$${AGENT_LOCAL_MODEL_NAME}" != "$${LOCAL_MODEL_NAME}" ]; then
+        ollama pull "$${AGENT_LOCAL_MODEL_NAME}"; fi
     env_file:
       - ../.env.production
     depends_on:
