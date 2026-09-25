@@ -27,7 +27,7 @@ class LocalModelProvider(OpenAICompatibleProvider):
         endpoint: str,
         model: str,
         timeout_seconds: float = 120.0,
-        max_tokens: int = 1536,
+        max_tokens: int = 1024,
         reasoning_effort: Literal["none", "low", "medium", "high"] | None = "none",
     ) -> None:
         parsed = urlparse(endpoint)

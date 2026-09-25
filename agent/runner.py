@@ -182,7 +182,7 @@ def build_provider_router_from_env() -> ProviderRouter:
         os.getenv("LOCAL_MODEL_TIMEOUT_SECONDS", "120").strip() or "120"
     )
     local_max_tokens = int(
-        os.getenv("LOCAL_MODEL_MAX_TOKENS", "1536").strip() or "1536"
+        os.getenv("LOCAL_MODEL_MAX_TOKENS", "1024").strip() or "1024"
     )
     cloud_endpoint = os.getenv("CLOUD_MODEL_CHAT_COMPLETIONS_URL", "").strip()
     cloud_model = os.getenv("CLOUD_MODEL_NAME", "").strip()

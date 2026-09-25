@@ -475,7 +475,7 @@ async def test_local_provider_defaults_to_disabled_reasoning_for_structured_outp
     assert captured["reasoning_effort"] == "none"
     assert captured["stream"] is False
     assert captured["think"] is False
-    assert captured["max_tokens"] == 1536
+    assert captured["max_tokens"] == 1024
     assert captured["messages"][0]["content"].startswith("/no_think")
     sent_schema = captured["response_format"]["json_schema"]["schema"]
     assert "title" not in sent_schema
@@ -856,7 +856,7 @@ async def test_time_range_sends_only_in_scope_evidence() -> None:
 
 
 @pytest.mark.asyncio
-async def test_time_filter_runs_before_two_hundred_evidence_limit() -> None:
+async def test_time_filter_runs_before_model_evidence_sampling() -> None:
     task_id = uuid4()
     owner_id = uuid4()
     inside = _evidence(
@@ -887,7 +887,7 @@ async def test_time_filter_runs_before_two_hundred_evidence_limit() -> None:
         )
         for index in range(201)
     ]
-    # 模拟校验后仓储按原始顺序返回大量范围外证据；范围过滤必须先于 200 条上限。
+    # 模拟校验后仓储按原始顺序返回大量范围外证据；范围过滤必须先于模型抽样。
     analysis_input.evidence[:] = [*outside, inside]
     provider = FakeProvider(_model_data(inside.id))
 
@@ -896,6 +896,56 @@ async def test_time_filter_runs_before_two_hundred_evidence_limit() -> None:
     prompt = provider.requests[0].user_prompt
     assert str(inside.id) in prompt
     assert all(str(item.id) not in prompt for item in outside)
+
+
+def test_full_lesson_evidence_sampling_bounds_prompt_and_preserves_coverage() -> None:
+    task_id = uuid4()
+    owner_id = uuid4()
+    transcripts = [
+        _evidence(
+            task_id=task_id,
+            owner_id=owner_id,
+            start_ms=index * 1000,
+            end_ms=index * 1000 + 900,
+            text=f"transcript-{index}",
+        )
+        for index in range(80)
+    ]
+    courseware = [
+        _evidence(
+            task_id=task_id,
+            owner_id=owner_id,
+            source_type=EvidenceSourceType.COURSEWARE,
+            text=f"slide-{index}",
+        )
+        for index in range(30)
+    ]
+    analysis_input = AnalysisInput(
+        task_id=task_id,
+        owner_id=owner_id,
+        contract=AnalysisContract(
+            goal="覆盖整节课",
+            focus_areas=["课堂结构"],
+            confirmed=True,
+        ),
+        evidence=[*transcripts, *courseware],
+    )
+
+    selected = AgentOrchestrator(
+        providers=ProviderRouter(local=FakeProvider(_model_data(transcripts[0].id)))
+    )._select_evidence(analysis_input)
+
+    assert len(selected) == 48
+    assert transcripts[0] in selected
+    assert transcripts[-1] in selected
+    assert courseware[0] in selected
+    assert courseware[-1] in selected
+    assert sum(
+        item.reference.source_type is EvidenceSourceType.TRANSCRIPT for item in selected
+    ) >= 32
+    assert sum(
+        item.reference.source_type is EvidenceSourceType.COURSEWARE for item in selected
+    ) >= 12
 
 
 @pytest.mark.asyncio
