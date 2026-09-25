@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import FrameType
 from typing import Self
@@ -374,6 +374,8 @@ def _process_claimed_media(
     worker_id: str,
     translation_adapter: TranslationAdapter | None = None,
 ) -> PipelineResult:
+    courseware_stack = ExitStack()
+    active_failure: WorkerError | None = None
     pipeline_started = False
     media_pipeline_completed = claim.stage in {
         TaskStage.PARSE_COURSEWARE,
@@ -388,6 +390,15 @@ def _process_claimed_media(
         duration_ms=0,
     )
     try:
+        # Claim download URLs are short-lived.  Fetch courseware immediately so
+        # a long ASR/translation stage cannot let its presigned URL expire before
+        # page parsing starts.  Keep the verified local copy until parsing ends.
+        courseware_paths: tuple[tuple[InternalAssetRead, Path], ...] = ()
+        if claim.stage is not TaskStage.BUILD_EVIDENCE_INDEX:
+            courseware_paths = courseware_stack.enter_context(
+                _claimed_courseware_paths(claim, store, object_root)
+            )
+
         if claim.stage not in {
             TaskStage.PARSE_COURSEWARE,
             TaskStage.BUILD_EVIDENCE_INDEX,
@@ -424,29 +435,24 @@ def _process_claimed_media(
                     trace_id=claim.trace_id,
                 ),
             )
-            with _claimed_courseware_paths(
-                claim,
-                store,
-                object_root,
-            ) as courseware_paths:
-                documents = tuple(
-                    parse_courseware(
-                        path,
-                        asset_id=asset.id,
-                        content_type=asset.content_type,
-                    )
-                    for asset, path in courseware_paths
+            documents = tuple(
+                parse_courseware(
+                    path,
+                    asset_id=asset.id,
+                    content_type=asset.content_type,
                 )
-                pages = [
-                    InternalCoursewarePageWrite(
-                        asset_id=document.asset_id,
-                        page_no=page.page_no,
-                        text=page.text,
-                    )
-                    for document in documents
-                    for page in document.pages
-                    if page.text.strip()
-                ]
+                for asset, path in courseware_paths
+            )
+            pages = [
+                InternalCoursewarePageWrite(
+                    asset_id=document.asset_id,
+                    page_no=page.page_no,
+                    text=page.text,
+                )
+                for document in documents
+                for page in document.pages
+                if page.text.strip()
+            ]
             store.save_courseware(
                 claim.task_id,
                 InternalCoursewareWrite(pages=pages, trace_id=claim.trace_id),
@@ -464,6 +470,7 @@ def _process_claimed_media(
                     trace_id=claim.trace_id,
                 ),
             )
+            courseware_stack.close()
 
         post_media_stage = TaskStage.BUILD_EVIDENCE_INDEX
         store.update_state(
@@ -489,6 +496,7 @@ def _process_claimed_media(
         post_media_stage = None
         return result
     except WorkerError as exc:
+        active_failure = exc
         if exc.code is WorkerErrorCode.STOPPED:
             raise
         # run_pipeline 自己记录其内部失败。下载尚未进入 pipeline、课件处理
@@ -516,6 +524,16 @@ def _process_claimed_media(
                 ),
             )
         raise
+    finally:
+        try:
+            courseware_stack.close()
+        except WorkerError as cleanup_error:
+            if active_failure is not None:
+                active_failure.add_note(
+                    f"{cleanup_error.code.value}: {cleanup_error}"
+                )
+            else:
+                raise
 
 
 def _install_signal_handlers(stop_event: threading.Event) -> None:
