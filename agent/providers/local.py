@@ -44,6 +44,16 @@ class LocalModelProvider(OpenAICompatibleProvider):
             reasoning_effort=reasoning_effort,
         )
 
+    def _customize_payload(self, payload: dict[str, Any]) -> None:
+        payload["stream"] = False
+        payload["think"] = False
+        payload["max_tokens"] = 4096
+        messages = payload.get("messages")
+        if isinstance(messages, list) and messages and isinstance(messages[0], dict):
+            content = messages[0].get("content")
+            if isinstance(content, str) and not content.startswith("/no_think"):
+                messages[0]["content"] = f"/no_think\n{content}"
+
     def _prepare_response_schema(self, schema: dict[str, Any]) -> dict[str, Any]:
         """Remove constraints Ollama 0.32 cannot compile into a response grammar.
 
