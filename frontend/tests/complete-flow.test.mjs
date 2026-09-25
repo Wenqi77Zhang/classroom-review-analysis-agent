@@ -73,6 +73,14 @@ test("上传创建任务并切换 URL 后恢复真实进度而不是回到上传
   assert.match(task, /不会要求重复上传/);
 });
 
+test("已取消任务可复用原资料创建带独立审计链的新任务", () => {
+  assert.match(task, /realTask\.status === "cancelled"/);
+  assert.match(task, /recreateFromExisting\(realTask\)/);
+  assert.match(task, /await getTaskAssets\(task\.id\)/);
+  assert.match(task, /使用原资料创建新任务/);
+  assert.match(task, /独立任务 ID、Trace 与审计记录/);
+});
+
 test("双语要求必须显式选择且选错后可复用原资料修正", () => {
   assert.match(task, /需要中英双语证据/);
   assert.match(task, /纯中文课堂不要勾选/);
