@@ -408,7 +408,7 @@ def test_provider_endpoint_security_rules() -> None:
     assert docker_provider.model_name == "m"
 
 
-def test_provider_router_reads_local_timeout_from_environment(
+def test_provider_router_reads_local_generation_limits_from_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
@@ -417,10 +417,12 @@ def test_provider_router_reads_local_timeout_from_environment(
     )
     monkeypatch.setenv("LOCAL_MODEL_NAME", "qwen3.5:4b")
     monkeypatch.setenv("LOCAL_MODEL_TIMEOUT_SECONDS", "600")
+    monkeypatch.setenv("LOCAL_MODEL_MAX_TOKENS", "1024")
 
     provider = build_provider_router_from_env().select(PrivacyMode.LOCAL)
 
     assert provider._timeout_seconds == 600  # type: ignore[attr-defined]
+    assert provider._max_tokens == 1024  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -473,13 +475,22 @@ async def test_local_provider_defaults_to_disabled_reasoning_for_structured_outp
     assert captured["reasoning_effort"] == "none"
     assert captured["stream"] is False
     assert captured["think"] is False
-    assert captured["max_tokens"] == 4096
+    assert captured["max_tokens"] == 1536
     assert captured["messages"][0]["content"].startswith("/no_think")
     sent_schema = captured["response_format"]["json_schema"]["schema"]
     assert "title" not in sent_schema
     assert "description" not in sent_schema["properties"]["ok"]
     assert captured["timeout"] == 120.0
     assert response.data == {"ok": True}
+
+
+def test_local_provider_rejects_unsafe_generation_limit() -> None:
+    with pytest.raises(ValueError, match="max_tokens"):
+        LocalModelProvider(
+            endpoint="http://127.0.0.1:11434/v1/chat/completions",
+            model="qwen3.5:4b",
+            max_tokens=128,
+        )
 
 
 def test_retriever_rejects_unknown_evidence_id() -> None:

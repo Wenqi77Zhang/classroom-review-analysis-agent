@@ -27,6 +27,7 @@ class LocalModelProvider(OpenAICompatibleProvider):
         endpoint: str,
         model: str,
         timeout_seconds: float = 120.0,
+        max_tokens: int = 1536,
         reasoning_effort: Literal["none", "low", "medium", "high"] | None = "none",
     ) -> None:
         parsed = urlparse(endpoint)
@@ -34,6 +35,9 @@ class LocalModelProvider(OpenAICompatibleProvider):
             raise ValueError(
                 "本地模型 endpoint 必须指向 localhost、loopback 或内部 ollama 服务。"
             )
+        if not 256 <= max_tokens <= 4096:
+            raise ValueError("本地模型 max_tokens 必须在 256 到 4096 之间。")
+        self._max_tokens = max_tokens
         super().__init__(
             endpoint=endpoint,
             model=model,
@@ -47,7 +51,7 @@ class LocalModelProvider(OpenAICompatibleProvider):
     def _customize_payload(self, payload: dict[str, Any]) -> None:
         payload["stream"] = False
         payload["think"] = False
-        payload["max_tokens"] = 4096
+        payload["max_tokens"] = self._max_tokens
         messages = payload.get("messages")
         if isinstance(messages, list) and messages and isinstance(messages[0], dict):
             content = messages[0].get("content")
