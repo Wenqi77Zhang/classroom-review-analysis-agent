@@ -42,10 +42,11 @@ Whisper、Ollama（4B 用于翻译、免费规格下 0.8B 用于候选分析）�
 课堂读取、修改、删除、课程课堂列表和报告访问均返回 404；验收后临时课堂、课程和账号已清理。
 产品入口已移除前端手动进度、固定证据和浏览器临时报告。
 
-稳定 HTTPS 入口与 AWS 受控主机已经完成；公开展示真实课程内容仍需获授权媒体，产品效果仍需
-非开发教师独立试用，数据库灾备仍需在非生产副本执行恢复演练。
+稳定 HTTPS 入口与 AWS 受控主机已经完成；2026-09-27 已把生产备份恢复到一次性 PostgreSQL 17
+容器，并逐表核对 20 张表的行数与迁移版本，演练后临时容器和备份均已清理。公开展示真实课程
+内容仍需获授权媒体，产品效果仍需非开发教师独立试用。
 完整需求、架构、部署和逐项门禁见[产品与技术手册](docs/product-and-technology-handbook.md)，
-五位成员的原始实现、后续整合和 AI 协作见[小组报告](reports/group-report.md)。
+五位成员的原始实现、后续整合和贡献归属见[小组报告](reports/group-report.md)。
 
 启动后从 `/login` 登录，`/classrooms` 管理课程与课堂，`/improvements` 建立改进循环，
 `/portfolio` 查看课程总览。复盘任务与报告只使用真实后端资源 ID。
@@ -149,8 +150,9 @@ docker compose --env-file .env.production -f deploy/compose.production.yml exec 
 
 共享演示入口由 `DEMO_ACCOUNT_PASSWORD` 显式启用，演示口令不发送到浏览器。教师忘记口令时使用同一脚本的
 `reset-password`，系统会立即撤销该账号已有登录令牌。数据库备份和受确认保护的恢复脚本位于
-`deploy/backup-database.sh` 与 `deploy/restore-database.sh`；备份包含私密课堂元数据，必须加密
-保存且不得提交 Git。
+`deploy/backup-database.sh` 与 `deploy/restore-database.sh`；可先运行
+`deploy/verify-database-restore.sh`，在不停止或写入生产数据库的前提下把新备份恢复到一次性容器并
+逐表核对。备份包含私密课堂元数据，必须加密保存且不得提交 Git。
 
 若已经在 Cloudflare 控制台创建稳定域名的远程托管 Tunnel，并把源站配置为
 `http://frontend:3000`，可将令牌只写入本机 `.env.production` 后启用命名隧道：
