@@ -13,7 +13,29 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install --no-install-recommends -y awscli ca-certificates curl git gnupg
+apt-get install --no-install-recommends -y ca-certificates curl git gnupg unzip
+
+# Ubuntu 24.04 does not currently publish the awscli package in every EC2
+# image repository configuration. Install AWS CLI v2 from AWS's official
+# distribution so backup and restore timers do not depend on that package.
+if ! command -v aws >/dev/null 2>&1; then
+  case "$(dpkg --print-architecture)" in
+    amd64) aws_cli_arch=x86_64 ;;
+    arm64) aws_cli_arch=aarch64 ;;
+    *)
+      echo "Unsupported architecture for AWS CLI v2: $(dpkg --print-architecture)" >&2
+      exit 1
+      ;;
+  esac
+  aws_cli_tmp=$(mktemp -d)
+  trap 'rm -rf "$aws_cli_tmp"' EXIT HUP INT TERM
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_cli_arch}.zip" \
+    -o "$aws_cli_tmp/awscliv2.zip"
+  unzip -q "$aws_cli_tmp/awscliv2.zip" -d "$aws_cli_tmp"
+  "$aws_cli_tmp/aws/install" --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+  rm -rf "$aws_cli_tmp"
+  trap - EXIT HUP INT TERM
+fi
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
   -o /etc/apt/keyrings/docker.asc
