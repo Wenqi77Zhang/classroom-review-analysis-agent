@@ -92,6 +92,7 @@ def test_runtime_http_client_is_a_core_dependency() -> None:
 def test_database_backup_and_restore_are_private_and_guarded() -> None:
     backup = (ROOT / "deploy/backup-database.sh").read_text(encoding="utf-8")
     restore = (ROOT / "deploy/restore-database.sh").read_text(encoding="utf-8")
+    verify_restore = (ROOT / "deploy/verify-database-restore.sh").read_text(encoding="utf-8")
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
 
     assert "umask 077" in backup
@@ -103,6 +104,15 @@ def test_database_backup_and_restore_are_private_and_guarded() -> None:
     stop_index = restore.index("stop frontend backend worker agent")
     assert restore.index("pg_restore --list") < stop_index
     assert stop_index < restore.index("pg_restore --username", stop_index)
+    assert "mktemp -d" in verify_restore
+    assert "docker run -d --rm" in verify_restore
+    assert "postgres:17-alpine" in verify_restore
+    assert "diff -u" in verify_restore
+    assert "trap cleanup" in verify_restore
+    assert 'rm -rf "$WORK_DIR"' in verify_restore
+    assert "stop frontend backend worker agent" not in verify_restore
+    assert "--clean --if-exists" not in verify_restore
+    assert "RESTORE_DRILL=PASS" in verify_restore
 
 
 def test_production_example_defaults_to_formal_accounts() -> None:
