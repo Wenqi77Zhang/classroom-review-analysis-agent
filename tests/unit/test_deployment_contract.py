@@ -126,6 +126,7 @@ def test_object_storage_restore_drill_is_isolated_and_self_cleaning() -> None:
     assert "tar -C" in verify_restore
     assert "docker network create" in verify_restore
     assert "docker run -d --rm" in verify_restore
+    assert '--user "$(id -u):$(id -g)"' in verify_restore
     assert "diff -u" in verify_restore
     assert "trap cleanup" in verify_restore
     assert 'rm -rf "$WORK_DIR"' in verify_restore

@@ -52,3 +52,4 @@ Thumbs.db
 *.log
 logs/
 deploy/backups/
+.artifact-build/

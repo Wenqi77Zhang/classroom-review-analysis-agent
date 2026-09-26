@@ -1,0 +1,35 @@
+{
+  "purpose": "Synthetic, privacy-safe public demonstration only",
+  "teaching_effect_evidence": false,
+  "license": "CC BY 4.0",
+  "source_assets": [
+    {
+      "name": "binary-classification-background.png",
+      "bytes": 898152,
+      "sha256": "fed99d6267acb8aa4b10f40acbae61f923f98c18762bb47eee45b96ead2e8860",
+      "provenance": "Generated specifically for this project with OpenAI ImageGen"
+    }
+  ],
+  "files": [
+    {
+      "name": "round-1-classroom.mp4",
+      "bytes": 2020706,
+      "sha256": "6b99f4cf8fa09cc626a243ddf1455d7120b0ce37c6d1fa11b992ee7a35d4f86c"
+    },
+    {
+      "name": "round-1-courseware.pptx",
+      "bytes": 2673233,
+      "sha256": "03ec10399f720d7401f3a8304187accdbe241615f773c1f17b57e5e1b18eab62"
+    },
+    {
+      "name": "round-2-classroom.mp4",
+      "bytes": 1990778,
+      "sha256": "9070f0f6807c861cdb12a1a26ad33a4bf4e4e3b578470430e5e4b8b45aed0f44"
+    },
+    {
+      "name": "round-2-courseware.pptx",
+      "bytes": 2673315,
+      "sha256": "d08a1ae6bdeef86b6269010516f4ccec06c001faa399be73ef856b5cee39b960"
+    }
+  ]
+}
