@@ -187,6 +187,16 @@ def test_aws_host_image_is_pinned_and_storage_is_retained() -> None:
     assert "DeleteOnTermination: false" in host
 
 
+def test_aws_bootstrap_uses_official_cli_when_ubuntu_package_is_unavailable() -> None:
+    bootstrap = (ROOT / "deploy/aws-bootstrap.sh").read_text(encoding="utf-8")
+
+    assert "apt-get install --no-install-recommends -y awscli" not in bootstrap
+    assert "https://awscli.amazonaws.com/awscli-exe-linux-${aws_cli_arch}.zip" in bootstrap
+    assert "command -v aws" in bootstrap
+    assert "amd64) aws_cli_arch=x86_64" in bootstrap
+    assert "arm64) aws_cli_arch=aarch64" in bootstrap
+
+
 def test_production_example_defaults_to_formal_accounts() -> None:
     example = (ROOT / "deploy/.env.production.example").read_text(encoding="utf-8")
     assert "# DEMO_ACCOUNT_PASSWORD=" in example
