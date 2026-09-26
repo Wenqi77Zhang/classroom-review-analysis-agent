@@ -15,6 +15,9 @@ assert.match(cycle, /只有第一轮中经教师接受或修改确认的建议/)
 assert.match(cycle, /生成证据对比/);
 assert.match(cycle, /接受候选判断/);
 assert.match(portfolio, /不是自动评分或全校管理平台/);
+assert.match(portfolio, /个真实循环符合汇总门禁/);
+assert.match(portfolio, /个循环符合门禁/);
+assert.doesNotMatch(portfolio, /真实或验证循环已闭环/);
 assert.match(portfolio, /导出 Markdown/);
 assert.match(api, /generateImprovementComparisons/);
 assert.match(api, /reviewImprovementComparison/);

@@ -170,7 +170,10 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             report = await client.get("/api/portfolio/aggregate-report", headers=owner_headers)
             assert report.status_code == 200
             assert report.json()["included_cycle_ids"] == [cycle_id]
+            assert report.json()["title"] == "多课程教学改进证据汇总"
+            assert "对比结果：有改善；教师复核：修改确认" in report.json()["content"]
             assert "教师核对两轮证据后" in report.json()["content"]
+            assert "纳入记录不等于已经发生教学改善" in report.json()["content"]
 
             empty_cycle = await client.post("/api/improvement-cycles", headers=owner_headers, json={"baseline_classroom_id": str(baseline_id), "title": "Empty Follow-up Cycle", "objective": "Do not infer improvement without reviewed follow-up findings", "validation_mode": "real"})
             assert empty_cycle.status_code == 201, empty_cycle.text
