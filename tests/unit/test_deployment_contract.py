@@ -173,6 +173,20 @@ def test_aws_stack_provisions_least_privilege_offsite_backup() -> None:
     assert "NoNewPrivileges=true" in timer
 
 
+def test_aws_host_image_is_pinned_and_storage_is_retained() -> None:
+    template = (ROOT / "deploy/cloudformation.aws.yml").read_text(encoding="utf-8")
+
+    assert "Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>" not in template
+    assert "Type: AWS::EC2::Image::Id" in template
+    assert "stable/current" not in template
+    host_start = template.index("  Host:\n")
+    host_end = template.index("  PublicAddress:\n", host_start)
+    host = template[host_start:host_end]
+    assert "DeletionPolicy: Retain" in host
+    assert "UpdateReplacePolicy: Retain" in host
+    assert "DeleteOnTermination: false" in host
+
+
 def test_production_example_defaults_to_formal_accounts() -> None:
     example = (ROOT / "deploy/.env.production.example").read_text(encoding="utf-8")
     assert "# DEMO_ACCOUNT_PASSWORD=" in example
