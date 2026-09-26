@@ -4,7 +4,7 @@
 > 未合并尝试和剩余工作。产品技术事实见
 > [`../docs/product-and-technology-handbook.md`](../docs/product-and-technology-handbook.md)，测试证据见
 > [`../tests/test-and-acceptance-record.md`](../tests/test-and-acceptance-record.md)。
-> 当前事实更新至 2026-09-25；生产网站：<https://15.134.73.60.sslip.io>。
+> 当前事实更新至 2026-09-27；生产网站：<https://15.134.73.60.sslip.io>。
 
 ## 1. 问题、用户与产品定位
 
