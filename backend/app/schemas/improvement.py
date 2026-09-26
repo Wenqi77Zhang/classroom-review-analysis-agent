@@ -12,6 +12,7 @@ from backend.app.schemas.analysis_report import EvidenceReference, ReviewAction,
 from backend.app.schemas.common import ApiModel, OrmModel, ResourceId
 
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+EvidenceNote = Annotated[str, StringConstraints(strip_whitespace=True, min_length=20)]
 
 
 class ValidationMode(StrEnum):
@@ -60,6 +61,18 @@ class ImprovementCycleUpdate(ApiModel):
             raise ValueError("至少提供一个需要修改的字段。")
         if any(getattr(self, key) is None for key in self.model_fields_set if key != "followup_classroom_id"):
             raise ValueError("名称与目标不能为空。")
+        return self
+
+
+class EffectEvidenceDeclaration(ApiModel):
+    independent_delivery_confirmed: bool
+    intervention_executed_confirmed: bool
+    effect_evidence_note: EvidenceNote = Field(max_length=4000)
+
+    @model_validator(mode="after")
+    def require_both_confirmations(self) -> EffectEvidenceDeclaration:
+        if not self.independent_delivery_confirmed or not self.intervention_executed_confirmed:
+            raise ValueError("教学效果门禁要求同时确认独立第二次授课和改进行动已实际执行。")
         return self
 
 
@@ -139,6 +152,9 @@ class ImprovementCycleRead(OrmModel):
     objective: str
     status: CycleStatus
     validation_mode: ValidationMode
+    independent_delivery_confirmed: bool
+    intervention_executed_confirmed: bool
+    effect_evidence_note: str | None = None
     actions: list[ImprovementActionRead] = Field(default_factory=list)
     comparisons: list[ImprovementComparisonRead] = Field(default_factory=list)
     created_at: datetime
@@ -160,6 +176,7 @@ class PortfolioCourseRead(ApiModel):
     name: str
     classroom_count: int
     completed_cycle_count: int
+    effect_evidence_cycle_count: int
     classrooms: list[PortfolioClassroomRead]
 
 
@@ -167,6 +184,9 @@ class PortfolioOverview(ApiModel):
     course_count: int
     classroom_count: int
     completed_cycle_count: int
+    effect_evidence_cycle_count: int
+    effect_evidence_course_count: int
+    m3_effect_ready: bool
     courses: list[PortfolioCourseRead]
 
 

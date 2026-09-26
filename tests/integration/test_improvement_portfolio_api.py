@@ -141,6 +141,17 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             hidden = await client.get(f"/api/improvement-cycles/{cycle_id}", headers=outsider_headers)
             assert hidden.status_code == 404
 
+            premature_declaration = await client.put(
+                f"/api/improvement-cycles/{cycle_id}/effect-evidence",
+                headers=owner_headers,
+                json={
+                    "independent_delivery_confirmed": True,
+                    "intervention_executed_confirmed": True,
+                    "effect_evidence_note": "尚未关联第二轮课堂，因此这份声明必须被后端拒绝。",
+                },
+            )
+            assert premature_declaration.status_code == 409
+
             action = await client.post(f"/api/improvement-cycles/{cycle_id}/actions", headers=owner_headers, json={"source_conclusion_id": str(baseline_conclusion_id), "action_text": "关键提问后等待五秒", "success_criterion": "第二轮证据出现更充分的学生回应", "priority": 1})
             assert action.status_code == 201, action.text
 
@@ -166,6 +177,9 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             assert overview.status_code == 200
             assert overview.json()["course_count"] == 2
             assert overview.json()["completed_cycle_count"] == 1
+            assert overview.json()["effect_evidence_cycle_count"] == 0
+            assert overview.json()["effect_evidence_course_count"] == 0
+            assert overview.json()["m3_effect_ready"] is False
 
             report = await client.get("/api/portfolio/aggregate-report", headers=owner_headers)
             assert report.status_code == 200
@@ -174,6 +188,27 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             assert "对比结果：有改善；教师复核：修改确认" in report.json()["content"]
             assert "教师核对两轮证据后" in report.json()["content"]
             assert "纳入记录不等于已经发生教学改善" in report.json()["content"]
+
+            completed_action = await client.patch(
+                f"/api/improvement-actions/{comparison['action_id']}",
+                headers=owner_headers,
+                json={"progress": "completed"},
+            )
+            assert completed_action.status_code == 200, completed_action.text
+            declared = await client.put(
+                f"/api/improvement-cycles/{cycle_id}/effect-evidence",
+                headers=owner_headers,
+                json={
+                    "independent_delivery_confirmed": True,
+                    "intervention_executed_confirmed": True,
+                    "effect_evidence_note": "第二轮为独立授课，已执行关键提问后等待五秒的行动，并保留课堂证据。",
+                },
+            )
+            assert declared.status_code == 200, declared.text
+            effect_overview = await client.get("/api/portfolio/overview", headers=owner_headers)
+            assert effect_overview.json()["effect_evidence_cycle_count"] == 1
+            assert effect_overview.json()["effect_evidence_course_count"] == 1
+            assert effect_overview.json()["m3_effect_ready"] is False
 
             empty_cycle = await client.post("/api/improvement-cycles", headers=owner_headers, json={"baseline_classroom_id": str(baseline_id), "title": "Empty Follow-up Cycle", "objective": "Do not infer improvement without reviewed follow-up findings", "validation_mode": "real"})
             assert empty_cycle.status_code == 201, empty_cycle.text
@@ -202,6 +237,7 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             assert stale_report.json()["included_cycle_ids"] == []
             stale_overview = await client.get("/api/portfolio/overview", headers=owner_headers)
             assert stale_overview.json()["completed_cycle_count"] == 0
+            assert stale_overview.json()["effect_evidence_cycle_count"] == 0
     finally:
         async with factory.begin() as session:
             test_user_ids = [owner_id, outsider_id]

@@ -49,10 +49,12 @@ from backend.app.schemas.analysis_report import (
     ReviewStatus,
 )
 from backend.app.schemas.improvement import (
+    ActionProgress,
     AggregateReportRead,
     ComparisonOutcome,
     ComparisonReviewRequest,
     CycleStatus,
+    EffectEvidenceDeclaration,
     ImprovementActionCreate,
     ImprovementActionRead,
     ImprovementActionUpdate,
@@ -123,6 +125,9 @@ async def _cycle_read(session: AsyncSession, cycle: ImprovementCycle) -> Improve
         objective=cycle.objective,
         status=cycle.status,
         validation_mode=cycle.validation_mode,
+        independent_delivery_confirmed=cycle.independent_delivery_confirmed,
+        intervention_executed_confirmed=cycle.intervention_executed_confirmed,
+        effect_evidence_note=cycle.effect_evidence_note,
         actions=[ImprovementActionRead.model_validate(item) for item in cycle.actions],
         comparisons=[await _comparison_read(session, item) for item in cycle.comparisons],
         created_at=cycle.created_at,
@@ -257,6 +262,40 @@ async def update_cycle(
         resource_type="improvement_cycle",
         resource_id=cycle.id,
         details={"updated_fields": sorted(changes)},
+    )
+    return await _cycle_read(session, await _load_cycle(session, cycle.id, user.id))
+
+
+@router.put(
+    "/improvement-cycles/{cycle_id}/effect-evidence",
+    response_model=ImprovementCycleRead,
+)
+async def declare_effect_evidence(
+    cycle_id: UUID,
+    body: EffectEvidenceDeclaration,
+    session: Db,
+    user: CurrentUser,
+) -> ImprovementCycleRead:
+    cycle = await _load_cycle(session, cycle_id, user.id)
+    if cycle.validation_mode != ValidationMode.REAL:
+        raise StateConflictError("合成机制验证轮次不能声明真实教学效果证据。")
+    if cycle.followup_classroom_id is None:
+        raise StateConflictError("请先关联独立第二次授课记录。")
+    cycle.independent_delivery_confirmed = body.independent_delivery_confirmed
+    cycle.intervention_executed_confirmed = body.intervention_executed_confirmed
+    cycle.effect_evidence_note = body.effect_evidence_note
+    await session.flush()
+    await record_audit_event(
+        session,
+        owner_id=user.id,
+        actor_user_id=user.id,
+        action="improvement_cycle.effect_evidence_declared",
+        resource_type="improvement_cycle",
+        resource_id=cycle.id,
+        details={
+            "independent_delivery_confirmed": body.independent_delivery_confirmed,
+            "intervention_executed_confirmed": body.intervention_executed_confirmed,
+        },
     )
     return await _cycle_read(session, await _load_cycle(session, cycle.id, user.id))
 
@@ -502,17 +541,38 @@ async def portfolio_overview(session: Db, user: CurrentUser) -> PortfolioOvervie
         (
             await session.scalars(
                 select(ImprovementCycle).where(ImprovementCycle.owner_id == user.id)
-                .options(selectinload(ImprovementCycle.comparisons))
+                .options(
+                    selectinload(ImprovementCycle.actions),
+                    selectinload(ImprovementCycle.comparisons),
+                )
             )
         ).all()
     )
     eligible_cycle_ids = set()
+    effect_evidence_cycle_ids = set()
     for cycle in cycles:
         if cycle.status == CycleStatus.COMPLETED and cycle.validation_mode == ValidationMode.REAL:
+            current_reportable = []
             for comparison in cycle.comparisons:
-                if comparison.review_status in REPORTABLE_REVIEW_STATUSES and await _sources_current(session, comparison):
-                    eligible_cycle_ids.add(cycle.id)
-                    break
+                if (
+                    comparison.review_status in REPORTABLE_REVIEW_STATUSES
+                    and await _sources_current(session, comparison)
+                ):
+                    current_reportable.append(comparison)
+            if current_reportable:
+                eligible_cycle_ids.add(cycle.id)
+            action_progress = {item.id: ActionProgress(item.progress) for item in cycle.actions}
+            if (
+                cycle.independent_delivery_confirmed
+                and cycle.intervention_executed_confirmed
+                and bool((cycle.effect_evidence_note or "").strip())
+                and any(
+                    ComparisonOutcome(item.proposed_outcome) is ComparisonOutcome.IMPROVED
+                    and action_progress.get(item.action_id) is ActionProgress.COMPLETED
+                    for item in current_reportable
+                )
+            ):
+                effect_evidence_cycle_ids.add(cycle.id)
     course_rows: list[PortfolioCourseRead] = []
     for course in courses:
         owned_classrooms = [item for item in classrooms if item.course_id == course.id]
@@ -548,13 +608,28 @@ async def portfolio_overview(session: Db, user: CurrentUser) -> PortfolioOvervie
                     and item.id in eligible_cycle_ids
                     for item in cycles
                 ),
+                effect_evidence_cycle_count=sum(
+                    item.course_id == course.id
+                    and item.id in effect_evidence_cycle_ids
+                    for item in cycles
+                ),
                 classrooms=classroom_rows,
             )
         )
+    effect_evidence_course_count = sum(
+        any(
+            item.course_id == course.id and item.id in effect_evidence_cycle_ids
+            for item in cycles
+        )
+        for course in courses
+    )
     return PortfolioOverview(
         course_count=len(courses),
         classroom_count=len(classrooms),
         completed_cycle_count=len(eligible_cycle_ids),
+        effect_evidence_cycle_count=len(effect_evidence_cycle_ids),
+        effect_evidence_course_count=effect_evidence_course_count,
+        m3_effect_ready=effect_evidence_course_count >= 2,
         courses=course_rows,
     )
 

@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -41,6 +42,9 @@ class ImprovementCycle(Base):
     objective: Mapped[str] = mapped_column(Text)
     status: Mapped[CycleStatus] = mapped_column(String(32), default=CycleStatus.DRAFT, index=True)
     validation_mode: Mapped[ValidationMode] = mapped_column(String(16), default=ValidationMode.REAL)
+    independent_delivery_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    intervention_executed_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    effect_evidence_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now())
 
