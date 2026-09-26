@@ -9,7 +9,7 @@
 当前生产环境位于 AWS 悉尼区，使用 HTTPS、独立教师账号、实例内私有 MinIO、PostgreSQL、
 Whisper、Ollama（4B 用于翻译、免费规格下 0.8B 用于候选分析）、Worker 与 Agent。访客可注册独立
 账号；生产环境未启用共享演示账号。仓库提供两轮无隐私、CC BY 4.0 的
-[公开演示材料](examples/public-demo/)，注册后可直接上传验收。
+[公开演示材料与操作说明](examples/public-demo/PUBLIC_DEMO_GUIDE.md)，注册后可直接上传验收。
 部署拓扑、验收证据与仍未完成的真实教师试用边界见
 [AWS 部署说明](docs/aws-deployment.md)和[测试与验收记录](tests/test-and-acceptance-record.md)。
 
