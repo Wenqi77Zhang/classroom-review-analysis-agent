@@ -532,6 +532,8 @@ docker compose --env-file .env.production -f deploy/compose.production.yml exec 
 - 若第二轮没有任何教师接受或修改确认的结论，结果由 `policy:no-reviewed-followup-v1` 确定为 `insufficient_evidence`，不调用模型在空证据上推断；
 - M3 汇总只接收 `validation_mode=real`、循环已闭环、教师接受/修改确认且来源指纹仍匹配的对比。合成、待复核、驳回、旧版匹配器及来源过期内容不能进入汇总正文；
 - M3 对每条纳入记录显式显示候选变化类型和教师复核状态；`insufficient_evidence` 可以作为已复核的失败关闭记录保留，但不能被统计或表述为教学改善；
+- “符合汇总门禁”和“具备教学效果证据”是两个独立计数。后者还要求教师声明第二轮是独立授课、改进行动已实际执行并留下不含学生个人信息的说明，同时至少一项行动状态为 `completed`，对应对比为来源仍有效、教师已接受或修改确认的 `improved`；
+- M3 教学效果门禁要求至少两门不同课程各自具备上述效果证据。教师声明会写入审计，但声明本身不替代两轮课堂证据；
 - `/improvements`、`/improvements/{id}` 和 `/portfolio` 分别承担循环建立、行动/对比复核与多课程总览。
 - 既有浏览器机制验收覆盖 1550/1024/900/620 四种视口；验收器全局只登录一次并串行复用安全会话，当时结果为 `12 passed, 4 skipped`。4 项跳过需要一条显式真实 M2 循环 ID；不以合成轮次冒充教学效果。
 

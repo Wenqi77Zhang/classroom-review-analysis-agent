@@ -7,6 +7,7 @@ import { SiteChrome } from "@/components/baseline/SiteChrome";
 import {
   ApiClientError,
   createImprovementAction,
+  declareEffectEvidence,
   generateImprovementComparisons,
   getConclusions,
   getImprovementCycle,
@@ -127,6 +128,21 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
     catch (caught) { setError(describe(caught)); } finally { setBusy(false); }
   }
 
+  async function saveEffectEvidence(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusy(true); setError("");
+    try {
+      await declareEffectEvidence(cycleId, {
+        independentDeliveryConfirmed: data.get("independentDeliveryConfirmed") === "on",
+        interventionExecutedConfirmed: data.get("interventionExecutedConfirmed") === "on",
+        effectEvidenceNote: String(data.get("effectEvidenceNote") ?? ""),
+      });
+      await reload();
+      setNotice("教学效果证据声明已保存并写入审计记录；系统仍会检查行动状态和教师复核结果。");
+    } catch (caught) { setError(describe(caught)); } finally { setBusy(false); }
+  }
+
   async function review(comparison: ImprovementComparisonRead, action: ReviewAction, editedSummary?: string) {
     setBusy(true); setError("");
     try {
@@ -140,6 +156,13 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
   if (!cycle) return <SiteChrome><section className="view active"><div className="page-shell"><p className="upload-error">{error || "改进循环不存在。"}</p></div></section></SiteChrome>;
 
   const reviewedCount = cycle.comparisons.filter((item) => item.review_status !== "pending").length;
+  const effectEvidenceReady = cycle.independent_delivery_confirmed
+    && cycle.intervention_executed_confirmed
+    && Boolean(cycle.effect_evidence_note?.trim())
+    && cycle.comparisons.some((comparison) => comparison.proposed_outcome === "improved"
+      && comparison.sources_current
+      && (comparison.review_status === "accepted" || comparison.review_status === "modified")
+      && cycle.actions.some((action) => action.id === comparison.action_id && action.progress === "completed"));
   return (
     <SiteChrome>
       <section className="view active improvement-page" aria-labelledby="cycle-title">
@@ -210,6 +233,18 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
                   </article>
                 ))}
               </div>
+            </section>
+
+            <section className="workflow-card" data-reveal>
+              <header><span>04</span><div><small>TEACHING EFFECT GATE</small><h2>声明真实授课条件，再检查效果证据</h2></div></header>
+              <p className="boundary-note">这两项由教师对真实教学过程负责确认；系统随后还会检查已执行行动、有效的“有改善”对比和教师复核。自我声明本身不是效果证明。</p>
+              <form className="effect-evidence-form" onSubmit={saveEffectEvidence}>
+                <label><input name="independentDeliveryConfirmed" type="checkbox" defaultChecked={cycle.independent_delivery_confirmed} /> 第二轮是独立发生的再次授课，不是同一录像的连续片段</label>
+                <label><input name="interventionExecutedConfirmed" type="checkbox" defaultChecked={cycle.intervention_executed_confirmed} /> 本轮登记的改进行动已在第二次授课中实际执行</label>
+                <label>授课与行动说明<textarea name="effectEvidenceNote" required minLength={20} maxLength={4000} rows={4} defaultValue={cycle.effect_evidence_note ?? ""} placeholder="记录授课日期、对象或班级、实际执行的行动及可核查材料；不要填写学生姓名等个人信息。" /></label>
+                <button className="button primary compact" disabled={busy || !cycle.followup_classroom_id || cycle.validation_mode !== "real"}>保存教师声明</button>
+              </form>
+              <p className={effectEvidenceReady ? "success-notice" : "boundary-note"}>{effectEvidenceReady ? "本循环已具备系统可识别的教学效果证据条件。" : "本循环尚未具备教学效果证据条件；请完成独立授课、执行行动并确认有效的改善对比。"}</p>
             </section>
           </div>
         </div>

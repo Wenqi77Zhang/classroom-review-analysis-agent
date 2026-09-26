@@ -423,6 +423,27 @@ export async function updateImprovementCycle(
   });
 }
 
+export async function declareEffectEvidence(
+  cycleId: string,
+  input: {
+    independentDeliveryConfirmed: boolean;
+    interventionExecutedConfirmed: boolean;
+    effectEvidenceNote: string;
+  },
+): Promise<ImprovementCycleRead> {
+  return requestJson(
+    `/api/m2/improvement-cycles/${encodeURIComponent(cycleId)}/effect-evidence`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        independent_delivery_confirmed: input.independentDeliveryConfirmed,
+        intervention_executed_confirmed: input.interventionExecutedConfirmed,
+        effect_evidence_note: input.effectEvidenceNote,
+      }),
+    },
+  );
+}
+
 export async function createImprovementAction(
   cycleId: string,
   input: {

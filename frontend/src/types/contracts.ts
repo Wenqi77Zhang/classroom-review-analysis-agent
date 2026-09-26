@@ -260,6 +260,9 @@ export type ImprovementCycleRead = {
   objective: string;
   status: CycleStatus;
   validation_mode: ValidationMode;
+  independent_delivery_confirmed: boolean;
+  intervention_executed_confirmed: boolean;
+  effect_evidence_note?: string | null;
   actions: ImprovementActionRead[];
   comparisons: ImprovementComparisonRead[];
   created_at: string;
@@ -279,12 +282,16 @@ export type PortfolioCourseRead = {
   name: string;
   classroom_count: number;
   completed_cycle_count: number;
+  effect_evidence_cycle_count: number;
   classrooms: PortfolioClassroomRead[];
 };
 export type PortfolioOverview = {
   course_count: number;
   classroom_count: number;
   completed_cycle_count: number;
+  effect_evidence_cycle_count: number;
+  effect_evidence_course_count: number;
+  m3_effect_ready: boolean;
   courses: PortfolioCourseRead[];
 };
 export type AggregateReportRead = {

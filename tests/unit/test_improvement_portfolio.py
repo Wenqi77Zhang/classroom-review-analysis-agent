@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from backend.app.schemas.analysis_report import ReviewAction
 from backend.app.schemas.improvement import (
     ComparisonReviewRequest,
+    EffectEvidenceDeclaration,
     ImprovementCycleCreate,
     ImprovementCycleUpdate,
     ValidationMode,
@@ -44,6 +45,21 @@ def test_empty_cycle_update_is_rejected() -> None:
 def test_modify_comparison_requires_teacher_text() -> None:
     with pytest.raises(ValidationError):
         ComparisonReviewRequest(action=ReviewAction.MODIFY)
+
+
+def test_effect_evidence_requires_both_teacher_confirmations_and_note() -> None:
+    with pytest.raises(ValidationError):
+        EffectEvidenceDeclaration(
+            independent_delivery_confirmed=True,
+            intervention_executed_confirmed=False,
+            effect_evidence_note="第二轮实际授课，但没有执行登记行动。",
+        )
+    with pytest.raises(ValidationError):
+        EffectEvidenceDeclaration(
+            independent_delivery_confirmed=True,
+            intervention_executed_confirmed=True,
+            effect_evidence_note="太短",
+        )
 
 
 def test_classroom_deletion_checks_improvement_references_before_storage() -> None:

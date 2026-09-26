@@ -66,11 +66,13 @@ export function PortfolioDashboard() {
                 <article><strong>{overview.course_count}</strong><span>门课程</span></article>
                 <article><strong>{overview.classroom_count}</strong><span>节课堂</span></article>
                 <article><strong>{overview.completed_cycle_count}</strong><span>个真实循环符合汇总门禁</span></article>
+                <article><strong>{overview.effect_evidence_course_count}</strong><span>门课程具备效果证据</span></article>
               </section>
+              <p className={overview.m3_effect_ready ? "success-notice" : "boundary-note"}>{overview.m3_effect_ready ? "M3 教学效果门禁已满足：至少两门课程具备真实效果证据。" : `M3 教学效果门禁未满足：当前 ${overview.effect_evidence_course_count}/2 门课程具备效果证据。`}</p>
               <section className="portfolio-courses" data-reveal>
                 {overview.courses.map((course) => (
                   <article className="portfolio-course" key={course.id}>
-                    <header><div><small>COURSE</small><h2>{course.name}</h2></div><span>{course.classroom_count} 节课堂 · {course.completed_cycle_count} 个循环符合门禁</span></header>
+                    <header><div><small>COURSE</small><h2>{course.name}</h2></div><span>{course.classroom_count} 节课堂 · {course.completed_cycle_count} 个循环符合汇总门禁 · {course.effect_evidence_cycle_count} 个具备效果证据</span></header>
                     <div className="portfolio-classrooms">
                       {course.classrooms.map((classroom) => (
                         <article className="portfolio-classroom" key={classroom.id}>
