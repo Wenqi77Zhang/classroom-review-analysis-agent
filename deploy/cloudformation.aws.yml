@@ -87,6 +87,65 @@ Resources:
         - Key: Project
           Value: classroom-review-agent
 
+  OffsiteBackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireClassroomBackups
+            Status: Enabled
+            Prefix: classroom-review-agent/
+            ExpirationInDays: 14
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: classroom-review-agent
+        - Key: DataClass
+          Value: private-backup
+
+  HostOffsiteBackupPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: classroom-review-agent-offsite-backup
+      Roles: [!Ref HostRole]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ListBackupPrefix
+            Effect: Allow
+            Action:
+              - s3:GetBucketLocation
+              - s3:ListBucket
+            Resource: !GetAtt OffsiteBackupBucket.Arn
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - classroom-review-agent
+                  - classroom-review-agent/*
+          - Sid: ReadWriteBackupObjects
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource: !Sub "${OffsiteBackupBucket.Arn}/classroom-review-agent/*"
+
   HostInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -174,3 +233,6 @@ Outputs:
     Description: Set PUBLIC_HOST to this value; Caddy obtains HTTPS automatically.
   SessionManager:
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/fleet-manager/managed-nodes/${Host}"
+  OffsiteBackupBucketName:
+    Value: !Ref OffsiteBackupBucket
+    Description: Private, encrypted, versioned bucket used by the host backup timer.
