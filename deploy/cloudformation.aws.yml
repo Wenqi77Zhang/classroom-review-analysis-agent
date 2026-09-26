@@ -19,8 +19,9 @@ Parameters:
     Default: main
     AllowedPattern: ^[A-Za-z0-9._/-]+$
   UbuntuAmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Type: AWS::EC2::Image::Id
+    Default: ami-090b1140798d2d006
+    Description: Pin the reviewed AMI explicitly; changing this value replaces the host.
 
 Resources:
   Vpc:
@@ -178,6 +179,8 @@ Resources:
 
   Host:
     Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     DependsOn: DefaultPublicRoute
     Properties:
       ImageId: !Ref UbuntuAmiId
@@ -194,7 +197,7 @@ Resources:
             VolumeType: gp3
             VolumeSize: 100
             Encrypted: true
-            DeleteOnTermination: true
+            DeleteOnTermination: false
       Tags:
         - Key: Name
           Value: classroom-review-agent
