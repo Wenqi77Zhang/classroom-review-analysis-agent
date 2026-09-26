@@ -115,6 +115,25 @@ def test_database_backup_and_restore_are_private_and_guarded() -> None:
     assert "RESTORE_DRILL=PASS" in verify_restore
 
 
+def test_object_storage_restore_drill_is_isolated_and_self_cleaning() -> None:
+    verify_restore = (
+        ROOT / "deploy/verify-object-storage-restore.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "umask 077" in verify_restore
+    assert "mktemp -d" in verify_restore
+    assert "mc mirror" in verify_restore
+    assert "tar -C" in verify_restore
+    assert "docker network create" in verify_restore
+    assert "docker run -d --rm" in verify_restore
+    assert '--user "$(id -u):$(id -g)"' in verify_restore
+    assert "diff -u" in verify_restore
+    assert "trap cleanup" in verify_restore
+    assert 'rm -rf "$WORK_DIR"' in verify_restore
+    assert "mc rm" not in verify_restore
+    assert "OBJECT_STORAGE_RESTORE_DRILL=PASS" in verify_restore
+
+
 def test_production_example_defaults_to_formal_accounts() -> None:
     example = (ROOT / "deploy/.env.production.example").read_text(encoding="utf-8")
     assert "# DEMO_ACCOUNT_PASSWORD=" in example

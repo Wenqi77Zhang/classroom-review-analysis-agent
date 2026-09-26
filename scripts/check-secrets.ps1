@@ -4,8 +4,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "无法读取 Git 跟踪文件，敏感文件检查未执行；请先确认当前目录是可信且可访问的 Git 仓库。"
 }
 $forbiddenPaths = $tracked | Where-Object {
-    $_ -match '(^|/)\.env$' -or
-    $_ -match '\.(mp4|mov|avi|mkv|wav|mp3|pem|key|sqlite|sqlite3)$'
+    $_ -notmatch '^examples/public-demo/round-[12]-classroom\.mp4$' -and (
+        $_ -match '(^|/)\.env$' -or
+        $_ -match '\.(mp4|mov|avi|mkv|wav|mp3|pem|key|sqlite|sqlite3)$'
+    )
 }
 if ($forbiddenPaths) {
     Write-Error ("禁止提交的文件：" + ($forbiddenPaths -join ", "))

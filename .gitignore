@@ -27,6 +27,8 @@ frontend/playwright-report/
 
 # Media, user data, databases and derived artifacts
 *.mp4
+!examples/public-demo/round-1-classroom.mp4
+!examples/public-demo/round-2-classroom.mp4
 *.mov
 *.avi
 *.mkv
@@ -52,3 +54,4 @@ Thumbs.db
 *.log
 logs/
 deploy/backups/
+.artifact-build/

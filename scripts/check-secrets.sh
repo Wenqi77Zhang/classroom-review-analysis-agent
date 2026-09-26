@@ -6,7 +6,9 @@ if ! tracked="$(git ls-files)"; then
   exit 1
 fi
 
-forbidden="$(printf '%s\n' "$tracked" | grep -Ei '(^|/)\.env$|\.(mp4|mov|avi|mkv|wav|mp3|pem|key|sqlite|sqlite3)$' || true)"
+forbidden="$(printf '%s\n' "$tracked" \
+  | grep -Eiv '^examples/public-demo/round-[12]-classroom\.mp4$' \
+  | grep -Ei '(^|/)\.env$|\.(mp4|mov|avi|mkv|wav|mp3|pem|key|sqlite|sqlite3)$' || true)"
 if [[ -n "$forbidden" ]]; then
   echo "禁止提交的文件：" >&2
   echo "$forbidden" >&2
