@@ -572,10 +572,20 @@ async def aggregate_report(session: Db, user: CurrentUser) -> AggregateReportRea
         .order_by(ImprovementCycle.created_at)
     )
     cycles = list(rows.unique().all())
+    outcome_labels = {
+        ComparisonOutcome.IMPROVED: "有改善",
+        ComparisonOutcome.UNCHANGED: "未变化",
+        ComparisonOutcome.REGRESSED: "出现退步",
+        ComparisonOutcome.INSUFFICIENT_EVIDENCE: "证据不足",
+    }
+    review_labels = {
+        ReviewStatus.ACCEPTED: "已接受",
+        ReviewStatus.MODIFIED: "修改确认",
+    }
     sections = [
-        "# 多课程教学改进汇总",
+        "# 多课程教学改进证据汇总",
         "",
-        "仅汇总真实轮次中经教师接受或修改确认的对比结论；模型候选与驳回内容不进入正文。",
+        "仅汇总真实轮次中经教师接受或修改确认的对比记录；纳入记录不等于已经发生教学改善，模型候选与驳回内容不进入正文。",
     ]
     included: list[UUID] = []
     for cycle in cycles:
@@ -591,13 +601,17 @@ async def aggregate_report(session: Db, user: CurrentUser) -> AggregateReportRea
         sections.extend(["", f"## {cycle.title}", "", f"改进目标：{cycle.objective}"])
         for item in accepted:
             text = item.reviewed_summary or item.summary
-            sections.append(f"- {text}（教师确认：{item.review_status}；Trace：{item.trace_id}）")
+            outcome = outcome_labels[ComparisonOutcome(item.proposed_outcome)]
+            review = review_labels[ReviewStatus(item.review_status)]
+            sections.append(
+                f"- 对比结果：{outcome}；教师复核：{review}。{text}（Trace：{item.trace_id}）"
+            )
     if not included:
         sections.extend(["", "暂无符合汇总门禁的真实改进轮次。"])
     return AggregateReportRead(
-        title="多课程教学改进汇总",
+        title="多课程教学改进证据汇总",
         content="\n".join(sections),
         included_cycle_ids=included,
         generated_at=datetime.now(UTC),
-        evidence_boundary="不汇总合成验证轮次、待复核或已驳回的模型判断；内容不构成自动教学评分。",
+        evidence_boundary="不汇总合成验证轮次、待复核或已驳回的模型判断；证据不足的已复核记录会保留，但不构成教学改善结论或自动教学评分。",
     )
