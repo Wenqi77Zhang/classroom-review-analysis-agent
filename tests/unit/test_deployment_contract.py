@@ -134,6 +134,45 @@ def test_object_storage_restore_drill_is_isolated_and_self_cleaning() -> None:
     assert "OBJECT_STORAGE_RESTORE_DRILL=PASS" in verify_restore
 
 
+def test_offsite_backup_is_encrypted_atomic_and_self_cleaning() -> None:
+    backup = (ROOT / "deploy/backup-offsite-s3.sh").read_text(encoding="utf-8")
+    verify = (ROOT / "deploy/verify-offsite-s3-restore.sh").read_text(encoding="utf-8")
+
+    assert "umask 077" in backup and "umask 077" in verify
+    assert "mktemp -d" in backup and "mktemp -d" in verify
+    assert "trap cleanup" in backup and "trap cleanup" in verify
+    assert '--sse AES256' in backup
+    assert backup.index('backup.sha256') < backup.index('REMOTE_PREFIX/COMPLETE')
+    assert "mc mirror" in backup and "mc rm" not in backup
+    assert "sha256sum -c backup.sha256" in verify
+    assert "sha256sum -c \"$WORK_DIR/objects.sha256\"" in verify
+    assert "docker run -d --rm" in verify
+    assert "--no-owner --exit-on-error" in verify
+    assert "OFFSITE_BACKUP=PASS" in backup
+    assert "OFFSITE_RESTORE_DRILL=PASS" in verify
+    assert "stop frontend backend worker agent" not in verify
+
+
+def test_aws_stack_provisions_least_privilege_offsite_backup() -> None:
+    template = (ROOT / "deploy/cloudformation.aws.yml").read_text(encoding="utf-8")
+    timer = (ROOT / "deploy/install-offsite-backup-timer.sh").read_text(encoding="utf-8")
+
+    assert "OffsiteBackupBucket:" in template
+    assert "DeletionPolicy: Retain" in template
+    assert "UpdateReplacePolicy: Retain" in template
+    assert "SSEAlgorithm: AES256" in template
+    assert "VersioningConfiguration:" in template and "Status: Enabled" in template
+    for setting in ("BlockPublicAcls", "BlockPublicPolicy", "IgnorePublicAcls", "RestrictPublicBuckets"):
+        assert f"{setting}: true" in template
+    assert "s3:GetObject" in template and "s3:PutObject" in template
+    assert "s3:DeleteObject" not in template
+    assert "classroom-review-agent/*" in template
+    assert "OnCalendar=*-*-* 03:20:00 UTC" in timer
+    assert "OnCalendar=Sun *-*-* 04:20:00 UTC" in timer
+    assert "Persistent=true" in timer
+    assert "NoNewPrivileges=true" in timer
+
+
 def test_production_example_defaults_to_formal_accounts() -> None:
     example = (ROOT / "deploy/.env.production.example").read_text(encoding="utf-8")
     assert "# DEMO_ACCOUNT_PASSWORD=" in example

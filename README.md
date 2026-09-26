@@ -12,6 +12,8 @@ Whisper、Ollama（4B 用于翻译、免费规格下 0.8B 用于候选分析）�
 [公开演示材料与操作说明](examples/public-demo/PUBLIC_DEMO_GUIDE.md)，注册后可直接上传验收。
 部署拓扑、验收证据与仍未完成的真实教师试用边界见
 [AWS 部署说明](docs/aws-deployment.md)和[测试与验收记录](tests/test-and-acceptance-record.md)。
+准备真实第二轮课堂时，直接按
+[M2 同课程第二轮真实课堂验收包](docs/m2-real-classroom-acceptance-pack.md)执行。
 
 本项目面向高校教师。教师上传真实课堂视频、课件或逐字稿后，系统生成带时间戳的逐字稿与可定位证据的教学分析；教师接受、修改或驳回结论后，仅将已确认内容组合进报告。
 
@@ -160,6 +162,9 @@ docker compose --env-file .env.production -f deploy/compose.production.yml exec 
 `deploy/backup-database.sh` 与 `deploy/restore-database.sh`；可先运行
 `deploy/verify-database-restore.sh`，在不停止或写入生产数据库的前提下把新备份恢复到一次性容器并
 逐表核对。备份包含私密课堂元数据，必须加密保存且不得提交 Git。
+AWS 模板还提供私有、加密、版本化并跨主机保存的 S3 备份桶；使用
+`deploy/install-offsite-backup-timer.sh` 安装每日异机备份和每周隔离恢复检查。配置和首次验收命令见
+[AWS 部署说明](docs/aws-deployment.md)。
 
 若已经在 Cloudflare 控制台创建稳定域名的远程托管 Tunnel，并把源站配置为
 `http://frontend:3000`，可将令牌只写入本机 `.env.production` 后启用命名隧道：

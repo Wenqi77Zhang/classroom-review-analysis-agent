@@ -166,3 +166,23 @@ object_storage=`ok`。本轮未上传媒体或个人信息，也未修改既有�
 并使用同一组 Compose 文件停止业务服务。删除 CloudFormation 栈前必须同时导出数据库与
 `minio_data` 持久卷；
 两者共同构成课堂证据链，缺少任何一个都不能视为可恢复备份。
+
+CloudFormation 模板同时声明一个独立 S3 备份桶：默认 AES256 服务端加密、阻止全部公开访问、启用
+版本控制，并对当前版本保留 14 天、非当前版本保留 7 天。实例角色只能列出指定前缀并读取、写入
+备份对象，没有删除权限。栈被删除或替换时，备份桶使用 `Retain` 保留策略。
+
+栈更新完成后，从输出读取 `OffsiteBackupBucketName`，在实例上安装每日备份和每周隔离恢复定时器：
+
+```bash
+sudo OFFSITE_BACKUP_BUCKET='CloudFormation 输出值' \
+  OFFSITE_BACKUP_REGION=ap-southeast-2 \
+  deploy/install-offsite-backup-timer.sh
+sudo systemctl start classroom-offsite-backup.service
+sudo systemctl start classroom-offsite-restore-check.service
+sudo journalctl -u classroom-offsite-backup.service -u classroom-offsite-restore-check.service --since today
+```
+
+`backup-offsite-s3.sh` 在权限为 700 的临时目录中生成 PostgreSQL 自定义格式转储和 MinIO 对象归档，
+逐文件生成 SHA-256 清单，以 `--sse AES256` 上传，并最后写入 `COMPLETE` 标记。只有带完成标记的批次
+可被恢复脚本选择。`verify-offsite-s3-restore.sh` 下载最新完整批次，校验摘要后，在一次性 PostgreSQL
+和临时对象目录中恢复；生产容器、数据库和 MinIO 均不停止、不覆盖。

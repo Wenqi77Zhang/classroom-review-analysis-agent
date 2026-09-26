@@ -490,6 +490,12 @@ docker compose --env-file .env.production -f deploy/compose.production.yml exec 
 服务再恢复；恢复属于破坏性运维，只能在核对目标主机、数据库和备份时间后执行。恢复后必须复验登录、
 一节课堂、证据定位与报告导出。
 
+AWS 部署的异机备份基线由 `deploy/cloudformation.aws.yml`、`deploy/backup-offsite-s3.sh`、
+`deploy/verify-offsite-s3-restore.sh` 和 `deploy/install-offsite-backup-timer.sh` 共同定义。S3 桶默认
+服务端加密、版本化、完全阻止公开访问，并与 EC2 系统盘处于不同故障域；实例角色仅有该桶指定前缀的
+列举、读取和写入权限，不具有删除权限。上传以 `COMPLETE` 作为提交标记，避免恢复半成品；数据库和
+对象归档都必须通过摘要校验与隔离恢复后，才可把某个备份批次记为已验证。
+
 ## 11. 五人协作与文件责任
 
 ### 11.1 计划责任包
