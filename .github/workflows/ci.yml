@@ -20,6 +20,7 @@ jobs:
         shell: bash
         run: |
           bash -n start.sh
+          for script in deploy/*.sh; do bash -n "$script"; done
           pwsh -NoProfile -Command '[void][scriptblock]::Create((Get-Content -Raw ./start.ps1))'
       - name: Validate production compose topology
         shell: bash

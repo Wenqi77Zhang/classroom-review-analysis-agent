@@ -52,6 +52,8 @@ SupplementaryGroups=docker
 WorkingDirectory=$INSTALL_ROOT
 EnvironmentFile=$ENV_FILE
 Environment=TMPDIR=/var/lib/classroom-offsite-backup
+Environment=HOME=/var/lib/classroom-offsite-backup
+Environment=DOCKER_CONFIG=/var/lib/classroom-offsite-backup/docker
 ExecStart=/bin/sh $INSTALL_ROOT/deploy/backup-offsite-s3.sh
 StateDirectory=classroom-offsite-backup
 StateDirectoryMode=0700
@@ -90,6 +92,8 @@ SupplementaryGroups=docker
 WorkingDirectory=$INSTALL_ROOT
 EnvironmentFile=$ENV_FILE
 Environment=TMPDIR=/var/lib/classroom-offsite-backup
+Environment=HOME=/var/lib/classroom-offsite-backup
+Environment=DOCKER_CONFIG=/var/lib/classroom-offsite-backup/docker
 ExecStart=/bin/sh $INSTALL_ROOT/deploy/verify-offsite-s3-restore.sh
 StateDirectory=classroom-offsite-backup
 StateDirectoryMode=0700
