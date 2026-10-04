@@ -2,10 +2,54 @@
 
 > 生产网站：**[https://15.134.73.60.sslip.io](https://15.134.73.60.sslip.io)**
 >
-> 最后核验：2026-09-27；区域：`ap-southeast-2`；CloudFormation 栈：`classroom-review-agent`。
-> 当前应用发布包含公开注册与 M3 教学效果门禁；共享演示账号已停用，演示输入改用仓库内单独许可
-> 的材料。生产提交为
+> 最新公网检查：2026-10-05，HTTPS 与数据库/对象存储健康检查通过，服务已恢复。区域：`ap-southeast-2`；
+> CloudFormation 栈：`classroom-review-agent`。
+> 事故前应用发布包含公开注册与 M3 教学效果门禁；共享演示账号已停用，演示输入改用仓库内单独许可
+> 的材料。事故前验收提交为
 > `5881af158d3e6a6eedfd5a31b292a3f57a041ce2`，数据库迁移为 `c8f91a2d7e04`。
+
+## 当前运行状态与恢复验收（2026-10-05）
+
+2026-09-27 的备份基础设施更新重新解析了动态 Ubuntu AMI 参数，触发 EC2 主机替换。
+旧主机根盘配置为终止时删除，导致其中 PostgreSQL 与 MinIO 数据丢失。当次排查未找到 EBS
+快照、回收站保留或可用异机备份；此前隔离恢复演练的临时备份已按设计清理，因此不能用于本次恢复。
+旧生产资源不可再访问；本文“事故前”章节保留历史 UUID、行数与演练结果，本节单独记录重建后证据。
+
+- [PR #89](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/pull/89) 已实现独立私有 S3
+  备份、每日备份及每周隔离恢复脚本；本轮已完成首次完整备份、恢复校验并启用定时器。
+- [PR #90](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/pull/90) 固定 AMI，并为主机
+  设置删除/替换保留策略、关闭根盘随实例终止删除。2026-09-27 实测栈为 `UPDATE_COMPLETE`，
+  修复前后实例均为 `i-036ae859f5cb5e702`，根盘 `DeleteOnTermination=False`。
+- [PR #91](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/pull/91) 修复 Ubuntu 24.04
+  没有 `awscli` 软件包导致初始化提前退出的问题，改用 AWS 官方 CLI v2 安装包。388 项单元测试及
+  三项 GitHub CI 通过。2026-10-05 已在保留的新实例完成 AWS CLI、Docker 与应用初始化。
+- [PR #92](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/pull/92) 修复后续实际恢复
+  暴露的问题：MinIO 镜像拉取 401，改为固定上游源码及 SHA-256 构建；Next.js 更新到 `16.3.8`；
+  登录页隐藏未启用的共享演示入口；AWS CLI 公共可执行文件允许服务账号读取，备份定时器使用
+  独立 HOME/DOCKER_CONFIG，保留 `ProtectHome` 和私有临时目录。
+
+当前主机为 `i-036ae859f5cb5e702`，固定 AMI `ami-090b1140798d2d006`，根盘
+`vol-0a87bbf962ca2f5ff` 的 `DeleteOnTermination=False`。应用构建基线为 `8b4d0b1`，
+定时器修复基线为 `2e8925a`；PostgreSQL、MinIO、后端、前端、Ollama 均健康，Worker/Agent 正常运行。
+配置从 SecureString 恢复并校正为私有 MinIO，`.env.production` 为 `classroom` 所有、权限 `0600`。
+临时参数读取策略已撤销，主机临时教师口令文件已删除，保留的正式口令未写入日志或仓库。
+
+正式教师账号已重建；新注册账号获得独立空间，双向课程可见性与六项跨账号访问检查通过。
+临时账号停用、临时课程清理，审计记录保留。共享演示账号保持停用，访客使用公开注册。
+
+新输入采用仓库 `examples/public-demo` 第一轮 CC BY 4.0 合成材料。课堂
+`4b84116b-a38b-4383-af6e-43bb2a89bf37`、任务 `fa4e1775-86ee-4c4e-b8b8-84b32e985d19`、
+Trace `92890a7b909249ac9c4510b44a529f31` 完成上传、Whisper、课件解析、证据索引和 Qwen 分析，
+约 114 秒无重试生成 12 条逐字稿、3 页课件和 3 条候选。开发者代行技术复核，修改确认 1 条事实、
+驳回 2 条证据不足的候选；报告 `746bb323-a90c-48ae-aa42-9dcfe4a9da98` 只包含确认事实。
+Markdown/PDF 私有导出、签名下载、摘要校验与 PDF 实际页面检查通过；未复核内容不能绕过门禁，
+旧版本编辑返回 409。该轮不属于独立教师试用，也不证明真实教学效果。
+
+首次异地备份批次 `20261004T173336Z-78888`（UTC；当地已为 10 月 5 日）包含 85949 字节数据库
+转储、5 个对象，共 4698369 字节对象原文。S3 完整批次下载后摘要全部通过，恢复得到 20 张 public
+表，Alembic 版本 `c8f91a2d7e04`；临时目录与隔离容器已清理，生产健康保持正常。每日备份计划为
+03:20 UTC、每周日恢复验证为 04:20 UTC，均带最多 30 分钟随机延迟；两项定时器为 enabled，
+首次手动触发的 service 均为 success、退出码 0。后续自动运行仍须查阅日志，首次成功不代替持续监测。
 
 本方案把真实上传、Whisper 转写、本地翻译、证据分析、人工复核和报告导出部署在一台
 Ubuntu 24.04 EC2 上。PostgreSQL、后端、Worker、Agent 和 Ollama 都只在 Docker 私有网络中
@@ -21,7 +65,7 @@ Free Plan 默认使用悉尼区当前允许的 `m7i-flex.large`（2 vCPU、8 GiB
 16 GiB）。AWS 新账户额度是限期抵扣，不等于实例永久免费；上线后必须在 Billing 中设置预算
 告警，并在复核结束后停止或删除不用的资源。
 
-## 当前生产实例
+## 事故前生产实例与配置
 
 - EC2：`i-0062e17d2e678b453`，通过 Systems Manager 管理，不开放 SSH；
 - HTTPS：Caddy 自动管理 `15.134.73.60.sslip.io` 的证书；
@@ -48,13 +92,18 @@ Free Plan 默认使用悉尼区当前允许的 `m7i-flex.large`（2 vCPU、8 GiB
 
 ## 注入生产配置并启动
 
+AWS Compose 从 [MinIO 官方源码](https://github.com/minio/minio) 构建对象存储及客户端，避免依赖
+已经无法匿名拉取的旧镜像地址。`deploy/Dockerfile.minio` 固定源码提交、校验下载 SHA-256，并保留
+许可证与来源标签；首次编译比拉取现成镜像更慢，后续使用构建缓存。
+
 通过 Session Manager 进入主机后，把 `deploy/.env.aws.example` 复制为仓库根目录下的
 `.env.production`。将 `PUBLIC_HOST` 与 `FRONTEND_ORIGIN` 改成 CloudFormation 输出，并填入
 MinIO 的独立访问标识和随机密钥。所有随机口令应使用独立的 32 字节以上随机值，文件权限
 必须设为 `600`。
 
-公网自助注册必须显式设置 `PUBLIC_REGISTRATION_ENABLED=true`；共享演示入口还需设置一个至少 16 位的
-随机 `DEMO_ACCOUNT_PASSWORD`。该随机值只作为服务器端启用门禁，不会提供给浏览器或访客。
+公网自助注册必须显式设置 `PUBLIC_REGISTRATION_ENABLED=true`。当前生产不设置
+`DEMO_ACCOUNT_PASSWORD`，登录页不会显示共享演示按钮；若在独立测试环境启用该选项，必须使用
+至少 16 位的随机值作为服务器端门禁，不向浏览器或访客提供该值。
 
 ```sh
 cd /opt/classroom-review-agent
@@ -69,7 +118,7 @@ bucket 并显式关闭匿名访问；后端启动时还会写入并读取两字�
 公网端口，因此 AWS 部署不需要对象存储 CORS。Caddy 会为 `PUBLIC_HOST` 自动申请和续期 HTTPS 证书。Ollama
 模型通过持久卷保留，首次下载期间 Agent 和 Worker 不会开始消费任务。
 
-## 已完成验收
+## 事故前已完成验收
 
 2026-09-23 使用不含个人信息的合成课堂视频和 PPTX，在正式账号下完成：
 
@@ -148,8 +197,8 @@ object_storage=`ok`。本轮未上传媒体或个人信息，也未修改既有�
 
 ## 剩余门禁与停止条件
 
-当前可以声明“AWS 已部署并完成合成资料及公开授权课堂资料的生产技术 E2E”，不能声明真实教学
-效果已经验证。仍需：
+当前可以声明“AWS 网站已恢复，并以新合成材料重新完成技术 E2E、异地备份及隔离恢复”。
+事故前公开授权课堂资料的验收仍是历史证据，旧数据没有恢复；真实教学效果未验证。仍需：
 
 - 非开发教师独立试用；
 - 既有真实课程资料仅限私有验收；MIT OCW 的课程主体为 CC BY-NC-SA 4.0，但课件中排除的第三方

@@ -1,7 +1,11 @@
 # 课堂复盘与教学分析 Agent：产品与技术手册
 
 > 本文是需求、产品、架构、接口、安全、运行和项目治理的唯一事实来源。  
-> 当前事实基线：M1–M3 工作流已实现，AWS 正式部署、合成资料、MIT OCW 公开授权资料 M1、同课程连续片段 M2、单个真实循环的 M3 生产机制及免费规格有界容量验收已通过；真实用户与教学效果仍待验收；最后梳理：2026-09-27。
+> 当前事实基线（2026-10-05）：M1–M3 代码已实现；AWS 已恢复上线，登录/注册、账号隔离、
+> 新合成课堂完整处理、报告导出及首次 S3 异地备份/隔离恢复通过，两个定时器已启用。
+> 2026-09-27 主机替换导致的旧 PostgreSQL/MinIO 数据丢失没有恢复；真实用户与教学效果仍待验收。
+> 本文后续带日期的生产数量、任务和报告只适用于各自历史基线；当前运行状态以
+> [AWS 恢复记录](aws-deployment.md#当前运行状态与恢复验收2026-10-05)为准。
 > 历史拆分文档与旧计划仍可通过 Git 历史追溯，不再在正文重复保存。
 
 ## 1. 如何阅读与维护
@@ -661,11 +665,12 @@ API 新增 `sources_current`；指纹覆盖两轮复核后的正文和证据快�
 `--port` / `--hostname`，默认绑定 loopback。`verify.ps1 -ScaffoldOnly` 现在只执行骨架、
 环境版本和敏感文件路径检查，与 Bash 骨架验证职责一致。
 
-Next.js 固定到 `16.3.4`，sharp 固定到 `0.35.4`，已更新锁文件并重建。
-本次修复依据 [Next.js Windows 公告](https://github.com/vercel/next.js/security/advisories/GHSA-p293-qw3h-jr36)、
+Next.js 在 2026-10-05 恢复时更新到 `16.3.8`，sharp 为 `0.35.4`，锁文件和生产镜像已更新。
+最新修复覆盖 [Next.js SVG 公告](https://github.com/advisories/GHSA-vcvr-r3jv-pc5j)；此前修复依据
+[Next.js Windows 公告](https://github.com/vercel/next.js/security/advisories/GHSA-p293-qw3h-jr36)、
 [AVIF 公告](https://github.com/vercel/next.js/security/advisories/GHSA-2xp9-vwfh-vxw4) 和
 [sharp 公告](https://github.com/lovell/sharp/security/advisories/GHSA-rgj7-g3m4-5g8c)。
-本轮扫描为 0 项已知漏洞，这不等于未来永久无漏洞。实际测试、历史证据与外部门禁见测试总记录。
+2026-10-05 CI 扫描为 0 项已知漏洞，这不等于未来永久无漏洞。实际测试、历史证据与外部门禁见测试总记录。
 
 ### 15.5 AWS 部署、模型超时与契约恢复（2026-09-23）
 
