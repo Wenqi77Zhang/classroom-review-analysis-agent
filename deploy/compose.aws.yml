@@ -1,6 +1,11 @@
 services:
   minio:
-    image: quay.io/minio/minio:latest
+    image: classroom-minio:7aac2a2c5b7c
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.minio
+      target: minio
     command: ["server", "/data"]
     env_file:
       - ../.env.production
@@ -20,7 +25,12 @@ services:
     networks: [private]
 
   minio-init:
-    image: quay.io/minio/mc:latest
+    image: classroom-mc:77f82e18b540
+    pull_policy: build
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.minio
+      target: mc
     env_file:
       - ../.env.production
     entrypoint: ["/bin/sh", "-ec"]

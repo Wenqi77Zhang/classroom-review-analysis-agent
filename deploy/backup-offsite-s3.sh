@@ -5,7 +5,6 @@ PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 ENV_FILE=${ENV_FILE:-"$PROJECT_ROOT/.env.production"}
 BASE_COMPOSE="$PROJECT_ROOT/deploy/compose.production.yml"
 AWS_COMPOSE="$PROJECT_ROOT/deploy/compose.aws.yml"
-MC_IMAGE=${MC_IMAGE:-quay.io/minio/mc:latest}
 OFFSITE_BACKUP_BUCKET=${OFFSITE_BACKUP_BUCKET:-}
 OFFSITE_BACKUP_PREFIX=${OFFSITE_BACKUP_PREFIX:-classroom-review-agent}
 OFFSITE_BACKUP_REGION=${OFFSITE_BACKUP_REGION:-ap-southeast-2}
