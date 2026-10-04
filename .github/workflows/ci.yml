@@ -26,6 +26,8 @@ jobs:
         run: |
           cp deploy/.env.production.example .env.production
           docker compose --env-file deploy/.env.production.example -f deploy/compose.production.yml config --quiet
+          cp deploy/.env.aws.example .env.production
+          docker compose --env-file deploy/.env.aws.example -f deploy/compose.production.yml -f deploy/compose.aws.yml config --quiet
           rm .env.production
 
   backend-check:
