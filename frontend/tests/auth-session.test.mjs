@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-const loginPage = read("src/app/login/page.tsx");
+const loginPage = read("src/app/login/page.tsx") + read("src/components/LoginForm.tsx");
 const loginRoute = read("src/app/api/session/login/route.ts");
 const registerRoute = read("src/app/api/session/register/route.ts");
 const logoutRoute = read("src/app/api/session/logout/route.ts");

@@ -5,8 +5,8 @@ PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 ENV_FILE=${ENV_FILE:-"$PROJECT_ROOT/.env.production"}
 BASE_COMPOSE="$PROJECT_ROOT/deploy/compose.production.yml"
 AWS_COMPOSE="$PROJECT_ROOT/deploy/compose.aws.yml"
-MC_IMAGE=${MC_IMAGE:-quay.io/minio/mc:latest}
-MINIO_IMAGE=${MINIO_IMAGE:-quay.io/minio/minio:latest}
+MC_IMAGE=${MC_IMAGE:-classroom-mc:77f82e18b540}
+MINIO_IMAGE=${MINIO_IMAGE:-classroom-minio:7aac2a2c5b7c}
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "Missing production environment file: $ENV_FILE" >&2

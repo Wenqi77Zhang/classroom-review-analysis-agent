@@ -31,10 +31,20 @@ if ! command -v aws >/dev/null 2>&1; then
   trap 'rm -rf "$aws_cli_tmp"' EXIT HUP INT TERM
   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_cli_arch}.zip" \
     -o "$aws_cli_tmp/awscliv2.zip"
-  unzip -q "$aws_cli_tmp/awscliv2.zip" -d "$aws_cli_tmp"
-  "$aws_cli_tmp/aws/install" --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+  (
+    # Recovery sessions use umask 077 for secrets. Public executable files
+    # must remain readable by the unprivileged backup service account.
+    umask 022
+    unzip -q "$aws_cli_tmp/awscliv2.zip" -d "$aws_cli_tmp"
+    "$aws_cli_tmp/aws/install" --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+  )
   rm -rf "$aws_cli_tmp"
   trap - EXIT HUP INT TERM
+fi
+# Reconcile an earlier official install made with a restrictive caller umask.
+# This tree contains vendor binaries only; production secrets stay mode 0600.
+if [ -d /usr/local/aws-cli/v2 ]; then
+  chmod -R a+rX /usr/local/aws-cli
 fi
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
@@ -64,6 +74,7 @@ if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash "$SERVICE_USER"
 fi
 usermod -aG docker "$SERVICE_USER"
+runuser -u "$SERVICE_USER" -- aws --version >/dev/null
 
 if [ -e "$INSTALL_ROOT/.git" ]; then
   git -C "$INSTALL_ROOT" fetch --prune origin
