@@ -26,14 +26,14 @@ from agent.providers.base import ModelProviderError, ModelRequest
 from agent.skills.common import get_common_skill
 from agent.state import AgentState, AgentWorkflow
 from agent.tools.retrieve_evidence import EvidenceNotFoundError, EvidenceRetriever
+from agent.tools.select_analysis_evidence import select_analysis_evidence
 from backend.app.schemas.analysis_report import (
-    ConclusionType,
     EvidenceSourceType,
     InternalConclusionBatchWrite,
     InternalConclusionWrite,
 )
 
-PROMPT_VERSION = "analysis-v2"
+PROMPT_VERSION = "analysis-v3"
 _PROMPT_PATH = Path(__file__).with_name("prompts") / "analysis.md"
 _GRAMMAR_SCHEMA_KEYS = frozenset(
     {
@@ -47,19 +47,6 @@ _GRAMMAR_SCHEMA_KEYS = frozenset(
         "maxItems",
     }
 )
-_MAX_MODEL_EVIDENCE_ITEMS = 48
-
-
-def _evenly_spaced(items: Sequence[EvidenceItem], limit: int) -> list[EvidenceItem]:
-    """Keep coverage across a lesson without always favoring its opening minutes."""
-
-    if limit <= 0 or not items:
-        return []
-    if len(items) <= limit:
-        return list(items)
-    if limit == 1:
-        return [items[len(items) // 2]]
-    return [items[index * (len(items) - 1) // (limit - 1)] for index in range(limit)]
 
 
 def _model_grammar_schema(
@@ -151,6 +138,15 @@ class AgentRunError(RuntimeError):
     def __init__(self, code: AgentErrorCode, message: str) -> None:
         self.code = code
         super().__init__(message)
+
+
+class EvidenceQuoteError(AgentRunError):
+    def __init__(self, errors: list[dict[str, str]]) -> None:
+        self.errors = errors
+        super().__init__(
+            AgentErrorCode.EVIDENCE_QUOTE_MISMATCH,
+            "模型摘录与本次提供的证据原文不一致。",
+        )
 
 
 ConclusionValidator = Callable[[InternalConclusionWrite], None]
@@ -264,11 +260,16 @@ class AgentOrchestrator:
 
             workflow.transition(AgentState.VALIDATING)
             try:
-                model_analysis = ModelAnalysis.model_validate(response.data)
-            except ValidationError as validation_error:
+                model_analysis = self._validate_model(response.data, evidence)
+            except (ValidationError, EvidenceQuoteError) as validation_error:
+                errors = (
+                    _validation_error_shape(validation_error)
+                    if isinstance(validation_error, ValidationError) else validation_error.errors
+                )
                 tracer.event(
-                    "agent.model.schema_invalid",
-                    errors=_validation_error_shape(validation_error),
+                    "agent.model.schema_invalid" if isinstance(validation_error, ValidationError)
+                    else "agent.model.quote_invalid",
+                    errors=errors,
                 )
                 # 本地小模型偶尔会生成 JSON 形状正确、但 UUID/必填字段等完整契约
                 # 不合规的结果。只允许一次同约束重生，不把无效字段静默修补进系统。
@@ -280,6 +281,7 @@ class AgentOrchestrator:
                         evidence,
                         response_schema=response_schema,
                         schema_repair=True,
+                        validation_feedback=errors,
                     ),
                     trace_id=tracer.trace_id,
                     response_schema=response_schema,
@@ -292,62 +294,22 @@ class AgentOrchestrator:
                     usage=response.usage,
                 )
                 try:
-                    model_analysis = ModelAnalysis.model_validate(response.data)
-                except ValidationError as repair_error:
+                    model_analysis = self._validate_model(response.data, evidence)
+                except (ValidationError, EvidenceQuoteError) as repair_error:
                     tracer.event(
-                        "agent.model.schema_repair_invalid",
-                        errors=_validation_error_shape(repair_error),
+                        "agent.model.schema_repair_invalid" if isinstance(repair_error, ValidationError)
+                        else "agent.model.quote_repair_invalid",
+                        errors=_validation_error_shape(repair_error)
+                        if isinstance(repair_error, ValidationError) else repair_error.errors,
                     )
                     raise
             candidates = list(model_analysis.conclusions)
-            required_types = (
-                ConclusionType.FACT,
-                ConclusionType.JUDGMENT,
-                ConclusionType.SUGGESTION,
-            )
-            present_types = {candidate.type for candidate in candidates}
-            for missing_type in required_types:
-                if missing_type in present_types:
-                    continue
-                repair_schema = _model_grammar_schema(
-                    allowed_skills=allowed_skills,
-                    allowed_types=[missing_type.value],
-                    allowed_evidence_ids=allowed_evidence_ids,
+            if not candidates:
+                raise AgentRunError(
+                    AgentErrorCode.EVIDENCE_INSUFFICIENT,
+                    "当前证据不足以形成可靠结论；请补充材料或缩小分析目标。",
                 )
-                repair_request = ModelRequest(
-                    system_prompt=_PROMPT_PATH.read_text(encoding="utf-8"),
-                    user_prompt=self._build_user_prompt(
-                        analysis_input,
-                        plan,
-                        evidence,
-                        response_schema=repair_schema,
-                        required_conclusion_types=[missing_type.value],
-                    ),
-                    trace_id=tracer.trace_id,
-                    response_schema=repair_schema,
-                )
-                repair_response = await provider.generate_structured(repair_request)
-                tracer.event(
-                    "agent.model.repair_completed",
-                    model_name=repair_response.model_name,
-                    required_type=missing_type.value,
-                    latency_ms=repair_response.latency_ms,
-                    usage=repair_response.usage,
-                )
-                repaired = ModelAnalysis.model_validate(repair_response.data)
-                matching = [
-                    candidate
-                    for candidate in repaired.conclusions
-                    if candidate.type is missing_type
-                ]
-                if not matching:
-                    raise AgentRunError(
-                        AgentErrorCode.SCHEMA_INVALID,
-                        f"模型修复输出仍缺少 {missing_type.value} 结论。",
-                    )
-                candidates.append(matching[0])
-                present_types.add(missing_type)
-
+            provided = {item.id: item for item in evidence}
             allowed_skill_set = set(allowed_skills)
             conclusions: list[InternalConclusionWrite] = []
             for candidate in candidates:
@@ -363,10 +325,19 @@ class AgentOrchestrator:
                         AgentErrorCode.EVIDENCE_NOT_PROVIDED,
                         "模型引用了未提供给本次分析的证据。",
                     )
+                references = []
+                for item, quote in zip(evidence_items, candidate.evidence_quotes, strict=True):
+                    normalized_quote = " ".join(quote.split())
+                    if normalized_quote not in " ".join(provided[item.id].text.split()):
+                        raise AgentRunError(
+                            AgentErrorCode.EVIDENCE_QUOTE_MISMATCH,
+                            "模型摘录与本次提供的证据原文不一致。",
+                        )
+                    references.append(item.reference.model_copy(update={"quote": normalized_quote}))
                 conclusion = InternalConclusionWrite(
                     type=candidate.type,
                     content=candidate.content,
-                    evidence_refs=[item.reference for item in evidence_items],
+                    evidence_refs=references,
                     trace_id=tracer.trace_id,
                     model_name=response.model_name,
                     skill=candidate.skill,
@@ -399,6 +370,26 @@ class AgentOrchestrator:
             raise AgentRunError(error_code, f"Agent 在 {failed_stage} 阶段失败。") from exc
 
     @staticmethod
+    def _validate_model(data: dict, evidence: Sequence[EvidenceItem]) -> ModelAnalysis:
+        model = ModelAnalysis.model_validate(data)
+        provided = {item.id: " ".join(item.text.split()) for item in evidence}
+        errors = []
+        for index, candidate in enumerate(model.conclusions):
+            for quote_index, (evidence_id, quote) in enumerate(zip(
+                candidate.evidence_ids, candidate.evidence_quotes, strict=True,
+            )):
+                # Unknown/foreign IDs remain the responsibility of the tenant/scope gate.
+                if evidence_id in provided and " ".join(quote.split()) not in provided[evidence_id]:
+                    errors.append({
+                        "location": f"conclusions.{index}.evidence_quotes.{quote_index}",
+                        "type": "quote_not_in_corresponding_text",
+                        "evidence_id": str(evidence_id),
+                    })
+        if errors:
+            raise EvidenceQuoteError(errors)
+        return model
+
+    @staticmethod
     def _is_in_scope(item: EvidenceItem, contract: AnalysisContract) -> bool:
         if contract.scope is AnalysisScope.FULL_LESSON:
             return True
@@ -423,39 +414,7 @@ class AgentOrchestrator:
                 "教师确认的分析范围内没有可定位证据。",
             )
         self._validate_evidence_policy(evidence, analysis_input.contract)
-        # A local 4B model cannot safely receive hundreds of UUID-enumerated items in a
-        # 4096-token context. Sample every source across the full lesson, then fill any
-        # unused quota from the remaining ordered evidence. The full index remains in
-        # PostgreSQL; this only bounds one model request.
-        quotas = {
-            EvidenceSourceType.TRANSCRIPT: 32,
-            EvidenceSourceType.COURSEWARE: 12,
-        }
-        selected_ids: set[object] = set()
-        selected: list[EvidenceItem] = []
-        for source_type, limit in quotas.items():
-            source_items = [
-                item for item in evidence if item.reference.source_type is source_type
-            ]
-            for item in _evenly_spaced(source_items, limit):
-                if item.id not in selected_ids:
-                    selected.append(item)
-                    selected_ids.add(item.id)
-        other_items = [
-            item
-            for item in evidence
-            if item.reference.source_type
-            not in {EvidenceSourceType.TRANSCRIPT, EvidenceSourceType.COURSEWARE}
-        ]
-        for item in _evenly_spaced(other_items, 4):
-            if item.id not in selected_ids:
-                selected.append(item)
-                selected_ids.add(item.id)
-        remaining_slots = _MAX_MODEL_EVIDENCE_ITEMS - len(selected)
-        remaining = [item for item in evidence if item.id not in selected_ids]
-        selected.extend(_evenly_spaced(remaining, remaining_slots))
-        order = {item.id: index for index, item in enumerate(evidence)}
-        return sorted(selected, key=lambda item: order[item.id])
+        return select_analysis_evidence(evidence, analysis_input.contract)
 
     def _validate_evidence_policy(
         self,
@@ -498,22 +457,20 @@ class AgentOrchestrator:
         evidence: Sequence[EvidenceItem],
         *,
         response_schema: Mapping[str, object],
-        required_conclusion_types: Sequence[str] | None = None,
         schema_repair: bool = False,
+        validation_feedback: list[dict[str, str]] | None = None,
     ) -> str:
+        # The response schema travels through the provider grammar once, not again
+        # as a long duplicate in the classroom prompt.
         trusted_context = {
             "analysis_contract": analysis_input.contract.model_dump(mode="json"),
             "plan": plan.model_dump(mode="json"),
-            "required_output_schema": response_schema,
         }
-        if required_conclusion_types is not None:
-            trusted_context["required_conclusion_types"] = list(
-                required_conclusion_types
-            )
         if schema_repair:
             trusted_context["schema_repair"] = {
                 "required": True,
-                "instruction": "重新生成完整结果；不得沿用不合规字段或省略必填字段。",
+                "instruction": "重新生成完整结果。每段摘录只能来自同一序号 evidence_id 对应的 text，禁止跨条拼接；可以删去无法支持的结论，不得省略必填字段。",
+                "errors": validation_feedback or [],
             }
         untrusted_evidence = {
             "encoding": "json-utf8",
@@ -522,12 +479,6 @@ class AgentOrchestrator:
                     "evidence_id": str(item.id),
                     "source": {
                         "source_type": item.reference.source_type.value,
-                        "asset_id": str(item.reference.asset_id)
-                        if item.reference.asset_id
-                        else None,
-                        "segment_id": str(item.reference.segment_id)
-                        if item.reference.segment_id
-                        else None,
                         "start_ms": item.reference.start_ms,
                         "end_ms": item.reference.end_ms,
                         "page_no": item.reference.page_no,

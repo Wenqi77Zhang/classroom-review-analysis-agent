@@ -34,6 +34,7 @@ from agent.skills import humanities as humanities_skill_module
 from agent.skills import load_domain_skills
 from agent.state import AgentState, AgentWorkflow, InvalidAgentTransition
 from agent.tools.retrieve_evidence import EvidenceNotFoundError, EvidenceRetriever
+from agent.tools.select_analysis_evidence import MAX_ITEMS, MAX_TEXT_CHARS
 from agent.validators import evidence_gate as evidence_gate_module
 from agent.validators import load_conclusion_validator
 from backend.app.schemas.agent_runtime import (
@@ -136,14 +137,14 @@ def _evidence(
             source_type=source_type,
             asset_id=uuid4(),
             page_no=2,
-            quote=text,
+            quote=text[:2000],
         )
         if source_type is EvidenceSourceType.COURSEWARE
         else EvidenceReference(
             source_type=source_type,
             start_ms=start_ms,
             end_ms=end_ms,
-            quote=text,
+            quote=text[:2000],
         )
     )
     return EvidenceItem(
@@ -178,25 +179,28 @@ def _input(
     )
 
 
-def _model_data(evidence_id: UUID) -> dict:
+def _model_data(evidence_id: UUID, quote: str = "教师提出问题后停顿三秒，然后邀请学生回答。") -> dict:
     return {
         "conclusions": [
             {
                 "type": "fact",
                 "content": "教师提问后等待约三秒再邀请学生回答。",
                 "evidence_ids": [str(evidence_id)],
+                "evidence_quotes": [quote],
                 "skill": "common",
             },
             {
                 "type": "judgment",
                 "content": "该等待时间为学生组织回答提供了明确空间。",
                 "evidence_ids": [str(evidence_id)],
+                "evidence_quotes": [quote],
                 "skill": "common",
             },
             {
                 "type": "suggestion",
                 "content": "后续可继续保留明确等待，并在邀请回答前提示思考步骤。",
                 "evidence_ids": [str(evidence_id)],
+                "evidence_quotes": [quote],
                 "skill": "common",
             },
         ]
@@ -525,7 +529,7 @@ async def test_orchestrator_generates_frozen_backend_conclusion_contract() -> No
     assert conclusion.trace_id == result.trace_id
     assert conclusion.model_name == "fake-model"
     assert conclusion.skill == "common"
-    assert conclusion.prompt_version == "analysis-v2"
+    assert conclusion.prompt_version == "analysis-v3"
     assert "review_status" not in conclusion.model_dump()
     assert [event.name for event in sink.events] == [
         "agent.plan.created",
@@ -573,91 +577,153 @@ async def test_orchestrator_limits_model_grammar_to_planned_domain_skills() -> N
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_rejects_analysis_missing_required_conclusion_layers() -> None:
+async def test_orchestrator_keeps_supported_fact_without_forcing_other_types() -> None:
     analysis_input = _input()
-    evidence_id = analysis_input.evidence[0].id
-    provider = FakeProvider(
-        {
-            "conclusions": [
-                {
-                    "type": "fact",
-                    "content": "教师提问后等待约三秒。",
-                    "evidence_ids": [str(evidence_id)],
-                    "skill": "common",
-                }
-            ]
-        }
-    )
-
-    with pytest.raises(AgentRunError) as captured:
-        await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(
-            analysis_input
-        )
-
-    assert captured.value.code is AgentErrorCode.SCHEMA_INVALID
-    assert len(provider.requests) == 2
-    repair_schema = provider.requests[1].response_schema
-    assert (
-        repair_schema["properties"]["conclusions"]["items"]["properties"]["type"]["enum"]
-        == ["judgment"]
-    )
+    data = _model_data(analysis_input.evidence[0].id)
+    data["conclusions"] = data["conclusions"][:1]
+    provider = FakeProvider(data)
+    result = await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(analysis_input)
+    assert [item.type.value for item in result.conclusions.conclusions] == ["fact"]
+    assert len(provider.requests) == 1
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_repairs_each_missing_conclusion_layer() -> None:
+@pytest.mark.parametrize("quote", [
+    "教师已确认所有学生都掌握了概念。",
+    "The teacher waited three seconds before inviting a student to answer.",
+    "教师提出问题后停顿五秒",
+])
+async def test_quote_must_match_original_not_translation_or_model_rewrite(quote: str) -> None:
     analysis_input = _input()
-    evidence_id = str(analysis_input.evidence[0].id)
-    provider = SequenceProvider(
-        [
-            {
-                "conclusions": [
-                    {
-                        "type": "fact",
-                        "content": "教师提问后等待约三秒。",
-                        "evidence_ids": [evidence_id],
-                        "skill": "common",
-                    }
-                ]
-            },
-            {
-                "conclusions": [
-                    {
-                        "type": "judgment",
-                        "content": "等待时间为学生组织回答提供了空间。",
-                        "evidence_ids": [evidence_id],
-                        "skill": "common",
-                    }
-                ]
-            },
-            {
-                "conclusions": [
-                    {
-                        "type": "suggestion",
-                        "content": "后续可保留等待并提示思考步骤。",
-                        "evidence_ids": [evidence_id],
-                        "skill": "common",
-                    }
-                ]
-            },
-        ]
+    analysis_input.evidence[0].translation = (
+        "The teacher waited three seconds before inviting a student to answer."
     )
+    provider = FakeProvider(_model_data(analysis_input.evidence[0].id, quote))
+    with pytest.raises(AgentRunError) as captured:
+        await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(analysis_input)
+    assert captured.value.code is AgentErrorCode.EVIDENCE_QUOTE_MISMATCH
+    assert len(provider.requests) == 2
 
+
+@pytest.mark.asyncio
+async def test_verified_quote_is_saved_instead_of_entire_source() -> None:
+    analysis_input = _input()
+    item = analysis_input.evidence[0]
+    item.text = "Introductory context. The teacher waited\n  three seconds. Extra context."
+    provider = FakeProvider(_model_data(item.id, "The teacher waited three seconds."))
+    result = await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(analysis_input)
+    reference = result.conclusions.conclusions[0].evidence_refs[0]
+    assert reference.quote == "The teacher waited three seconds."
+    assert reference.start_ms == item.reference.start_ms
+    assert reference.end_ms == item.reference.end_ms
+    assert item.reference.quote != reference.quote  # do not mutate the original index
+
+
+@pytest.mark.asyncio
+async def test_quote_repair_is_bounded_and_feedback_does_not_echo_classroom_text() -> None:
+    analysis_input = _input()
+    evidence_id = analysis_input.evidence[0].id
+    invalid = _model_data(evidence_id, "PRIVATE_INVALID_MODEL_TEXT")
+    provider = SequenceProvider([invalid, _model_data(evidence_id)])
+    sink = InMemoryTraceSink()
     result = await AgentOrchestrator(
-        providers=ProviderRouter(local=provider)
+        providers=ProviderRouter(local=provider), trace_sink=sink,
     ).analyze(analysis_input)
+    assert len(result.conclusions.conclusions) == 3
+    assert len(provider.requests) == 2
+    assert "quote_not_in_corresponding_text" in provider.requests[1].user_prompt
+    assert "PRIVATE_INVALID_MODEL_TEXT" not in provider.requests[1].user_prompt
+    assert "PRIVATE_INVALID_MODEL_TEXT" not in repr(sink.events)
 
-    assert [item.type.value for item in result.conclusions.conclusions] == [
-        "fact",
-        "judgment",
-        "suggestion",
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", ["duplicate_id", "missing_quote", "blank_quote"])
+async def test_quote_id_alignment_is_validated_before_writes(invalid: str) -> None:
+    claim = _agent_claim()
+    store = MemoryAgentStore(claim)
+    data = _model_data(claim.evidence[0].id)
+    item = data["conclusions"][0]
+    if invalid == "duplicate_id":
+        item["evidence_ids"] *= 2
+        item["evidence_quotes"] *= 2
+    elif invalid == "missing_quote":
+        item.pop("evidence_quotes")
+    else:
+        item["evidence_quotes"] = ["   "]
+    provider = FakeProvider(data)
+    with pytest.raises(AgentRunError):
+        await run_claimed_once(
+            store, AgentOrchestrator(providers=ProviderRouter(local=provider)),
+            InternalAgentClaimRequest(agent_id="agent-test", lease_seconds=60),
+        )
+    assert not store.conclusions
+    assert store.states[-1].status is TaskStatus.FAILED
+    assert len(provider.requests) == 2  # one bounded schema repair, no infinite loop
+
+
+def test_goal_retrieval_keeps_late_relevant_sentence_and_its_neighbors() -> None:
+    analysis_input = _input()
+    task_id, owner_id = analysis_input.task_id, analysis_input.owner_id
+    analysis_input.contract.goal = "Review opportunity cost"
+    analysis_input.contract.focus_areas = ["opportunity cost"]
+    items = [
+        _evidence(task_id=task_id, owner_id=owner_id, start_ms=i*1000, end_ms=i*1000+900,
+                  text=f"Unrelated housekeeping sentence {i}.") for i in range(80)
     ]
-    assert len(provider.requests) == 3
-    assert [
-        request.response_schema["properties"]["conclusions"]["items"]["properties"][
-            "type"
-        ]["enum"]
-        for request in provider.requests[1:]
-    ] == [["judgment"], ["suggestion"]]
+    items[63].text = "Opportunity cost is the value of the next best alternative."
+    analysis_input.evidence = items
+    selected = AgentOrchestrator(providers=ProviderRouter())._select_evidence(analysis_input)
+    assert {items[i].id for i in (62, 63, 64)} <= {item.id for item in selected}
+    assert len(selected) <= MAX_ITEMS
+    assert items[0] not in selected
+
+
+def test_long_bilingual_sources_are_contiguous_and_within_total_budget() -> None:
+    analysis_input = _input()
+    analysis_input.contract.goal = "查找 neural evidence"
+    items = [
+        _evidence(task_id=analysis_input.task_id, owner_id=analysis_input.owner_id,
+                  start_ms=i*1000, end_ms=i*1000+900,
+                  text="背景。"*2000 + " neural evidence " + "结束。"*1000,
+                  translation="Context. "*600 + " neural evidence " + " End."*100)
+        for i in range(30)
+    ]
+    analysis_input.evidence = items
+    selected = AgentOrchestrator(providers=ProviderRouter())._select_evidence(analysis_input)
+    assert sum(len(item.text) + len(item.translation or "") for item in selected) <= MAX_TEXT_CHARS
+    originals = {item.id: item for item in items}
+    for item in selected:
+        assert item.text in originals[item.id].text
+        assert item.translation in originals[item.id].translation
+        assert "neural evidence" in item.text
+
+
+@pytest.mark.asyncio
+async def test_quote_from_unseen_part_of_long_source_is_blocked() -> None:
+    analysis_input = _input()
+    item = analysis_input.evidence[0]
+    item.text = "教师提问。"*500 + "The unprovided secret tail."
+    provider = FakeProvider(_model_data(item.id, "The unprovided secret tail."))
+    with pytest.raises(AgentRunError) as captured:
+        await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(analysis_input)
+    assert captured.value.code is AgentErrorCode.EVIDENCE_QUOTE_MISMATCH
+
+
+@pytest.mark.asyncio
+async def test_insufficient_evidence_is_actionable_and_never_saved() -> None:
+    claim = _agent_claim()
+    store = MemoryAgentStore(claim)
+    provider = FakeProvider({"conclusions": []})
+    with pytest.raises(AgentRunError) as captured:
+        await run_claimed_once(
+            store, AgentOrchestrator(providers=ProviderRouter(local=provider)),
+            InternalAgentClaimRequest(agent_id="agent-test", lease_seconds=60),
+        )
+    assert captured.value.code is AgentErrorCode.EVIDENCE_INSUFFICIENT
+    assert store.conclusions == []
+    assert store.states[-1].status is TaskStatus.FAILED
+    assert "证据不足" in store.states[-1].message
+    assert len(provider.requests) == 1
 
 
 @pytest.mark.asyncio
@@ -688,6 +754,7 @@ async def test_orchestrator_retries_invalid_model_contract_once() -> None:
     assert sink.events[2].attributes["errors"] == [
         {"location": "conclusions.0.content", "type": "missing"},
         {"location": "conclusions.0.evidence_ids", "type": "missing"},
+        {"location": "conclusions.0.evidence_quotes", "type": "missing"},
         {"location": "conclusions.0.skill", "type": "missing"},
     ]
 
@@ -938,17 +1005,17 @@ def test_full_lesson_evidence_sampling_bounds_prompt_and_preserves_coverage() ->
         providers=ProviderRouter(local=FakeProvider(_model_data(transcripts[0].id)))
     )._select_evidence(analysis_input)
 
-    assert len(selected) == 48
+    assert len(selected) == 12
     assert transcripts[0] in selected
     assert transcripts[-1] in selected
     assert courseware[0] in selected
     assert courseware[-1] in selected
     assert sum(
         item.reference.source_type is EvidenceSourceType.TRANSCRIPT for item in selected
-    ) >= 32
+    ) >= 6
     assert sum(
         item.reference.source_type is EvidenceSourceType.COURSEWARE for item in selected
-    ) >= 12
+    ) >= 6
 
 
 @pytest.mark.asyncio
@@ -984,7 +1051,7 @@ async def test_model_prompt_excludes_foreign_owner_and_task_evidence() -> None:
     )
     # 模拟 Schema 校验后仓储/调用方错误地混入外部证据；Agent 必须再次 fail closed。
     analysis_input.evidence.extend([foreign_owner, foreign_task])
-    provider = FakeProvider(_model_data(own.id))
+    provider = FakeProvider(_model_data(own.id, own.text))
 
     result = await AgentOrchestrator(
         providers=ProviderRouter(local=provider)
@@ -1059,7 +1126,7 @@ async def test_bilingual_contract_rejects_missing_translation_before_model_call(
         ),
         evidence=[evidence],
     )
-    provider = FakeProvider(_model_data(evidence.id))
+    provider = FakeProvider(_model_data(evidence.id, evidence.text))
 
     with pytest.raises(AgentRunError) as captured:
         await AgentOrchestrator(providers=ProviderRouter(local=provider)).analyze(analysis_input)
@@ -1079,7 +1146,7 @@ async def test_bilingual_contract_does_not_require_translation_for_courseware() 
         text="中文课件内容",
         translation=None,
     )
-    provider = FakeProvider(_model_data(evidence.id))
+    provider = FakeProvider(_model_data(evidence.id, evidence.text))
     analysis_input = AnalysisInput(
         task_id=task_id,
         owner_id=owner_id,
@@ -1116,7 +1183,7 @@ async def test_untrusted_transcript_is_data_and_cannot_change_constraints() -> N
         ),
         evidence=[evidence],
     )
-    provider = FakeProvider(_model_data(evidence.id))
+    provider = FakeProvider(_model_data(evidence.id, evidence.text))
 
     result = await AgentOrchestrator(
         providers=ProviderRouter(local=provider)
