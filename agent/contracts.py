@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, model_validator
 
 from backend.app.schemas.analysis_report import (
     ConclusionType,
@@ -35,6 +35,8 @@ class AgentErrorCode(StrEnum):
     BILINGUAL_EVIDENCE_INCOMPLETE = "BILINGUAL_EVIDENCE_INCOMPLETE"
     SKILL_NOT_IN_PLAN = "SKILL_NOT_IN_PLAN"
     EVIDENCE_NOT_FOUND = "EVIDENCE_NOT_FOUND"
+    EVIDENCE_QUOTE_MISMATCH = "EVIDENCE_QUOTE_MISMATCH"
+    EVIDENCE_INSUFFICIENT = "EVIDENCE_INSUFFICIENT"
     SCHEMA_INVALID = "SCHEMA_INVALID"
     PROVIDER_NOT_CONFIGURED = "PROVIDER_NOT_CONFIGURED"
     MODEL_PROVIDER_ERROR = "MODEL_PROVIDER_ERROR"
@@ -89,12 +91,23 @@ class ModelConclusion(ApiModel):
 
     type: ConclusionType
     content: str = Field(min_length=1, max_length=10000)
-    evidence_ids: list[ResourceId] = Field(min_length=1, max_length=20)
+    evidence_ids: list[ResourceId] = Field(min_length=1, max_length=3)
+    evidence_quotes: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=400)]
+    ] = Field(min_length=1, max_length=3)
     skill: str = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _paired_quotes(self) -> ModelConclusion:
+        if len(self.evidence_ids) != len(self.evidence_quotes):
+            raise ValueError("每个证据 ID 必须对应一段原文摘录。")
+        if len(set(self.evidence_ids)) != len(self.evidence_ids):
+            raise ValueError("单条结论不得重复引用同一个证据 ID。")
+        return self
 
 
 class ModelAnalysis(ApiModel):
-    conclusions: list[ModelConclusion] = Field(min_length=1, max_length=3)
+    conclusions: list[ModelConclusion] = Field(min_length=0, max_length=3)
 
 
 class AgentRunResult(ApiModel):

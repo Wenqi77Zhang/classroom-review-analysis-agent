@@ -88,6 +88,16 @@ def _analysis_input(claim: InternalAgentTaskClaim) -> AnalysisInput:
 
 def _public_failure(error: BaseException) -> tuple[ErrorCode, str]:
     if isinstance(error, AgentRunError):
+        if error.code is AgentErrorCode.EVIDENCE_INSUFFICIENT:
+            return (
+                ErrorCode.SCHEMA_INVALID,
+                "当前证据不足以形成可靠结论。请补充相关视频或课件，或缩小分析目标后重新处理。",
+            )
+        if error.code is AgentErrorCode.EVIDENCE_QUOTE_MISMATCH:
+            return (
+                ErrorCode.SCHEMA_INVALID,
+                "模型引用未能对应证据原文，已停止保存结论。可重试分析或联系管理员并提供 Trace ID。",
+            )
         if error.code is AgentErrorCode.BILINGUAL_EVIDENCE_INCOMPLETE:
             return (
                 ErrorCode.SCHEMA_INVALID,
