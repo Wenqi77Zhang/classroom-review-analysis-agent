@@ -1,7 +1,7 @@
 # Public demo kit
 
 This directory provides two small, privacy-safe classroom rounds for the deployed Classroom Review Agent. Register an
-account at <https://15.134.73.60.sslip.io>, then use these pairs in order:
+account at <https://54.66.10.43.sslip.io>, then use these pairs in order:
 
 1. `round-1-classroom.mp4` with `round-1-courseware.pptx`
 2. `round-2-classroom.mp4` with `round-2-courseware.pptx`

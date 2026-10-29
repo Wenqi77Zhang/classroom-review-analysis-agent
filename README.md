@@ -4,13 +4,14 @@
 
 ## 🌐 在线网站
 
-**[AWS 网站固定入口：15.134.73.60.sslip.io](https://15.134.73.60.sslip.io)**
+**[AWS 网站固定入口：54.66.10.43.sslip.io](https://54.66.10.43.sslip.io)**
 
-> **2026-10-06 运行状态：已上线分析质量改进。** `analysis-v3` 按目标检索证据、逐条核验原文
-> 摘录，不再强制凑齐事实、判断、建议。两份真实课堂固定输入已在现有 AWS 规格通过；每日 S3
-> 备份已查证自然触发成功。模型判断仍须逐条人工复核，不能把引用有效等同于分析完全正确。
-> 2026-09-27 主机替换时丢失的旧数据库和 MinIO 数据没有恢复；本次验收使用重建后的账号与新数据。
-> 当前证据与事故前历史记录分开列出，详见 [AWS 部署说明](docs/aws-deployment.md)。
+> **2026-10-30 运行状态：已在新 AWS 账号重新部署并完成技术验收。**
+> 访客可注册独立账号，上传后完成转写、分析、人工复核和 Markdown/PDF 导出。
+> 原 AWS 账号免费额度耗尽，旧站账号、上传文件和报告未迁移；本次从新数据库开始。
+> 每日云端备份和每周隔离恢复计划已启用，
+> 本轮数据库、对象、生产配置与代码已加密备份到负责人本地并验证可解密和校验。
+> 本地副本是当次快照，并非持续自动同步；详情见 [AWS 部署说明](docs/aws-deployment.md)。
 
 部署方案位于 AWS 悉尼区，使用 HTTPS、独立教师账号、实例内私有 MinIO、PostgreSQL、
 Whisper、Ollama（翻译和候选分析均使用本地 4B）、Worker 与 Agent。访客可注册独立
@@ -23,7 +24,7 @@ Whisper、Ollama（翻译和候选分析均使用本地 4B）、Worker 与 Agent
 
 本项目面向高校教师。教师上传真实课堂视频、课件或逐字稿后，系统生成带时间戳的逐字稿与可定位证据的教学分析；教师接受、修改或驳回结论后，仅将已确认内容组合进报告。
 
-## 当前分析质量进展（2026-10-06）
+## 分析质量基线（2026-10-06）
 
 [PR #93](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/pull/93) 将模型输入限制为
 最多 12 条相关证据和相邻语境，核对每条引用的实际连续原文。结构或摘录错误只允许一次修复，
@@ -36,7 +37,7 @@ Whisper、Ollama（翻译和候选分析均使用本地 4B）、Worker 与 Agent
 报告仅含 2 条确认事实，实际 PDF 页面已核查。它证明技术链路，不作为独立教师或教学效果验收。
 
 详细输入哈希、来源许可、旧版缺陷、新版结果与限制见
-[固定输入分析评估](docs/analysis-quality-evaluation-2026-10-06.md)。当前 CI 后端为
+[固定输入分析评估](docs/analysis-quality-evaluation-2026-10-06.md)。该次 CI 后端为
 `403 passed, 10 skipped`，前端检查、构建和依赖扫描通过。独立生产验收及报告证据统一见
 [测试与验收记录](tests/test-and-acceptance-record.md)。本轮没有扩容 AWS，也没有把课堂资料发送给云模型。
 
@@ -169,7 +170,7 @@ Cloudflare Quick Tunnel。组员无需安装项目环境，使用浏览器打开
 
 ### 生产部署
 
-当前 AWS 生产站点为 **[https://15.134.73.60.sslip.io](https://15.134.73.60.sslip.io)**。
+当前 AWS 生产站点为 **[https://54.66.10.43.sslip.io](https://54.66.10.43.sslip.io)**。
 实际部署与复现方案见 [`docs/aws-deployment.md`](docs/aws-deployment.md)：CloudFormation、自动 HTTPS、
 私有 Docker 网络、本地 Ollama、非公网 MinIO 和 Session Manager 管理入口均已落地。
 
