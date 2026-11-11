@@ -4,9 +4,9 @@
 > 未合并尝试和剩余工作。产品技术事实见
 > [`../docs/product-and-technology-handbook.md`](../docs/product-and-technology-handbook.md)，测试证据见
 > [`../tests/test-and-acceptance-record.md`](../tests/test-and-acceptance-record.md)。
-> 当前运行状态更新至 2026-10-30；网站入口：<https://54.66.10.43.sslip.io>。
+> 当前运行状态更新至 2026-11-11；网站入口：<https://54.66.10.43.sslip.io>。
 
-**当前交付：** 公开注册、课堂处理、逐条复核及报告导出通过生产技术验收，近期发布与安全维护见 12.14。
+**当前交付：** 公开注册、课堂处理、逐条复核及报告导出通过生产技术验收；两轮合成循环与复核留痕已复验，近期修复见 12.15，安全维护历史见 12.14。
 下文任务、报告及数量属于各自标注日期的验收记录，不代表当前站点预置了这些数据。
 成员 1 的后续整合包含 [PR #89](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/pull/89)
 的异机备份与恢复脚本、[PR #90](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/pull/90)
@@ -573,3 +573,21 @@ PDF 页面。该记录保留模型错误及人工修订负担，不把 AI 生成
 
 这属于成员 1 的部署维护、恢复能力与质量控制工作，不改变其他成员原有贡献，也不作为
 独立教师认可或教学改善证据。当前地址及本轮证据统一见部署说明和测试总记录。
+
+### 12.15 两轮流程复验、复核留痕与展示材料（2026-11-11）
+
+成员 1 继续组织完整使用流程的展示与质量核查，使用仓库原创合成材料完成注册、分析契约、
+上传、三个实际处理任务、七条候选逐条复核、第一轮 PDF 导出及同课程改进循环。复核接受一条、
+修改确认四条、驳回两条，并校订转写与中文译文；初次导出的 PDF 仅含当时确认的两条事实。
+
+本轮发现并修复改进行动已保存却出现错误提示、循环创建缺少合成资料选择、对比复核仅显示
+证据数量，以及复核按钮对比度和复核理由展示不足。变更分别见
+[`c818f3d`](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/commit/c818f3d75541e663c103d267b4ecbc1de6efdffd)、
+[`8fcdb00`](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/commit/8fcdb0096821551accad0b3d67397615ec9a073e) 和
+[`7ff509e`](https://github.com/Wenqi77Zhang/classroom-review-analysis-agent/commit/7ff509e7a2963c6ab3592a7f7301ae4ffb02f044)。
+前后端部署后通过健康检查，页面实际显示两轮原文与原任务入口；驳回原因刷新后仍可查看。
+
+实际模型把第二轮的学习目标引用推成改善信号。开发者代理对照成功标准后驳回，不将模型输出
+直接视为最终结论；课程汇总正确排除合成轮次与已驳回判断。补充聚焦分析目前通过任务 API
+发起，页面重跑入口仍待完善。本轮工作属于持续整合、质量控制和可复查展示，不改变其他成员
+原有贡献，也不作为独立教师认可或真实教学改善的证据。
