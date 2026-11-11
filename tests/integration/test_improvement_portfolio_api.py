@@ -169,9 +169,14 @@ async def test_real_improvement_cycle_and_portfolio_gates() -> None:
             assert comparison["model_name"] == "integration-fixture"
             assert comparison["prompt_version"] == "comparison-v2"
 
-            reviewed = await client.post(f"/api/improvement-comparisons/{comparison['id']}/review", headers=owner_headers, json={"action": "modify", "edited_summary": "教师核对两轮证据后，确认本轮出现了更充分的学生回应。"})
+            review_note = "已核对两轮原文和时间位置，保留本次人工复核依据。"
+            reviewed = await client.post(f"/api/improvement-comparisons/{comparison['id']}/review", headers=owner_headers, json={"action": "modify", "edited_summary": "教师核对两轮证据后，确认本轮出现了更充分的学生回应。", "note": review_note})
             assert reviewed.status_code == 200, reviewed.text
             assert reviewed.json()["review_status"] == "modified"
+            assert reviewed.json()["review_note"] == review_note
+            restored_cycle = await client.get(f"/api/improvement-cycles/{cycle_id}", headers=owner_headers)
+            assert restored_cycle.status_code == 200
+            assert restored_cycle.json()["comparisons"][0]["review_note"] == review_note
 
             overview = await client.get("/api/portfolio/overview", headers=owner_headers)
             assert overview.status_code == 200

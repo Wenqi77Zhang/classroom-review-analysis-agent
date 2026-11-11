@@ -105,6 +105,7 @@ async def _comparison_read(session: AsyncSession, item: ImprovementComparison) -
         followup_evidence=[EvidenceReference.model_validate(row) for row in item.followup_evidence],
         review_status=item.review_status,
         reviewed_summary=item.reviewed_summary,
+        review_note=item.review_note,
         trace_id=item.trace_id,
         skill=item.skill,
         prompt_version=item.prompt_version,

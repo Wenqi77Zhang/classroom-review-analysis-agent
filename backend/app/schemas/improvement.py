@@ -120,6 +120,7 @@ class ImprovementComparisonRead(OrmModel):
     followup_evidence: list[EvidenceReference]
     review_status: ReviewStatus
     reviewed_summary: str | None = None
+    review_note: str | None = None
     trace_id: str
     skill: str
     prompt_version: str

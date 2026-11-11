@@ -243,6 +243,7 @@ export type ImprovementComparisonRead = {
   followup_evidence: EvidenceReference[];
   review_status: ReviewStatus;
   reviewed_summary?: string | null;
+  review_note?: string | null;
   trace_id: string;
   skill: string;
   prompt_version: string;

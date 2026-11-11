@@ -160,9 +160,10 @@
 .comparison-card textarea { width: 100%; }
 .comparison-card footer { margin-top: 16px; color: rgba(34,44,44,.62); font-size: 13px; overflow-wrap: anywhere; }
 .review-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 13px; }
-.review-accept { background: #526d63; color: white; }
-.review-modify { background: #e9e1cf; color: #514936; }
-.review-reject { background: #7b5551; color: white; }
+.review-actions .button.review-accept { background: #526d63; color: white; }
+.review-actions .button.review-modify { background: #e9e1cf; color: #514936; }
+.review-actions .button.review-reject { background: #7b5551; color: white; }
+.comparison-review-note { display: block; margin: 16px 0 8px; font-size: 14px; font-weight: 700; }
 
 .effect-evidence-form { display: grid; gap: 12px; margin-top: 20px; }
 .effect-evidence-form > label:nth-child(-n+2) { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; line-height: 1.6; }

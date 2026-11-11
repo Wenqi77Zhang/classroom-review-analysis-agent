@@ -39,6 +39,13 @@ const outcomeText: Record<ImprovementComparisonRead["proposed_outcome"], string>
   insufficient_evidence: "证据不足",
 };
 
+const reviewStatusText: Record<ImprovementComparisonRead["review_status"], string> = {
+  pending: "待教师复核",
+  accepted: "教师已接受",
+  modified: "教师已修改确认",
+  rejected: "教师已驳回",
+};
+
 function EvidenceCount({ comparison }: { comparison: ImprovementComparisonRead }) {
   return <p className="comparison-evidence-count">第一轮 {comparison.baseline_evidence.length} 条证据 · 第二轮 {comparison.followup_evidence.length} 条证据</p>;
 }
@@ -179,7 +186,8 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
   async function review(comparison: ImprovementComparisonRead, action: ReviewAction, editedSummary?: string) {
     setBusy(true); setError("");
     try {
-      await reviewImprovementComparison(comparison.id, { action, editedSummary });
+      const note = (document.getElementById(`comparison-note-${comparison.id}`) as HTMLTextAreaElement | null)?.value;
+      await reviewImprovementComparison(comparison.id, { action, editedSummary, note });
       await reload();
       setNotice(`对比结论已${action === "reject" ? "驳回" : "确认"}，审计记录已保存。`);
     } catch (caught) { setError(describe(caught)); } finally { setBusy(false); }
@@ -254,19 +262,22 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
                   <article className="comparison-card" key={comparison.id}>
                     {(!comparison.model_name || !comparison.sources_current) && <p className="upload-error" role="alert">此对比属于旧版规则或原始依据已变化，当前仅保留作历史记录，不计入教学成效汇总；请新建循环重新分析。</p>}
                     {comparison.model_name && <p className="boundary-note">分析模型：{comparison.model_name} · {comparison.prompt_version}</p>}
-                    <div className="comparison-title"><span>{String(index + 1).padStart(2, "0")}</span><div><small>{outcomeText[comparison.proposed_outcome]} · 待教师判断</small><h3>{comparison.summary}</h3></div></div>
+                    <div className="comparison-title"><span>{String(index + 1).padStart(2, "0")}</span><div><small>模型候选：{outcomeText[comparison.proposed_outcome]} · {reviewStatusText[comparison.review_status]}</small><h3>{comparison.reviewed_summary || comparison.summary}</h3></div></div>
                     <EvidenceCount comparison={comparison} />
                     <div className="comparison-source-grid">
                       <ComparisonSources title="第一轮" references={comparison.baseline_evidence} taskId={sourceTasks[comparison.baseline_conclusion_id]} />
                       <ComparisonSources title="第二轮" references={comparison.followup_evidence} taskId={comparison.followup_conclusion_id ? sourceTasks[comparison.followup_conclusion_id] : undefined} />
                     </div>
                     <textarea id={`comparison-${comparison.id}`} defaultValue={comparison.reviewed_summary || comparison.summary} aria-label={`第 ${index + 1} 条对比结论修改稿`} rows={4} />
+                    <label className="comparison-review-note" htmlFor={`comparison-note-${comparison.id}`}>复核说明（可选）</label>
+                    <textarea id={`comparison-note-${comparison.id}`} defaultValue={comparison.review_note || ""} rows={3} maxLength={2000} placeholder="记录接受、修改或驳回的证据依据。" />
                     <div className="review-actions">
                       <button className="button review-accept compact" disabled={busy || !comparison.sources_current} onClick={() => void review(comparison, "accept")}>接受候选判断</button>
                       <button className="button review-modify compact" disabled={busy || !comparison.sources_current} onClick={() => { const field = document.getElementById(`comparison-${comparison.id}`) as HTMLTextAreaElement; void review(comparison, "modify", field.value); }}>修改确认</button>
                       <button className="button review-reject compact" disabled={busy} onClick={() => void review(comparison, "reject")}>驳回</button>
                     </div>
                     <footer>复核状态：{comparison.review_status} · Trace {comparison.trace_id} · {comparison.skill}/{comparison.prompt_version}</footer>
+                    {comparison.review_note && <p className="boundary-note">已保存复核说明：{comparison.review_note}</p>}
                   </article>
                 ))}
               </div>
