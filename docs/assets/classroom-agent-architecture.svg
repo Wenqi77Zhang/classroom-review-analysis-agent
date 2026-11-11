@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1580" viewBox="0 0 2400 1580" role="img" aria-labelledby="title desc">
+<title id="title">课堂复盘与教学分析 Agent 技术逻辑架构</title>
+<desc id="desc">根据当前仓库实现绘制：浏览器经 Caddy、Next.js BFF 进入 FastAPI；数据库维护业务状态和任务租约，Worker 处理媒体，Agent 基于证据分析，Ollama 提供本地推理，教师复核后才进入报告。</desc>
+<rect width="2400" height="1580" fill="#f7f9f7"/>
+<text x="70" y="96.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="56" font-weight="700" fill="#183a34" text-anchor="start">课堂复盘与教学分析 Agent</text>
+<text x="73" y="140.7" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="400" fill="#526b65" text-anchor="start">技术逻辑架构  /  显式任务状态机 · 证据约束分析 · 教师最终复核</text>
+<text x="2320" y="88.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="end">实现核对：2026-11-11</text>
+<text x="2320" y="126.7" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" fill="#526b65" text-anchor="end">当前部署与仓库代码对应</text>
+<rect x="70" y="184" width="350" height="115" rx="16" fill="#eff4f1" stroke="#cfddd6" stroke-width="2"/>
+<text x="92" y="227.8" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" fill="#183a34" text-anchor="start">01  目标与契约</text>
+<text x="92" y="272.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">教师确认分析范围</text>
+<polyline points="422,241 448,241" fill="none" stroke="#587f74" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="448.0,241.0 433.0,247.0 433.0,235.0" fill="#587f74"/>
+<rect x="450" y="184" width="350" height="115" rx="16" fill="#eff4f1" stroke="#cfddd6" stroke-width="2"/>
+<text x="472" y="227.8" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" fill="#183a34" text-anchor="start">02  上传与处理</text>
+<text x="472" y="272.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">媒体转成可定位证据</text>
+<polyline points="802,241 828,241" fill="none" stroke="#587f74" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="828.0,241.0 813.0,247.0 813.0,235.0" fill="#587f74"/>
+<rect x="830" y="184" width="350" height="115" rx="16" fill="#eff4f1" stroke="#cfddd6" stroke-width="2"/>
+<text x="852" y="227.8" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" fill="#183a34" text-anchor="start">03  受约束分析</text>
+<text x="852" y="272.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">事实 / 判断 / 建议</text>
+<polyline points="1182,241 1208,241" fill="none" stroke="#587f74" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="1208.0,241.0 1193.0,247.0 1193.0,235.0" fill="#587f74"/>
+<rect x="1210" y="184" width="350" height="115" rx="16" fill="#eff4f1" stroke="#cfddd6" stroke-width="2"/>
+<text x="1232" y="227.8" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" fill="#183a34" text-anchor="start">04  人工复核</text>
+<text x="1232" y="272.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">接受 / 修改 / 驳回</text>
+<polyline points="1562,241 1588,241" fill="none" stroke="#587f74" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="1588.0,241.0 1573.0,247.0 1573.0,235.0" fill="#587f74"/>
+<rect x="1590" y="184" width="350" height="115" rx="16" fill="#eff4f1" stroke="#cfddd6" stroke-width="2"/>
+<text x="1612" y="227.8" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" fill="#183a34" text-anchor="start">05  报告与导出</text>
+<text x="1612" y="272.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">仅纳入确认内容</text>
+<polyline points="1942,241 1968,241" fill="none" stroke="#587f74" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="1968.0,241.0 1953.0,247.0 1953.0,235.0" fill="#587f74"/>
+<rect x="1970" y="184" width="350" height="115" rx="16" fill="#eff4f1" stroke="#cfddd6" stroke-width="2"/>
+<text x="1992" y="227.8" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" fill="#183a34" text-anchor="start">06  两轮与课程汇总</text>
+<text x="1992" y="272.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">另设真实效果门禁</text>
+<rect x="50" y="336" width="2300" height="805" rx="26" fill="#f0f5f2" stroke="#c5d6cc" stroke-width="2"/>
+<text x="82" y="390.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="31" font-weight="700" fill="#183a34" text-anchor="start">运行架构</text>
+<text x="250" y="391.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" fill="#526b65" text-anchor="start">AWS EC2 · Docker Compose · 业务与数据服务位于受控网络</text>
+<text x="2315" y="391.7" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" fill="#526b65" text-anchor="end">实线：业务 / 证据流    虚线：本地模型请求</text>
+<rect x="85" y="450" width="300" height="170" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="109" y="501.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="32" font-weight="700" fill="#183a34" text-anchor="start">教师浏览器</text>
+<text x="109" y="549.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" fill="#526b65" text-anchor="start">上传 / 核查 / 校订</text>
+<text x="109" y="584.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" fill="#526b65" text-anchor="start">接受 / 修改 / 驳回</text>
+<rect x="455" y="450" width="270" height="170" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="479" y="498.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" fill="#183a34" text-anchor="start">HTTPS · Caddy</text>
+<text x="479" y="548.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">站点反向代理</text>
+<text x="479" y="583.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">私有媒体请求入口</text>
+<rect x="795" y="450" width="340" height="170" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="819" y="500.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="31" font-weight="700" fill="#183a34" text-anchor="start">Next.js / React</text>
+<text x="819" y="548.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">页面工作台 + 同源 BFF</text>
+<text x="819" y="583.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">HttpOnly JWT 会话</text>
+<rect x="1205" y="450" width="610" height="170" rx="20" fill="#e8f1ed" stroke="#9cb9ab" stroke-width="2"/>
+<text x="1229" y="502.9" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" fill="#183a34" text-anchor="start">FastAPI 业务与权限</text>
+<text x="1229" y="548.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">鉴权 / 资源归属 / 契约与结果校验</text>
+<text x="1229" y="583.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">任务 / 复核 / 报告 / M2、M3 / 签名</text>
+<rect x="1915" y="450" width="390" height="170" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="1939" y="502.9" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" fill="#183a34" text-anchor="start">PostgreSQL</text>
+<text x="1939" y="549.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" fill="#526b65" text-anchor="start">业务数据 / 任务与租约</text>
+<text x="1939" y="584.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" fill="#526b65" text-anchor="start">证据 / 结论 / 审计记录</text>
+<polyline points="385,535 455,535" fill="none" stroke="#587f74" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="455.0,535.0 440.0,541.0 440.0,529.0" fill="#587f74"/>
+<text x="420" y="518.3" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="18" font-weight="400" fill="#526b65" text-anchor="middle">HTTPS</text>
+<polyline points="725,535 795,535" fill="none" stroke="#587f74" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="795.0,535.0 780.0,541.0 780.0,529.0" fill="#587f74"/>
+<text x="760" y="520.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" fill="#526b65" text-anchor="middle">代理</text>
+<polyline points="1135,535 1205,535" fill="none" stroke="#587f74" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1205.0,535.0 1190.0,541.0 1190.0,529.0" fill="#587f74"/>
+<text x="1170" y="520.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" fill="#526b65" text-anchor="middle">BFF</text>
+<polyline points="1815,535 1915,535" fill="none" stroke="#587f74" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1915.0,535.0 1900.0,541.0 1900.0,529.0" fill="#587f74"/>
+<polygon points="1815.0,535.0 1830.0,529.0 1830.0,541.0" fill="#587f74"/>
+<text x="1865" y="520.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" fill="#526b65" text-anchor="middle">持久化</text>
+<rect x="85" y="805" width="500" height="230" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="109" y="856.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="32" font-weight="700" fill="#183a34" text-anchor="start">私有对象存储 · MinIO</text>
+<text x="109" y="905.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">原始视频 / 课件 / 导出报告</text>
+<text x="109" y="940.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">S3 兼容接口 · 预签名 PUT / GET</text>
+<text x="109" y="975.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">对象按账号与课堂归属管理</text>
+<rect x="705" y="805" width="500" height="230" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="729" y="857.9" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" fill="#183a34" text-anchor="start">媒体 Worker</text>
+<text x="729" y="905.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">FFmpeg → Whisper → 翻译</text>
+<text x="729" y="940.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">课件解析 → 证据索引</text>
+<text x="729" y="975.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">通过内部 API 写回证据与进度</text>
+<rect x="1305" y="805" width="510" height="230" rx="20" fill="#e8f1ed" stroke="#9cb9ab" stroke-width="2"/>
+<text x="1329" y="857.9" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" fill="#183a34" text-anchor="start">分析 Agent</text>
+<text x="1329" y="905.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">读取本任务已验证的证据</text>
+<text x="1329" y="940.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">受约束调用 / Skill / 摘录校验</text>
+<text x="1329" y="975.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="400" fill="#526b65" text-anchor="start">写回等待人工复核的候选</text>
+<rect x="1915" y="805" width="390" height="230" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="1939" y="855.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="31" font-weight="700" fill="#183a34" text-anchor="start">Ollama · Qwen</text>
+<text x="1939" y="903.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">当前：qwen3.5:4b</text>
+<text x="1939" y="938.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">澄清 / 翻译 / 分析 / 对比</text>
+<text x="1939" y="973.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">本地运行 · 单推理并发</text>
+<polyline points="590,620 590,705 335,705 335,805" fill="none" stroke="#587f74" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="335.0,805.0 329.0,790.0 341.0,790.0" fill="#587f74"/>
+<text x="105" y="686.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">授权后的媒体 PUT / GET</text>
+<polyline points="585,915 705,915" fill="none" stroke="#587f74" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="705.0,915.0 690.0,921.0 690.0,909.0" fill="#587f74"/>
+<text x="645" y="898.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" fill="#526b65" text-anchor="middle">限时读取</text>
+<polyline points="1280,620 1280,700 955,700 955,805" fill="none" stroke="#587f74" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="955.0,805.0 949.0,790.0 961.0,790.0" fill="#587f74"/>
+<polygon points="1280.0,620.0 1286.0,635.0 1274.0,635.0" fill="#587f74"/>
+<text x="932" y="676.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" fill="#526b65" text-anchor="start">领取任务 / 心跳 / 写回</text>
+<polyline points="1560,620 1560,805" fill="none" stroke="#587f74" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="1560.0,805.0 1554.0,790.0 1566.0,790.0" fill="#587f74"/>
+<polygon points="1560.0,620.0 1566.0,635.0 1554.0,635.0" fill="#587f74"/>
+<text x="1581" y="706.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" fill="#526b65" text-anchor="start">领取分析任务</text>
+<text x="1581" y="743.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" fill="#526b65" text-anchor="start">回写候选结果</text>
+<polyline points="1815,590 1865,590 1865,745 2110,745 2110,805" fill="none" stroke="#537b9b" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polygon points="2110.0,805.0 2104.0,790.0 2116.0,790.0" fill="#537b9b"/>
+<text x="1938" y="721.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#537b9b" text-anchor="start">澄清 + M2 对比</text>
+<polyline points="1815,915 1915,915" fill="none" stroke="#537b9b" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polygon points="1915.0,915.0 1900.0,921.0 1900.0,909.0" fill="#537b9b"/>
+<text x="1865" y="898.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" fill="#537b9b" text-anchor="middle">分析</text>
+<polyline points="955,1035 955,1094 2110,1094 2110,1035" fill="none" stroke="#537b9b" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polygon points="2110.0,1035.0 2116.0,1050.0 2104.0,1050.0" fill="#537b9b"/>
+<text x="1410" y="1079.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" fill="#537b9b" text-anchor="start">逐句翻译调用同一模型服务</text>
+<text x="72" y="1211.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="32" font-weight="700" fill="#183a34" text-anchor="start">受约束分析与质量门禁</text>
+<rect x="70" y="1240" width="530" height="156" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="94" y="1288.7" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" fill="#183a34" text-anchor="start">按目标筛选证据</text>
+<text x="94" y="1338.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">词项评分 + 相邻语境</text>
+<text x="94" y="1373.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">最多 12 条证据 / 6000 字符</text>
+<polyline points="602,1318 658,1318" fill="none" stroke="#587f74" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="658.0,1318.0 643.0,1324.0 643.0,1312.0" fill="#587f74"/>
+<rect x="660" y="1240" width="530" height="156" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="684" y="1288.7" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" fill="#183a34" text-anchor="start">模型生成结构化候选</text>
+<text x="684" y="1338.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">限定 Skill、类型和证据 ID</text>
+<text x="684" y="1373.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">事实 / 判断 / 建议，允许空候选</text>
+<polyline points="1192,1318 1248,1318" fill="none" stroke="#587f74" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="1248.0,1318.0 1233.0,1324.0 1233.0,1312.0" fill="#587f74"/>
+<rect x="1250" y="1240" width="530" height="156" rx="20" fill="#ffffff" stroke="#cfddd6" stroke-width="2"/>
+<text x="1274" y="1288.7" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" fill="#183a34" text-anchor="start">分层校验与有限修复</text>
+<text x="1274" y="1338.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">Agent 核对摘录 / 最多修复一次</text>
+<text x="1274" y="1373.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">后端核验任务归属与定位字段</text>
+<polyline points="1782,1318 1838,1318" fill="none" stroke="#587f74" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="1838.0,1318.0 1823.0,1324.0 1823.0,1312.0" fill="#587f74"/>
+<rect x="1840" y="1240" width="530" height="156" rx="20" fill="#e8f1ed" stroke="#9cb9ab" stroke-width="2"/>
+<text x="1864" y="1288.7" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" fill="#183a34" text-anchor="start">教师决定报告纳入</text>
+<text x="1864" y="1338.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">接受或修改确认 → 进入报告</text>
+<text x="1864" y="1373.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" fill="#526b65" text-anchor="start">驳回或未审核 → 排除</text>
+<text x="73" y="1461.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" fill="#183a34" text-anchor="start">调度机制</text>
+<text x="73" y="1501.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" fill="#526b65" text-anchor="start">PostgreSQL 行锁 + 租约 / 心跳；Worker、Agent 分别轮询。</text>
+<text x="1245" y="1461.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" fill="#183a34" text-anchor="start">验收边界</text>
+<text x="1245" y="1501.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" fill="#526b65" text-anchor="start">引用校验不保证语义正确；独立教师试用与真实教学效果仍待验证。</text>
+<text x="73" y="1557.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" fill="#526b65" text-anchor="start">依据：生产 Compose、任务领取接口、Worker / Agent 实现、复核与报告门禁。图中仅表示关键流向。</text>
+</svg>
