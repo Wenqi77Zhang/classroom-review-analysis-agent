@@ -20,6 +20,7 @@ import {
 import type {
   AnalysisConclusion,
   ClassroomRead,
+  EvidenceReference,
   ImprovementComparisonRead,
   ImprovementCycleRead,
   ReviewAction,
@@ -42,9 +43,38 @@ function EvidenceCount({ comparison }: { comparison: ImprovementComparisonRead }
   return <p className="comparison-evidence-count">第一轮 {comparison.baseline_evidence.length} 条证据 · 第二轮 {comparison.followup_evidence.length} 条证据</p>;
 }
 
+function evidenceTime(milliseconds: number) {
+  const seconds = Math.floor(milliseconds / 1000);
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function ComparisonSources({ title, references, taskId }: {
+  title: string;
+  references: EvidenceReference[];
+  taskId?: string;
+}) {
+  return (
+    <section className="comparison-sources" aria-label={`${title}证据原文`}>
+      <h4>{title}证据原文</h4>
+      {references.length ? references.map((reference, index) => (
+        <div className="comparison-source" key={reference.id || `${reference.source_type}-${index}`}>
+          <p>
+            {reference.source_type === "courseware" ? "课件" : reference.source_type === "transcript" ? "逐字稿" : reference.source_type === "frame" ? "视频画面" : "视频"}
+            {reference.start_ms != null && ` · ${evidenceTime(reference.start_ms)}${reference.end_ms != null ? `–${evidenceTime(reference.end_ms)}` : ""}`}
+            {reference.page_no != null && ` · 第 ${reference.page_no} 页`}
+          </p>
+          {reference.quote ? <blockquote>{reference.quote}</blockquote> : <p>此项未附文字引文，请回到原课堂核对。</p>}
+        </div>
+      )) : <p className="boundary-note">本条对比未引用这一轮的证据，不能据此认定该轮发生了变化。</p>}
+      {taskId && <Link href={`/tasks/${encodeURIComponent(taskId)}`} target="_blank" rel="noopener noreferrer">打开{title}原任务，核对时间或页码 ↗</Link>}
+    </section>
+  );
+}
+
 export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
   const [cycle, setCycle] = useState<ImprovementCycleRead | null>(null);
   const [suggestions, setSuggestions] = useState<AnalysisConclusion[]>([]);
+  const [sourceTasks, setSourceTasks] = useState<Record<string, string>>({});
   const [classrooms, setClassrooms] = useState<ClassroomRead[]>([]);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -53,10 +83,12 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
   const reload = useCallback(async () => {
     const current = await getImprovementCycle(cycleId);
     setCycle(current);
-    const [conclusions, classroomRows] = await Promise.all([
+    const [conclusions, classroomRows, followupConclusions] = await Promise.all([
       getConclusions(current.baseline_classroom_id),
       listClassrooms(current.course_id),
+      current.followup_classroom_id ? getConclusions(current.followup_classroom_id) : Promise.resolve([]),
     ]);
+    setSourceTasks(Object.fromEntries([...conclusions, ...followupConclusions].map((item) => [item.id, item.task_id])));
     setSuggestions(
       conclusions.filter(
         (item) =>
@@ -224,6 +256,10 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
                     {comparison.model_name && <p className="boundary-note">分析模型：{comparison.model_name} · {comparison.prompt_version}</p>}
                     <div className="comparison-title"><span>{String(index + 1).padStart(2, "0")}</span><div><small>{outcomeText[comparison.proposed_outcome]} · 待教师判断</small><h3>{comparison.summary}</h3></div></div>
                     <EvidenceCount comparison={comparison} />
+                    <div className="comparison-source-grid">
+                      <ComparisonSources title="第一轮" references={comparison.baseline_evidence} taskId={sourceTasks[comparison.baseline_conclusion_id]} />
+                      <ComparisonSources title="第二轮" references={comparison.followup_evidence} taskId={comparison.followup_conclusion_id ? sourceTasks[comparison.followup_conclusion_id] : undefined} />
+                    </div>
                     <textarea id={`comparison-${comparison.id}`} defaultValue={comparison.reviewed_summary || comparison.summary} aria-label={`第 ${index + 1} 条对比结论修改稿`} rows={4} />
                     <div className="review-actions">
                       <button className="button review-accept compact" disabled={busy || !comparison.sources_current} onClick={() => void review(comparison, "accept")}>接受候选判断</button>

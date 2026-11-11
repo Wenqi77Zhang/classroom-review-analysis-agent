@@ -150,6 +150,13 @@
 .comparison-title > span { color: #6b827b; font: 700 28px/1 var(--font-display, serif); }
 .comparison-title h3 { margin: 6px 0 0; font-size: 19px; line-height: 1.6; }
 .comparison-evidence-count { color: #5a716c; font-weight: 700; }
+.comparison-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin: 18px 0; }
+.comparison-sources { min-width: 0; padding: 18px; background: rgba(255,255,255,.68); border: 1px solid rgba(70,91,87,.16); border-radius: 16px; }
+.comparison-sources h4 { margin: 0 0 12px; font-size: 16px; }
+.comparison-source + .comparison-source { border-top: 1px solid rgba(70,91,87,.16); margin-top: 12px; padding-top: 12px; }
+.comparison-source p { margin: 0 0 6px; font-size: 13px; color: #5a716c; }
+.comparison-source blockquote { margin: 0 0 14px; padding-left: 12px; border-left: 3px solid #91a89f; font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+.comparison-sources a { font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
 .comparison-card textarea { width: 100%; }
 .comparison-card footer { margin-top: 16px; color: rgba(34,44,44,.62); font-size: 13px; overflow-wrap: anywhere; }
 .review-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 13px; }
