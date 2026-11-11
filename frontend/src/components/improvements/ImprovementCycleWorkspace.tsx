@@ -89,7 +89,8 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
 
   async function addAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     setBusy(true); setError(""); setNotice("");
     try {
       await createImprovementAction(cycleId, {
@@ -98,7 +99,7 @@ export function ImprovementCycleWorkspace({ cycleId }: { cycleId: string }) {
         successCriterion: String(data.get("successCriterion") ?? ""),
         priority: Number(data.get("priority") ?? 2),
       });
-      event.currentTarget.reset();
+      form.reset();
       setNotice("改进行动已保存，并保留了来源结论与证据链。");
       try {
         await reload();

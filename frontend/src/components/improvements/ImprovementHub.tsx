@@ -93,7 +93,7 @@ export function ImprovementHub() {
         baselineClassroomId,
         title,
         objective,
-        validationMode: "real",
+        validationMode: data.get("validationMode") === "synthetic" ? "synthetic" : "real",
       });
       router.push(`/improvements/${cycle.id}`);
     } catch (caught) {
@@ -129,7 +129,13 @@ export function ImprovementHub() {
               </label>
               <label>循环名称<input name="title" placeholder="例如：提问等待时间改进循环" /></label>
               <label>改进目标<textarea name="objective" rows={4} placeholder="说明下一轮希望发生的可观察变化。" /></label>
-              <p className="boundary-note">请关联同一课程的两次实际教学记录，并由教师核对双方证据。历史合成验证仍单独标注，不进入教学成效汇总。</p>
+              <label>资料性质
+                <select name="validationMode" defaultValue="real">
+                  <option value="real">真实教学记录</option>
+                  <option value="synthetic">合成材料演示（不计入教学成效）</option>
+                </select>
+              </label>
+              <p className="boundary-note">真实轮次请关联同一课程的两次实际教学记录，并由教师核对双方证据。使用演示材料时请选择合成验证。历史合成验证仍单独标注，不进入教学成效汇总。</p>
               <button className="button primary wide" disabled={busy || !courses.length}>建立循环 <span aria-hidden>→</span></button>
               {!courses.length && !busy && <p>尚无课程。请先<Link href="/classrooms">创建课堂</Link>并完成一次 M1 复盘。</p>}
             </form>
